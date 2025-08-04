@@ -3271,6 +3271,130 @@ got_privsep_recv_object_idlist(int *done, struct got_object_id **ids,
 	return err;
 }
 
+static const struct got_error *
+send_qidlist(struct imsgbuf *ibuf, struct got_object_qid **qids, size_t nids)
+{
+	const struct got_error *err = NULL;
+	struct got_imsg_object_id_queue idqueue;
+	struct ibuf *wbuf;
+	size_t i;
+
+	memset(&idqueue, 0, sizeof(idqueue));
+
+	if (nids > GOT_IMSG_OBJ_ID_QUEUE_MAX_NIDS)
+		return got_error(GOT_ERR_NO_SPACE);
+
+	wbuf = imsg_create(ibuf, GOT_IMSG_OBJ_ID_QUEUE, 0, 0,
+	    sizeof(idqueue) + nids * sizeof(struct got_object_qid));
+	if (wbuf == NULL) {
+		err = got_error_from_errno("imsg_create OBJ_ID_QUEUE");
+		return err;
+	}
+
+	idqueue.nids = nids;
+	if (imsg_add(wbuf, &idqueue, sizeof(idqueue)) == -1)
+		return got_error_from_errno("imsg_add OBJ_ID_QUEUE");
+
+	for (i = 0; i < nids; i++) {
+		struct got_object_qid *qid = qids[i];
+		if (imsg_add(wbuf, qid, sizeof(*qid)) == -1)
+			return got_error_from_errno("imsg_add OBJ_ID_LIST");
+	}
+
+	imsg_close(ibuf, wbuf);
+
+	return flush_imsg(ibuf);
+}
+
+const struct got_error *
+got_privsep_send_object_id_queue(struct imsgbuf *ibuf,
+    struct got_object_id_queue *ids, size_t nids)
+{
+	const struct got_error *err = NULL;
+	struct got_object_qid *qid, *qidlist[GOT_IMSG_OBJ_ID_QUEUE_MAX_NIDS];
+	int i, queued = 0;
+
+	qid = STAILQ_FIRST(ids);
+	for (i = 0; qid && i < nids; i++) {
+		qidlist[i % nitems(qidlist)] = qid;
+		queued++;
+		if (queued >= nitems(qidlist)) {
+			err = send_qidlist(ibuf, qidlist, queued);
+			if (err)
+				return err;
+			queued = 0;
+		}
+		qid = STAILQ_NEXT(qid, entry);
+	}
+
+	if (queued > 0) {
+		err = send_qidlist(ibuf, qidlist, queued);
+		if (err)
+			return err;
+	}
+
+	if (imsg_compose(ibuf, GOT_IMSG_OBJ_ID_QUEUE_DONE, 0, 0, -1, NULL, 0)
+	    == -1)
+		return got_error_from_errno("imsg_compose OBJ_ID_QUEUE_DONE");
+
+	return flush_imsg(ibuf);
+}
+
+const struct got_error *
+got_privsep_recv_object_id_queue(int *done, struct got_object_id_queue *ids,
+    size_t *nids, struct imsgbuf *ibuf)
+{
+	const struct got_error *err = NULL;
+	struct imsg imsg;
+	struct got_imsg_object_id_queue *qidlist;
+	struct got_object_qid *qid, *iqid;
+	size_t datalen;
+
+	*done = 0;
+	*nids = 0;
+
+	err = got_privsep_recv_imsg(&imsg, ibuf, 0);
+	if (err)
+		return err;
+
+	datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
+	switch (imsg.hdr.type) {
+	case GOT_IMSG_OBJ_ID_QUEUE:
+		if (datalen < sizeof(*qidlist)) {
+			err = got_error(GOT_ERR_PRIVSEP_LEN);
+			break;
+		}
+		qidlist = imsg.data;
+		if (qidlist->nids > GOT_IMSG_OBJ_ID_LIST_MAX_NIDS ||
+		    qidlist->nids * sizeof(struct got_object_qid) !=
+		    datalen - sizeof(*qidlist)) {
+			err = got_error(GOT_ERR_PRIVSEP_LEN);
+			break;
+		}
+		iqid = (struct got_object_qid *)(imsg.data + sizeof(*qidlist));
+		while (*nids < qidlist->nids) {
+			err = got_object_qid_alloc_partial(&qid);
+			if (err)
+				break;
+			memcpy(qid, iqid, sizeof(*qid));
+			STAILQ_INSERT_TAIL(ids, qid, entry);
+			(*nids)++;
+			iqid++;
+		}
+		break;
+	case GOT_IMSG_OBJ_ID_QUEUE_DONE:
+		*done = 1;
+		break;
+	default:
+		err = got_error(GOT_ERR_PRIVSEP_MSG);
+		break;
+	}
+
+	imsg_free(&imsg);
+
+	return err;
+}
+
 const struct got_error *
 got_privsep_send_delta_reuse_req(struct imsgbuf *ibuf)
 {

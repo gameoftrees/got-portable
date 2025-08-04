@@ -205,6 +205,10 @@ enum got_imsg_type {
 	GOT_IMSG_OBJ_ID_LIST,
 	GOT_IMSG_OBJ_ID_LIST_DONE,
 
+	/* Transfer a queue of object IDs. */
+	GOT_IMSG_OBJ_ID_QUEUE,
+	GOT_IMSG_OBJ_ID_QUEUE_DONE,
+
 	/* Messages related to patch files. */
 	GOT_IMSG_PATCH_FILE,
 	GOT_IMSG_PATCH_HUNK,
@@ -573,6 +577,24 @@ struct got_imsg_object_idlist {
 	sizeof(struct got_imsg_object_idlist)) / sizeof(struct got_object_id))
 };
 
+/*
+ * Structure for GOT_IMSG_OBJ_ID_QUEUE data.
+ * Multiple such messages may be sent back-to-back, where each message
+ * contains a chunk of IDs. The entire list must be terminated with a
+ * GOT_IMSG_OBJ_ID_QUEUE_DONE message.
+ */
+struct got_imsg_object_id_queue {
+	size_t nids;
+
+	/*
+	 * Followed by nids * struct got_object_qid.
+	 */
+
+#define GOT_IMSG_OBJ_ID_QUEUE_MAX_NIDS \
+	((MAX_IMSGSIZE - IMSG_HEADER_SIZE - \
+	sizeof(struct got_imsg_object_id_queue)) / sizeof(struct got_object_qid))
+};
+
 /* Structure for GOT_IMSG_COMMIT_TRAVERSAL_REQUEST  */
 struct got_imsg_commit_traversal_request {
 	struct got_imsg_packed_object iobj;
@@ -817,6 +839,11 @@ const struct got_error *got_privsep_send_object_idlist(struct imsgbuf *,
 const struct got_error *got_privsep_send_object_idlist_done(struct imsgbuf *);
 const struct got_error *got_privsep_recv_object_idlist(int *,
     struct got_object_id **, size_t *, struct imsgbuf *);
+
+const struct got_error *got_privsep_send_object_id_queue(struct imsgbuf *ibuf,
+    struct got_object_id_queue *, size_t);
+const struct got_error *got_privsep_recv_object_id_queue(int *,
+    struct got_object_id_queue *, size_t *, struct imsgbuf *);
 
 const struct got_error *got_privsep_send_delta_reuse_req(struct imsgbuf *);
 const struct got_error *got_privsep_send_reused_deltas(struct imsgbuf *,
