@@ -1901,9 +1901,8 @@ commit_painting_request(struct imsg *imsg, struct imsgbuf *ibuf,
 	const struct got_error *err = NULL;
 	size_t datalen;
 	struct got_object_id_queue ids;
-	size_t nkeep = 0, ndrop = 0, nskip = 0;
-	int nids = 0;
-	uintptr_t color;
+	size_t nids;
+	int nqueued = 0, done = 0;
 
 	STAILQ_INIT(&ids);
 
@@ -1911,42 +1910,23 @@ commit_painting_request(struct imsg *imsg, struct imsgbuf *ibuf,
 	if (datalen != 0)
 		return got_error(GOT_ERR_PRIVSEP_LEN);
 
-	color = COLOR_KEEP;
-	err = recv_object_id_queue(&nkeep, &ids, (void *)color, NULL, ibuf);
-	if (err)
-		goto done;
-	if (nids + nkeep > INT_MAX) {
-		err = got_error(GOT_ERR_PRIVSEP_LEN);
-		goto done;
+	while (!done) {
+		err = got_privsep_recv_object_id_queue(&done, &ids, &nids, ibuf);
+		if (err)
+			goto done;
+		if (nqueued + nids > INT_MAX) {
+			err = got_error(GOT_ERR_PRIVSEP_LEN);
+			goto done;
+		}
+		nqueued += nids;
 	}
-	nids += nkeep;
 
-	color = COLOR_DROP;
-	err = recv_object_id_queue(&ndrop, &ids, (void *)color, NULL, ibuf);
-	if (err)
-		goto done;
-	if (nids + ndrop > INT_MAX) {
-		err = got_error(GOT_ERR_PRIVSEP_LEN);
-		goto done;
-	}
-	nids += ndrop;
-
-	color = COLOR_SKIP;
-	err = recv_object_id_queue(&nskip, &ids, (void *)color, NULL, ibuf);
-	if (err)
-		goto done;
-	if (nids + nskip > INT_MAX) {
-		err = got_error(GOT_ERR_PRIVSEP_LEN);
-		goto done;
-	}
-	nids += nskip;
-
-	err = paint_commits(&ids, &nids, keep, drop, skip,
+	err = paint_commits(&ids, &nqueued, keep, drop, skip,
 	    pack, packidx, ibuf, objcache);
 	if (err)
 		goto done;
 
-	err = got_privsep_send_painted_commits(ibuf, &ids, &nids, 0, 1);
+	err = got_privsep_send_painted_commits(ibuf, &ids, &nqueued, 0, 1);
 	if (err)
 		goto done;
 

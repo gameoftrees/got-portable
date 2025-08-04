@@ -96,38 +96,6 @@ send_idset(struct imsgbuf *ibuf, struct got_object_idset *idset)
 }
 
 static const struct got_error *
-send_filtered_id_queue(struct imsgbuf *ibuf, struct got_object_id_queue *ids,
-    uintptr_t color)
-{
-	const struct got_error *err = NULL;
-	struct got_object_qid *qid;
-	struct got_object_id *filtered_ids[GOT_IMSG_OBJ_ID_LIST_MAX_NIDS];
-	int nids = 0;
-
-	STAILQ_FOREACH(qid, ids, entry) {
-		if (color != (intptr_t)qid->data)
-			continue;
-
-		filtered_ids[nids++] = &qid->id;
-		if (nids >= GOT_IMSG_OBJ_ID_LIST_MAX_NIDS) {
-			err = got_privsep_send_object_idlist(ibuf,
-			    filtered_ids, nids);
-			if (err)
-				return err;
-			nids = 0;
-		}
-	}
-
-	if (nids > 0) {
-		err = got_privsep_send_object_idlist(ibuf, filtered_ids, nids);
-		if (err)
-			return err;
-	}
-
-	return got_privsep_send_object_idlist_done(ibuf);
-}
-
-static const struct got_error *
 recv_reused_delta(struct got_imsg_reused_delta *delta,
     struct got_object_idset *idset, struct got_pack_metavec *v)
 {
@@ -326,18 +294,8 @@ paint_packed_commits(struct got_object_qid **qid0,
 	if (err)
 		return err;
 
-	err = send_filtered_id_queue(pack->privsep_child->ibuf, ids,
-	    COLOR_KEEP);
-	if (err)
-		return err;
-
-	err = send_filtered_id_queue(pack->privsep_child->ibuf, ids,
-	    COLOR_DROP);
-	if (err)
-		return err;
-
-	err = send_filtered_id_queue(pack->privsep_child->ibuf, ids,
-	    COLOR_SKIP);
+	err = got_privsep_send_object_id_queue(pack->privsep_child->ibuf,
+	    ids, *nqueued);
 	if (err)
 		return err;
 
