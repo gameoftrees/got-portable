@@ -340,7 +340,10 @@ paint_packed_commits(struct got_object_qid **qid0,
 		qid = STAILQ_FIRST(&next_ids);
 		STAILQ_REMOVE_HEAD(&next_ids, entry);
 		got_pack_paint_commit(qid, color);
-		STAILQ_INSERT_TAIL(ids, qid, entry);
+		if (color == COLOR_KEEP)
+			STAILQ_INSERT_TAIL(ids, qid, entry);
+		else
+			STAILQ_INSERT_HEAD(ids, qid, entry);
 		(*nqueued)++;
 		if (color == COLOR_SKIP)
 			(*nskip)++;
