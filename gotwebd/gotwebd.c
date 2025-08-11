@@ -575,9 +575,6 @@ connect_children(struct gotwebd *env)
 
 		if (send_imsg(iev2, GOTWEBD_IMSG_CTL_PIPE, pipe[1], NULL, 0))
 			fatal("send_imsg");
-
-		close(pipe[0]);
-		close(pipe[1]);
 	}
 }
 
