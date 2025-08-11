@@ -3661,7 +3661,10 @@ got_privsep_recv_painted_commits(struct got_object_id_queue *new_ids,
 				memcpy(&qid->id, &icommit.id,
 				    sizeof(qid->id));
 				qid->data = (void *)icommit.color;
-				STAILQ_INSERT_TAIL(new_ids, qid, entry);
+				if (icommit.color == 0 /* COLOR_KEEP */)
+					STAILQ_INSERT_TAIL(new_ids, qid, entry);
+				else
+					STAILQ_INSERT_HEAD(new_ids, qid, entry);
 			}
 		}
 
