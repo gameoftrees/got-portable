@@ -1140,8 +1140,8 @@ got_pack_find_pack_for_commit_painting(struct got_packidx **best_packidx,
 	*best_packidx = NULL;
 
 	/*
-	 * Find the largest pack which contains at least some of the
-	 * commits we are interested in.
+	 * Find the largest pack which contains the commit at the head
+	 * of the queue and some other commits we are interested in.
 	 */
 	RB_FOREACH(pe, got_pathlist_head, &repo->packidx_paths) {
 		const char *path_packidx = pe->path;
@@ -1154,15 +1154,24 @@ got_pack_find_pack_for_commit_painting(struct got_packidx **best_packidx,
 			break;
 
 		nobj = be32toh(packidx->hdr.fanout_table[0xff]);
-		if (nobj <= nobj_max)
+		if (nobj < nobj_max)
 			continue;
 
-		STAILQ_FOREACH(qid, ids, entry) {
+		qid = STAILQ_FIRST(ids);
+		idx = got_packidx_get_object_idx(packidx, &qid->id);
+		if (idx == -1)
+			continue;
+		ncommits++;
+
+		qid = STAILQ_NEXT(qid, entry);
+		while (qid) {
 			idx = got_packidx_get_object_idx(packidx, &qid->id);
 			if (idx != -1)
 				ncommits++;
+			qid = STAILQ_NEXT(qid, entry);
 		}
-		if (ncommits > ncommits_max) {
+
+		if (ncommits >= ncommits_max) {
 			best_packidx_path = path_packidx;
 			nobj_max = nobj;
 			ncommits_max = ncommits;
@@ -1277,9 +1286,12 @@ find_pack_for_enumeration(struct got_packidx **best_packidx,
 
 	*best_packidx = NULL;
 
+	if (nids == 0)
+		return NULL;
+
 	/*
-	 * Find the largest pack which contains at least some of the
-	 * commits and tags we are interested in.
+	 * Find the largest pack which contains the commit at the head
+	 * of the queue and some other commits we are interested in.
 	 */
 	RB_FOREACH(pe, got_pathlist_head, &repo->packidx_paths) {
 		const char *path_packidx = pe->path;
@@ -1291,15 +1303,20 @@ find_pack_for_enumeration(struct got_packidx **best_packidx,
 			break;
 
 		nobj = be32toh(packidx->hdr.fanout_table[0xff]);
-		if (nobj <= nobj_max)
+		if (nobj < nobj_max)
 			continue;
 
-		for (i = 0; i < nids; i++) {
+		idx = got_packidx_get_object_idx(packidx, ids[0]);
+		if (idx == -1)
+			continue;
+		ncommits++;
+
+		for (i = 1; i < nids; i++) {
 			idx = got_packidx_get_object_idx(packidx, ids[i]);
 			if (idx != -1)
 				ncommits++;
 		}
-		if (ncommits > ncommits_max) {
+		if (ncommits >= ncommits_max) {
 			best_packidx_path = path_packidx;
 			nobj_max = nobj;
 			ncommits_max = ncommits;
