@@ -2,20 +2,26 @@
 
 if [ "$CIRRUS_OS" = "linux" ]; then
 	apt-get update -qq && \
-	apt-get -y install bison autoconf \
-				autotools-dev \
-				libncurses5-dev \
-				pkg-config \
-				build-essential \
-				libssl-dev \
-				libbsd-dev \
-				libevent-dev \
-				uuid-dev \
-				zlib1g-dev \
-				git \
-				athena-jot \
-				ed \
-				libtls-dev
+	apt-get --no-install-suggests --no-install-recommends -y install \
+		athena-jot \
+		autoconf \
+		autoconf-archive \
+		automake \
+		autotools-dev \
+		bison \
+		build-essential \
+		ed \
+		git \
+		libbsd-dev \
+		libevent-dev \
+		libhttp-daemon-perl \
+		libhttp-daemon-ssl-perl \
+		libncurses5-dev \
+		libssl-dev \
+		libtls-dev \
+		pkg-config \
+		uuid-dev \
+		zlib1g-dev
 fi
 
 if [ "$CIRRUS_OS" = "freebsd" ]; then
@@ -24,7 +30,9 @@ if [ "$CIRRUS_OS" = "freebsd" ]; then
 		pkgconf \
 		git \
 		libevent \
-		libretls
+		libretls \
+		p5-HTTP-Daemon \
+		p5-HTTP-Daemon-SSL
 fi
 
 if [ "$CIRRUS_OS" = "darwin" ]; then
