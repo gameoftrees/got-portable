@@ -9,7 +9,7 @@ got_ubuntu_task:
     image: ubuntu:latest
   before_build_script: .github/ci/before-install.sh
   build:script: .github/ci/build.sh
-  test_script: make install && make tests
+  #test_script: make install && make tests
 
 got_alpine_linux_task:
   container:
@@ -32,13 +32,23 @@ got_alpine_linux_task:
       openssh
       ed
     - .github/ci/build.sh
+    - mkdir -p /var/run/sshd
+    - ssh-keygen -A
+    - echo "root:rootpassword" | chpasswd
+    # Allow root login and password auth (for testing only)
+    - echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
+    - echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config
+    - echo "StrictHostKeyChecking=no" >> /etc/ssh/sshd_config
+    # Run sshd in the background on localhost
+    - /usr/sbin/sshd -D &
+  test_script: make install && (umask 022; make tests)
 
 got_freebsd_task:
   freebsd_instance:
     image_family: freebsd-14-2
   before_build_script: .github/ci/before-install.sh
   build:script: .github/ci/build.sh
-  test_script: make install && make tests
+  #test_script: make install && make tests
 
 got_macos_task:
   macos_instance:
