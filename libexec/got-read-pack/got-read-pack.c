@@ -1795,13 +1795,6 @@ paint_commits(struct got_object_id_queue *ids, int *nids,
 		parents = got_object_commit_get_parent_ids(commit);
 		if (parents) {
 			struct got_object_qid *pid;
-
-			STAILQ_FOREACH(pid, parents, entry) {
-				if (got_packidx_get_object_idx(packidx,
-				    &pid->id) == -1)
-					goto send;
-			}
-
 			color = (intptr_t)qid->data;
 			STAILQ_FOREACH(pid, parents, entry) {
 				err = queue_commit_id(ids, &pid->id, color);
@@ -1825,7 +1818,7 @@ paint_commits(struct got_object_id_queue *ids, int *nids,
 		if (err)
 			goto done;
 	}
-send:
+
 	err = got_privsep_send_painted_commits(ibuf, &painted, &npainted, 1, 1);
 	if (err)
 		goto done;
