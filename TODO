@@ -82,6 +82,7 @@ gotd:
 - keep track of available repository disk space and fail gracefully when
   uploaded pack files would fill up the disk too much, keeping a reserve
 - reuse packed non-delta objects directly (without re-deltification) for speed
+- sending a branch while deleting another with got send -d breaks notifications
 
 gotadmin:
 - add support for generating git-fast-export streams from a repository
