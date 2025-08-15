@@ -217,7 +217,7 @@ recv_painted_commit(void *arg, struct got_object_id *id, intptr_t color)
 {
 	const struct got_error *err = NULL;
 	struct recv_painted_commit_arg *a = arg;
-	struct got_object_qid *qid, *tmp;
+	struct got_object_qid *qid;
 
 	if (a->cancel_cb) {
 		err = a->cancel_cb(a->cancel_arg);
@@ -254,17 +254,18 @@ recv_painted_commit(void *arg, struct got_object_id *id, intptr_t color)
 		    "%s invalid commit color %"PRIdPTR, __func__, color);
 	}
 
-	STAILQ_FOREACH_SAFE(qid, a->ids, entry, tmp) {
+	STAILQ_FOREACH(qid, a->ids, entry) {
+		int ocolor;
 		if (got_object_id_cmp(&qid->id, id) != 0)
 			continue;
-		STAILQ_REMOVE(a->ids, qid, got_object_qid, entry);
-		color = (intptr_t)qid->data;
-		if (*(a->qid0) == qid)
-			*(a->qid0) = NULL;
-		got_object_qid_free(qid);
-		(*a->nqueued)--;
-		if (color == COLOR_SKIP)
-			(*a->nskip)--;
+		ocolor = (intptr_t)qid->data;
+		if (ocolor != color) {
+			got_pack_paint_commit(qid, color);
+			if (ocolor == COLOR_SKIP)
+				(*a->nskip)--;
+			else if (color == COLOR_SKIP)
+				(*a->nskip)++;
+		}
 		break;
 	}
 
