@@ -1,0 +1,61 @@
+name: GoT-portable CI
+
+on:
+  push:
+    branches:
+      - portable
+      - ta/cirrus-updates
+
+jobs:
+  ubuntu-build:
+    name: Ubuntu (${{ matrix.compiler }})
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    container:
+      image: 'thomasadam/got-libc:latest'
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
+    env:
+      CI_OS: linux
+      CI_COMPILER: ${{ matrix.compiler }}
+    steps:
+      - name: Refresh Certs
+        run: apt -y install ca-certificates && update-ca-certificates
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - run: git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+      - name: Build
+        run: .github/ci/build.sh
+      - name: Tests
+        if: ${{ matrix.compiler == 'gcc' }}
+        run: |
+          make install
+          (umask 022; make tests -j4 GOT_TEST_QUIET=)
+
+  alpine-build:
+    name: Alpine (${{ matrix.compiler }})
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    container:
+      image: 'thomasadam/got-alpine:latest'
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
+    env:
+      CI_OS: alpine
+      CI_COMPILER: ${{ matrix.compiler }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - run: git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+      - name: Build
+        run: .github/ci/build.sh
+      - name: Install
+        run: make install
+      - name: Setup SSH
+        run: |
+          ssh-keygen -A
+          /usr/sbin/sshd -D &
+      - name: Run Tests
+        if: ${{ matrix.compiler == 'gcc' }}
+        run: |
+          (umask 022; make tests GOT_TEST_QUIET=)

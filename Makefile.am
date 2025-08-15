@@ -299,4 +299,4 @@ regress-path:
 
 regress-tog:
 	(cd $(top_builddir)/regress/tog || exit $$?; 	\
-	./log.sh -q -r "$(GOT_TEST_ROOT)");
+	./log.sh $(GOT_TEST_QUIET) -r "$(GOT_TEST_ROOT)");
