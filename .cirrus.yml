@@ -41,7 +41,7 @@ got_alpine_linux_task:
     - echo "StrictHostKeyChecking=no" >> /etc/ssh/sshd_config
     # Run sshd in the background on localhost
     - /usr/sbin/sshd -D &
-  test_script: make install && (umask 022; make tests)
+  test_script: make install && (umask 022; make tests GOT_TEST_QUIET=)
 
 got_freebsd_task:
   freebsd_instance:
