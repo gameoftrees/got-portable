@@ -485,9 +485,11 @@ test_fetch_all() {
 
 	# remove default branch from got.conf, fetch all branches
 	ed -s $testroot/repo-clone/got.conf <<-EOF
+	/fetch {/d
 	/branch {/c
 	fetch_all_branches yes
 	.
+	/}/d
 	w
 	EOF
 
