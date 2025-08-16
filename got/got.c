@@ -1395,15 +1395,21 @@ create_gotconfig(const char *proto, const char *host, const char *port,
 	    "\tprotocol %s\n"
 	    "%s%s%s"
 	    "\trepository \"%s\"\n"
+	    "%s"
 	    "%s%s%s"
+	    "%s"
 	    "%s%s%s"
 	    "%s"
 	    "%s"
 	    "}\n",
 	    GOT_FETCH_DEFAULT_REMOTE_NAME, host, proto,
 	    port ? "\tport " : "", port ? port : "", port ? "\n" : "",
-	    remote_repo_path, branches ? "\tbranch { " : "",
-	    branches ? branches : "", branches ? "}\n" : "",
+	    remote_repo_path,
+	    branches ? "\tfetch {\n" : "",
+	    branches ? "\t\tbranch { " : "",
+	    branches ? branches : "",
+	    branches ? "}\n" : "",
+	    branches ? "\t}\n" : "",
 	    refs ? "\treference { " : "", refs ? refs : "", refs ? "}\n" : "",
 	    mirror_references ? "\tmirror_references yes\n" : "",
 	    fetch_all_branches ? "\tfetch_all_branches yes\n" : "") == -1) {
