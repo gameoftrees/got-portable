@@ -1,3 +1,15 @@
+* got 0.117; 2025-08-17
+- regress: replace "sed -i" with ed(1) for portable in-place editing
+- ensure that error messages from gotsysd libexec helpers get logged
+- fix gotsysd using wrong auth and hmac labels in the generated gotd.conf
+- preserve bad symlinks across merges during rebase and histedit
+- improve binary files detection: detect any control characters, not just NUL
+- gotwebd: fix race condition resulting in trucated html with trailing garbage
+- make commit coloring faster and more accurate, producing smaller pack files
+- improve selection of pack files for pinning in the open pack file cache
+- regress: don't load global/home git configuration files while running tests
+- make 'got clone' set a got.conf default branch for fetching only, not sending
+
 * got 0.116; 2025-07-25
 - make our pack-refs header format align with the expectations of git 2.50.0
 - fix bogus "bad offset in pack file" errors wrongly raised by gotd
