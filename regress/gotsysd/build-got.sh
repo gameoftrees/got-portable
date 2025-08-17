@@ -8,7 +8,7 @@ cd ~/src/got
 # on already compiled files might be off. Clean out any build artifacts.
 # We cannot run the top-level clean target because some subdirs are missing,
 # most notably the regress directory.
-for d in got* git* lib*; do
+for d in got* git* lib* template; do
 	if [ -d "${d}" ]; then
 		make -s -C "${d}" clean > /dev/null
 	fi
