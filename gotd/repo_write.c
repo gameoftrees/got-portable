@@ -1941,16 +1941,52 @@ print_commits(struct got_object_id *root_id, struct got_object_id *end_id,
     struct got_repository *repo, int fd)
 {
 	const struct got_error *err;
-	struct got_commit_graph *graph;
+	struct got_commit_graph *graph = NULL;
 	struct got_object_id_queue reversed_commits;
 	struct got_object_qid *qid;
 	struct got_commit_object *commit = NULL;
 	struct got_pathlist_head changed_paths;
 	int ncommits = 0;
 	const int shortlog_threshold = 50;
+	struct got_object_id *yca_id = NULL;
+	struct got_reference *head_ref = NULL;
+	struct got_object_id *head_id = NULL;
 
 	STAILQ_INIT(&reversed_commits);
 	RB_INIT(&changed_paths);
+
+	if (end_id && got_object_id_cmp(root_id, end_id) != 0) {
+		err = got_commit_graph_find_youngest_common_ancestor(
+		    &yca_id, root_id, end_id, 1, 0, repo_write.repo,
+		    check_cancelled, NULL);
+		if (err)
+			return err;
+		if (yca_id)
+			end_id = yca_id;
+	}
+
+	if (end_id == NULL) {
+		err = got_ref_open(&head_ref, repo_write.repo, GOT_REF_HEAD, 0);
+		if (err) {
+			if (err->code != GOT_ERR_NOT_REF)
+				goto done;
+		} else {
+			err = got_ref_resolve(&head_id, repo_write.repo,
+			    head_ref);
+			if (err)
+				goto done;
+			if (got_object_id_cmp(root_id, head_id) != 0) {
+				err =
+				got_commit_graph_find_youngest_common_ancestor(
+				    &yca_id, root_id, head_id, 1, 0,
+				    repo_write.repo, check_cancelled, NULL);
+				if (err)
+					goto done;
+				if (yca_id)
+					end_id = yca_id;
+			}
+		}
+	}
 
 	/* XXX first-parent only for now */
 	err = got_commit_graph_open(&graph, "/", 1);
@@ -2016,11 +2052,16 @@ print_commits(struct got_object_id *root_id, struct got_object_id *end_id,
 		got_pathlist_free(&changed_paths, GOT_PATHLIST_FREE_ALL);
 	}
 done:
+	free(yca_id);
+	free(head_id);
+	if (head_ref)
+		got_ref_close(head_ref);
 	if (commit)
 		got_object_commit_close(commit);
 	got_object_id_queue_free(&reversed_commits);
 	got_pathlist_free(&changed_paths, GOT_PATHLIST_FREE_ALL);
-	got_commit_graph_close(graph);
+	if (graph)
+		got_commit_graph_close(graph);
 	return err;
 }
 
@@ -2133,7 +2174,7 @@ static const struct got_error *
 notify_created_ref(const char *refname, struct got_object_id *id,
     struct gotd_imsgev *iev, int fd)
 {
-	const struct got_error *err;
+	const struct got_error *err = NULL;
 	int obj_type;
 
 	err = got_object_get_type(&obj_type, repo_write.repo, id);
