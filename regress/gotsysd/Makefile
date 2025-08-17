@@ -11,7 +11,7 @@ CLEANFILES= SHA256.sig bsd.rd bsd.rd.fs bsd.rd.decomp ${AUTOINSTALL_CONF} \
 	${GOTSYSD_TEST_VM_BASE_IMAGE} ${GOTSYSD_VM_PASSWD_FILE} ${GOTD_CONF} \
 	${GOTSYSD_CONF} ${GOTSYS_CONF} ${GOT_CONF} ${INSTALL_SITE}
 
-.PHONY: ensure_root vm start_test_vm
+.PHONY: ensure_root vm start_test_vm build_got
 
 GOTSYSD_TEST_ROOT=/tmp
 GOTSYSD_TEST_DIR!!=mktemp -d "$(GOTSYSD_TEST_ROOT)/gotsysd-test-XXXXXXXXXX"
@@ -206,7 +206,7 @@ ${GOTSYS_CONF}: ${GOTSYSD_SSH_PUBKEY}
 ${GOT_CONF}:
 	@${UNPRIV} "echo author \\'${GOTSYSD_TEST_USER} \\<${GOTSYSD_TEST_USER}@localhost\\>\\' > $@"
 
-setup_test_vm: start_test_vm ${GOTD_CONF} ${GOTSYSD_CONF} ${GOTSYS_CONF} ${GOT_CONF}
+build_got:
 	@set -e; \
 	VMID=`vmctl status ${GOTSYSD_VM_NAME} | tail -n1 | \
 		awk '{print $$1}'`; \
@@ -225,9 +225,16 @@ setup_test_vm: start_test_vm ${GOTD_CONF} ${GOTSYSD_CONF} ${GOTSYS_CONF} ${GOT_C
 		make -C /home/${GOTSYSD_TEST_USER}/src/got -- GOT_RELEASE=Yes \
 		DEBUG=\\'-Oo -g\\' sysd-install server-install webd-install install"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} -- root@$${VMIP} \
-		ln -s gitwrapper /usr/local/bin/git-upload-pack"; \
+		ln -f -s gitwrapper /usr/local/bin/git-upload-pack"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} -- root@$${VMIP} \
-		ln -s gitwrapper /usr/local/bin/git-receive-pack"; \
+		ln -f -s gitwrapper /usr/local/bin/git-receive-pack"
+
+setup_test_vm: start_test_vm build_got ${GOTD_CONF} ${GOTSYSD_CONF} ${GOTSYS_CONF} ${GOT_CONF}
+	@set -e; \
+	VMID=`vmctl status ${GOTSYSD_VM_NAME} | tail -n1 | \
+		awk '{print $$1}'`; \
+	VMIP="100.64.$$VMID.3"; \
+	${UNPRIV} "ssh-keygen -R $${VMIP}"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} sysctl kern.nosuidcoredump=3"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} mkdir -p /var/crash/gotd "; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} mkdir -p /var/crash/gotsysd "; \
