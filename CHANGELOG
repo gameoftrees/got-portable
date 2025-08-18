@@ -6,6 +6,13 @@ other than OpenBSD.
 
 All changes are on top of the versioned changes listed in CHANGES.
 
+# got-portable 0.117 (2025-08-18)
+
+* Changes from got-0.117
+
+  Plus:
+    - regress: replace "sed -i" with ed(1) for portable in-place editing
+
 # got-portable 0.116 (2025-07-27)
 
 * Changes from got-0.116
