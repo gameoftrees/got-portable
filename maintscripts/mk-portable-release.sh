@@ -31,7 +31,9 @@ nproc()
 	echo "$result"
 }
 
-[ -z "$(git status --porcelain)" ] || die "Working tree is not clean"
+{
+	[ -z "$(git status --porcelain)" ] || [ "$1" != "--force" ]
+} && die "Working tree is not clean"
 
 git checkout -q "$PORTABLE_BRANCH"
 git pull -q
