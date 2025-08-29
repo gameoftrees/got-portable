@@ -7003,6 +7003,7 @@ diff_write_patch(struct tog_view *view)
 	FILE				*f = NULL;
 	char				 buf[BUFSIZ], pathbase[PATH_MAX];
 	char				*idstr1, *idstr2 = NULL, *path = NULL;
+	char				*repo_name = NULL;
 	size_t				 r;
 	off_t				 pos;
 	int				 rc;
@@ -7035,8 +7036,13 @@ diff_write_patch(struct tog_view *view)
 	if (err != NULL)
 		goto done;
 
-	rc = snprintf(pathbase, sizeof(pathbase), "%s/tog-%.8s-%.8s",
-	    GOT_TMPDIR_STR, idstr1 != NULL ? idstr1 : "empty", idstr2);
+	err = got_path_basename(&repo_name, got_repo_get_path(s->repo));
+	if (err)
+		goto done;
+
+	rc = snprintf(pathbase, sizeof(pathbase), "%s/tog-%s-%.8s-%.8s",
+	    GOT_TMPDIR_STR, repo_name,
+	    idstr1 != NULL ? idstr1 : "empty", idstr2);
 	if (rc < 0 || (size_t)rc >= sizeof(pathbase)) {
 		err = got_error(rc < 0 ? GOT_ERR_IO : GOT_ERR_NO_SPACE);
 		goto done;
@@ -7080,6 +7086,7 @@ done:
 	free(path);
 	free(idstr1);
 	free(idstr2);
+	free(repo_name);
 	return err;
 }
 
