@@ -156,6 +156,18 @@ gotweb_get_socket(int sock_id)
 	return NULL;
 }
 
+static void
+cleanup_request(struct request *c)
+{
+	uint32_t request_id = c->request_id;
+
+	fcgi_cleanup_request(c);
+
+	if (imsg_compose_event(gotwebd_env->iev_server, GOTWEBD_IMSG_REQ_ABORT,
+	    GOTWEBD_PROC_GOTWEB, -1, -1, &request_id, sizeof(request_id)) == -1)
+		log_warn("imsg_compose_event");
+}
+
 static struct request *
 recv_request(struct imsg *imsg)
 {
@@ -211,14 +223,14 @@ recv_request(struct imsg *imsg)
 	c->tp = template(c, fcgi_write, c->outbuf, GOTWEBD_CACHESIZE);
 	if (c->tp == NULL) {
 		log_warn("gotweb init template");
-		fcgi_cleanup_request(c);
+		cleanup_request(c);
 		return NULL;
 	}
 
 	c->sock = gotweb_get_socket(c->sock_id);
 	if (c->sock == NULL) {
 		log_warn("socket id '%d' not found", c->sock_id);
-		fcgi_cleanup_request(c);
+		cleanup_request(c);
 		return NULL;
 	}
 
@@ -226,15 +238,15 @@ recv_request(struct imsg *imsg)
 	error = gotweb_init_transport(&c->t);
 	if (error) {
 		log_warnx("gotweb init transport: %s", error->msg);
-		fcgi_cleanup_request(c);
+		cleanup_request(c);
 		return NULL;
 	}
 
 	/* get the gotwebd server */
-	srv = gotweb_get_server(c->server_name);
+	srv = gotweb_get_server(c->fcgi_params.server_name);
 	if (srv == NULL) {
-		log_warnx("server '%s' not found", c->server_name);
-		fcgi_cleanup_request(c);
+		log_warnx("server '%s' not found", c->fcgi_params.server_name);
+		cleanup_request(c);
 		return NULL;
 	}
 	c->srv = srv;
@@ -262,7 +274,7 @@ gotweb_process_request(struct request *c)
 		goto err;
 	}
 	c->t->qs = qs;
-	error = gotweb_parse_querystring(qs, c->querystring);
+	error = gotweb_parse_querystring(qs, c->fcgi_params.querystring);
 	if (error) {
 		log_warnx("%s: %s", __func__, error->msg);
 		goto err;
@@ -270,22 +282,23 @@ gotweb_process_request(struct request *c)
 
 	/* Log the request. */
 	if (gotwebd_env->gotwebd_verbose > 0) {
+		struct gotwebd_fcgi_params *p = &c->fcgi_params;
 		char *server_name = NULL;
 		char *querystring = NULL;
 		char *document_uri = NULL;
 
-		if (c->server_name[0] &&
-		    stravis(&server_name, c->server_name, VIS_SAFE) == -1) {
+		if (p->server_name[0] &&
+		    stravis(&server_name, p->server_name, VIS_SAFE) == -1) {
 			log_warn("stravis");
 			server_name = NULL;
 		}
-		if (c->querystring[0] &&
-		    stravis(&querystring, c->querystring, VIS_SAFE) == -1) {
+		if (p->querystring[0] &&
+		    stravis(&querystring, p->querystring, VIS_SAFE) == -1) {
 			log_warn("stravis");
 			querystring = NULL;
 		}
-		if (c->document_uri[0] &&
-		    stravis(&document_uri, c->document_uri, VIS_SAFE) == -1) {
+		if (p->document_uri[0] &&
+		    stravis(&document_uri, p->document_uri, VIS_SAFE) == -1) {
 			log_warn("stravis");
 			document_uri = NULL;
 		}
@@ -1160,12 +1173,13 @@ int
 gotweb_render_absolute_url(struct request *c, struct gotweb_url *url)
 {
 	struct template	*tp = c->tp;
-	const char	*proto = c->https ? "https" : "http";
+	struct gotwebd_fcgi_params *p = &c->fcgi_params;
+	const char	*proto = p->https ? "https" : "http";
 
 	if (tp_writes(tp, proto) == -1 ||
 	    tp_writes(tp, "://") == -1 ||
-	    tp_htmlescape(tp, c->server_name) == -1 ||
-	    tp_htmlescape(tp, c->document_uri) == -1)
+	    tp_htmlescape(tp, p->server_name) == -1 ||
+	    tp_htmlescape(tp, p->document_uri) == -1)
 		return -1;
 
 	return gotweb_render_url(c, url);
@@ -1495,6 +1509,7 @@ gotweb_dispatch_server(int fd, short event, void *arg)
 			c = recv_request(&imsg);
 			if (c) {
 				int request_id = c->request_id;
+				log_info("%u: %s: request %u", getpid(), __func__, c->request_id);
 				if (gotweb_process_request(c) == -1) {
 					log_warnx("request %u failed",
 					    request_id);
@@ -1506,7 +1521,7 @@ gotweb_dispatch_server(int fd, short event, void *arg)
 				}
 
 				fcgi_create_end_record(c);
-				fcgi_cleanup_request(c);
+				cleanup_request(c);
 			}
 			break;
 		default:

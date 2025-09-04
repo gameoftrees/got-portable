@@ -79,11 +79,135 @@ static struct socket *sockets_conf_new_socket(struct gotwebd *,
 
 int cgi_inflight = 0;
 
+/* Request hash table needs some spare room to avoid collisions. */
+struct requestlist requests[GOTWEBD_MAXCLIENTS * 4];
+static SIPHASH_KEY requests_hash_key;
+
+static void
+requests_init(void)
+{
+	int i;
+
+	arc4random_buf(&requests_hash_key, sizeof(requests_hash_key));
+
+	for (i = 0; i < nitems(requests); i++)
+		TAILQ_INIT(&requests[i]);
+}
+
+static uint64_t
+request_hash(uint32_t request_id)
+{
+	return SipHash24(&requests_hash_key, &request_id, sizeof(request_id));
+}
+
+static void
+add_request(struct request *c)
+{
+	uint64_t slot = request_hash(c->request_id) % nitems(requests);
+	TAILQ_INSERT_HEAD(&requests[slot], c, entry);
+	client_cnt++;
+}
+
+static void
+del_request(struct request *c)
+{
+	uint64_t slot = request_hash(c->request_id) % nitems(requests);
+	TAILQ_REMOVE(&requests[slot], c, entry);
+	client_cnt--;
+}
+
+static struct request *
+find_request(uint32_t request_id)
+{
+	uint64_t slot;
+	struct request *c;
+
+	slot = request_hash(request_id) % nitems(requests);
+	TAILQ_FOREACH(c, &requests[slot], entry) {
+		if (c->request_id == request_id)
+			return c;
+	}
+
+	return NULL;
+}
+
+static void
+cleanup_request(struct request *c)
+{
+	cgi_inflight--;
+
+	del_request(c);
+
+	event_add(&c->sock->ev, NULL);
+
+	if (evtimer_initialized(&c->tmo))
+		evtimer_del(&c->tmo);
+	if (event_initialized(&c->ev))
+		event_del(&c->ev);
+	if (c->fd != -1)
+		close(c->fd);
+	free(c->buf);
+	free(c);
+}
+
+static void
+request_timeout(int fd, short events, void *arg)
+{
+	struct request *c = arg;
+
+	log_warnx("request %u has timed out", c->request_id);
+	cleanup_request(c);
+}
+
+static void
+requests_purge(void)
+{
+	uint64_t slot;
+	struct request *c;
+
+	for (slot = 0; slot < nitems(requests); slot++) {
+		while (!TAILQ_EMPTY(&requests[slot])) {
+			c = TAILQ_FIRST(&requests[slot]);
+			cleanup_request(c);
+		}
+	}
+}
+
+static uint32_t
+get_request_id(void)
+{
+	int duplicate = 0;
+	uint32_t id;
+
+	do {
+		id = arc4random();
+		duplicate = (find_request(id) != NULL);
+	} while (duplicate || id == 0);
+
+	return id;
+}
+
+static void
+request_done(struct request *c)
+{
+	/*
+	 * If we have not yet handed the client off to gotweb.c we
+	 * must send an FCGI end record ourselves.
+	 */
+	if (c->client_status > CLIENT_CONNECT &&
+	    c->client_status < CLIENT_REQUEST)
+		fcgi_create_end_record(c);
+
+	cleanup_request(c);
+}
+
 void
 sockets(struct gotwebd *env, int fd)
 {
 	struct event	 sighup, sigint, sigusr1, sigchld, sigterm;
 	struct event_base *evb;
+
+	requests_init();
 
 	evb = event_init();
 
@@ -198,6 +322,8 @@ sockets_launch(struct gotwebd *env)
 	struct socket *sock;
 	int i, have_unix = 0, have_inet = 0;
 
+	if (env->iev_fcgi == NULL)
+		fatalx("fcgi process not connected");
 	if (env->gotweb_pending != 0)
 		fatal("gotweb process not connected");
 
@@ -250,9 +376,27 @@ sockets_launch(struct gotwebd *env)
 			fatal("pledge");
 	}
 #endif
+	event_add(&env->iev_fcgi->ev, NULL);
 	for (i = 0; i < env->prefork; i++)
 		event_add(&env->iev_gotweb[i].ev, NULL);
+}
 
+static void
+abort_request(struct imsg *imsg)
+{
+	struct request *c;
+	uint32_t request_id;
+
+	if (imsg_get_data(imsg, &request_id, sizeof(request_id)) == -1) {
+		log_warn("imsg_get_data");
+		return;
+	}
+
+	c = find_request(request_id);
+	if (c == NULL)
+		return;
+
+	request_done(c);
 }
 
 static void
@@ -284,6 +428,9 @@ server_dispatch_gotweb(int fd, short event, void *arg)
 			break;
 
 		switch (imsg.hdr.type) {
+		case GOTWEBD_IMSG_REQ_ABORT:
+			abort_request(&imsg);
+			break;
 		default:
 			fatalx("%s: unknown imsg type %d", __func__,
 			    imsg.hdr.type);
@@ -320,6 +467,7 @@ recv_gotweb_pipe(struct gotwebd *env, struct imsg *imsg)
 	if (imsgbuf_init(&iev->ibuf, fd) == -1)
 		fatal("imsgbuf_init");
 	imsgbuf_allow_fdpass(&iev->ibuf);
+	imsgbuf_set_maxsize(&iev->ibuf, sizeof(struct gotwebd_fcgi_record));
 
 	iev->handler = server_dispatch_gotweb;
 	iev->data = iev;
@@ -327,6 +475,189 @@ recv_gotweb_pipe(struct gotwebd *env, struct imsg *imsg)
 	imsg_event_add(iev);
 
 	env->gotweb_pending--;
+}
+
+static int
+process_request(struct request *c)
+{
+	struct gotwebd *env = gotwebd_env;
+	struct imsgev *iev_gotweb;
+	int ret, i;
+	struct request ic;
+
+	memcpy(&ic, c, sizeof(ic));
+
+	/* Don't leak pointers from our address space to another process. */
+	ic.sock = NULL;
+	ic.srv = NULL;
+	ic.t = NULL;
+	ic.tp = NULL;
+	ic.buf = NULL;
+	ic.outbuf = NULL;
+
+	/* Other process will use its own set of temp files. */
+	for (i = 0; i < nitems(c->priv_fd); i++)
+		ic.priv_fd[i] = -1;
+	ic.fd = -1;
+
+	/* Round-robin requests across gotweb processes. */
+	iev_gotweb = &env->iev_gotweb[env->gotweb_cur];
+	env->gotweb_cur = (env->gotweb_cur + 1) % env->prefork;
+
+	ret = imsg_compose_event(iev_gotweb, GOTWEBD_IMSG_REQ_PROCESS,
+	    GOTWEBD_PROC_SERVER, -1, c->fd, &ic, sizeof(ic));
+	if (ret == -1) {
+		log_warn("imsg_compose_event");
+		return -1;
+	}
+
+	c->fd = -1;
+	c->client_status = CLIENT_REQUEST;
+	return 0;
+}
+
+static void
+recv_parsed_params(struct imsg *imsg)
+{
+	struct gotwebd_fcgi_params params, *p;
+	struct request *c;
+
+	if (imsg_get_data(imsg, &params, sizeof(params)) == -1) {
+		log_warn("imsg_get_data");
+		return;
+	}
+
+	c = find_request(params.request_id);
+	if (c == NULL)
+		return;
+
+	if (c->client_status > CLIENT_FCGI_STDIN)
+		return;
+
+	if (c->client_status < CLIENT_FCGI_PARAMS)
+		goto fail;
+
+	p = &c->fcgi_params;
+
+	if (params.querystring[0] != '\0' &&
+	    strlcpy(p->querystring, params.querystring,
+	    sizeof(p->querystring)) >= sizeof(p->querystring)) {
+		log_warnx("querystring too long");
+		goto fail;
+	}
+
+	if (params.document_uri[0] != '\0' &&
+	    strlcpy(p->document_uri, params.document_uri,
+	    sizeof(p->document_uri)) >= sizeof(p->document_uri)) {
+		log_warnx("document uri too long");
+		goto fail;
+	}
+
+	if (params.server_name[0] != '\0' &&
+	    strlcpy(p->server_name, params.server_name,
+	    sizeof(p->server_name)) >= sizeof(p->server_name)) {
+		log_warnx("server name too long");
+		goto fail;
+	}
+
+	if (params.https && !p->https)
+		p->https = 1;
+
+	c->nparams_parsed++;
+
+	if (c->client_status == CLIENT_FCGI_STDIN &&
+	    c->nparams_parsed >= c->nparams) {
+		if (process_request(c) == -1)
+			goto fail;
+	}
+
+	return;
+fail:
+	request_done(c);
+}
+
+static void
+server_dispatch_fcgi(int fd, short event, void *arg)
+{
+	struct imsgev		*iev = arg;
+	struct imsgbuf		*ibuf;
+	struct imsg		 imsg;
+	ssize_t			 n;
+	int			 shut = 0;
+
+	ibuf = &iev->ibuf;
+
+	if (event & EV_READ) {
+		if ((n = imsgbuf_read(ibuf)) == -1)
+			fatal("imsgbuf_read error");
+		if (n == 0)	/* Connection closed */
+			shut = 1;
+	}
+	if (event & EV_WRITE) {
+		if (imsgbuf_write(ibuf) == -1)
+			fatal("imsgbuf_write");
+	}
+
+	for (;;) {
+		if ((n = imsg_get(ibuf, &imsg)) == -1)
+			fatal("imsg_get");
+		if (n == 0)	/* No more messages. */
+			break;
+
+		switch (imsg.hdr.type) {
+		case GOTWEBD_IMSG_FCGI_PARAMS:
+			recv_parsed_params(&imsg);
+			break;
+		case GOTWEBD_IMSG_REQ_ABORT:
+			abort_request(&imsg);
+			break;
+		default:
+			fatalx("%s: unknown imsg type %d", __func__,
+			    imsg.hdr.type);
+		}
+
+		imsg_free(&imsg);
+	}
+
+	if (!shut)
+		imsg_event_add(iev);
+	else {
+		/* This pipe is dead.  Remove its event handler */
+		event_del(&iev->ev);
+		event_loopexit(NULL);
+	}
+}
+
+static void
+recv_fcgi_pipe(struct gotwebd *env, struct imsg *imsg)
+{
+	struct imsgev *iev;
+	int fd;
+
+	if (env->iev_fcgi != NULL) {
+		log_warn("fcgi pipe already received");
+		return;
+	}
+
+	fd = imsg_get_fd(imsg);
+	if (fd == -1)
+		fatalx("invalid gotweb pipe fd");
+
+	iev = calloc(1, sizeof(*iev));
+	if (iev == NULL)
+		fatal("calloc");
+
+	if (imsgbuf_init(&iev->ibuf, fd) == -1)
+		fatal("imsgbuf_init");
+	imsgbuf_allow_fdpass(&iev->ibuf);
+	imsgbuf_set_maxsize(&iev->ibuf, sizeof(struct gotwebd_fcgi_record));
+
+	iev->handler = server_dispatch_fcgi;
+	iev->data = iev;
+	event_set(&iev->ev, fd, EV_READ, server_dispatch_fcgi, iev);
+	imsg_event_add(iev);
+
+	env->iev_fcgi = iev;
 }
 
 static void
@@ -369,7 +700,10 @@ sockets_dispatch_main(int fd, short event, void *arg)
 			config_getcfg(env, &imsg);
 			break;
 		case GOTWEBD_IMSG_CTL_PIPE:
-			recv_gotweb_pipe(env, &imsg);
+			if (env->iev_fcgi == NULL)
+				recv_fcgi_pipe(env, &imsg);
+			else
+				recv_gotweb_pipe(env, &imsg);
 			break;
 		case GOTWEBD_IMSG_CTL_START:
 			sockets_launch(env);
@@ -446,11 +780,18 @@ sockets_shutdown(void)
 		free(sock);
 	}
 
+	requests_purge();
+
 	imsgbuf_clear(&gotwebd_env->iev_parent->ibuf);
 	free(gotwebd_env->iev_parent);
+
+	imsgbuf_clear(&gotwebd_env->iev_fcgi->ibuf);
+	free(gotwebd_env->iev_fcgi);
+
 	for (i = 0; i < gotwebd_env->prefork; i++)
 		imsgbuf_clear(&gotwebd_env->iev_gotweb[i].ibuf);
 	free(gotwebd_env->iev_gotweb);
+
 	free(gotwebd_env);
 
 	exit(0);
@@ -598,6 +939,158 @@ sockets_accept_paused(int fd, short events, void *arg)
 	event_add(&sock->ev, NULL);
 }
 
+static int
+parse_params(struct request *c, uint8_t *record, size_t record_len)
+{
+	struct gotwebd *env = gotwebd_env;
+	struct gotwebd_fcgi_record rec;
+	int ret;
+
+	memset(&rec, 0, sizeof(rec));
+
+	memcpy(rec.record, record, record_len);
+	rec.record_len = record_len;
+	rec.request_id = c->request_id;
+
+	ret = imsg_compose_event(env->iev_fcgi,
+	    GOTWEBD_IMSG_FCGI_PARSE_PARAMS,
+	    GOTWEBD_PROC_SERVER, -1, -1, &rec, sizeof(rec));
+	if (ret == -1)
+		log_warn("imsg_compose_event");
+
+	return ret;
+}
+
+static void
+read_fcgi_records(int fd, short events, void *arg)
+{
+	struct request *c = arg;
+	ssize_t n;
+	struct fcgi_record_header h;
+	size_t record_len;
+
+	n = read(fd, c->buf + c->buf_len, FCGI_RECORD_SIZE - c->buf_len);
+	log_info("%u: %s: request %u, read=%zd", getpid(), __func__, c->request_id, n);
+
+	switch (n) {
+	case -1:
+		switch (errno) {
+		case EINTR:
+		case EAGAIN:
+			goto more;
+		default:
+			goto fail;
+		}
+		break;
+	case 0:
+		if (c->client_status < CLIENT_FCGI_STDIN) {
+			log_warnx("client %u closed connection too early",
+			    c->request_id);
+			goto fail;
+		}
+		return;
+	default:
+		break;
+	}
+
+	c->buf_len += n;
+
+	while (c->buf_len >= sizeof(h)) {
+		memcpy(&h, c->buf, sizeof(h));
+
+		record_len = sizeof(h) + ntohs(h.content_len) + h.padding_len;
+		if (record_len > FCGI_RECORD_SIZE) {
+			log_warnx("FGI record length too large");
+			goto fail;
+		}
+
+		if (c->buf_len < record_len)
+			goto more;
+
+		switch (h.type) {
+		case FCGI_BEGIN_REQUEST:
+			if (c->client_status >= CLIENT_FCGI_BEGIN) {
+				log_warnx("unexpected FCGI_BEGIN_REQUEST");
+				goto fail;
+			}
+
+			if (ntohs(h.content_len) !=
+			    sizeof(struct fcgi_begin_request_body)) {
+				log_warnx("wrong begin request size %u != %zu",
+				    ntohs(h.content_len),
+				    sizeof(struct fcgi_begin_request_body));
+				goto fail;
+			}
+
+			/* XXX -- FCGI_CANT_MPX_CONN */
+			c->client_status = CLIENT_FCGI_BEGIN;
+			c->id = ntohs(h.id);
+			break;
+		case FCGI_PARAMS:
+			if (c->client_status < CLIENT_FCGI_BEGIN) {
+				log_warnx("FCGI_PARAMS without "
+				    "FCGI_BEGIN_REQUEST");
+				goto fail;
+			}
+			if (c->client_status > CLIENT_FCGI_PARAMS) {
+				log_warnx("FCGI_PARAMS after FCGI_STDIN");
+				goto fail;
+			}
+
+			if (c->id != ntohs(h.id)) {
+				log_warnx("unexpected ID in FCGI header");
+				goto fail;
+			}
+
+			c->client_status = CLIENT_FCGI_PARAMS;
+			c->nparams++;
+
+			if (parse_params(c, c->buf, record_len) == -1)
+				goto fail;
+			break;
+		case FCGI_ABORT_REQUEST:
+			log_warnx("received FCGI_ABORT_REQUEST from client");
+			request_done(c);
+			return;
+		case FCGI_STDIN:
+			if (c->client_status < CLIENT_FCGI_BEGIN) {
+				log_warnx("FCGI_STDIN without "
+				    "FCGI_BEGIN_REQUEST");
+				goto fail;
+			}
+
+			if (c->client_status < CLIENT_FCGI_PARAMS) {
+				log_warnx("FCGI_STDIN without FCGI_PARAMS");
+				goto fail;
+			}
+
+			if (c->id != ntohs(h.id)) {
+				log_warnx("unexpected ID in FCGI header");
+				goto fail;
+			}
+
+			c->client_status = CLIENT_FCGI_STDIN;
+			if (c->nparams_parsed >= c->nparams) {
+				if (process_request(c) == -1)
+					goto fail;
+			}
+			break;
+		default:
+			log_warn("unexpected FCGI type %u", h.type);
+			goto fail;
+		}
+
+		/* drop the parsed record */
+		c->buf_len -= record_len;
+		memmove(c->buf, c->buf + record_len, c->buf_len);
+	}
+more:
+	event_add(&c->ev, NULL);
+	return;
+fail:
+	request_done(c);
+}
+
 void
 sockets_socket_accept(int fd, short event, void *arg)
 {
@@ -609,12 +1102,16 @@ sockets_socket_accept(int fd, short event, void *arg)
 	socklen_t len;
 	int s;
 
+	log_info("%u: %s: %d clients", getpid(), __func__, client_cnt);
+
 	backoff.tv_sec = 1;
 	backoff.tv_usec = 0;
 
-	event_add(&sock->ev, NULL);
-	if (event & EV_TIMEOUT)
+	if (event & EV_TIMEOUT) {
+		event_add(&sock->ev, NULL);
+		log_info("%u: %s: timeout", getpid(), __func__);
 		return;
+	}
 
 	len = sizeof(ss);
 
@@ -626,6 +1123,8 @@ sockets_socket_accept(int fd, short event, void *arg)
 		case EINTR:
 		case EWOULDBLOCK:
 		case ECONNABORTED:
+			log_info("%u: %s: errno %d", getpid(), __func__, errno);
+			event_add(&sock->ev, NULL);
 			return;
 		case EMFILE:
 		case ENFILE:
@@ -639,14 +1138,21 @@ sockets_socket_accept(int fd, short event, void *arg)
 		}
 	}
 
-	if (client_cnt > GOTWEBD_MAXCLIENTS)
-		goto err;
+	if (client_cnt > GOTWEBD_MAXCLIENTS) {
+		cgi_inflight--;
+		close(s);
+		if (c != NULL)
+			free(c);
+		event_add(&sock->ev, NULL);
+		return;
+	}
 
 	c = calloc(1, sizeof(struct request));
 	if (c == NULL) {
 		log_warn("%s: calloc", __func__);
 		close(s);
 		cgi_inflight--;
+		event_add(&sock->ev, NULL);
 		return;
 	}
 
@@ -656,6 +1162,7 @@ sockets_socket_accept(int fd, short event, void *arg)
 		close(s);
 		cgi_inflight--;
 		free(c);
+		event_add(&sock->ev, NULL);
 		return;
 	}
 
@@ -664,23 +1171,18 @@ sockets_socket_accept(int fd, short event, void *arg)
 	c->sock = sock;
 	memcpy(c->priv_fd, gotwebd_env->priv_fd, sizeof(c->priv_fd));
 	c->sock_id = sock->conf.id;
-	c->buf_pos = 0;
 	c->buf_len = 0;
-	c->request_started = 0;
 	c->client_status = CLIENT_CONNECT;
+	c->request_id = get_request_id();
 
-	event_set(&c->ev, s, EV_READ, fcgi_request, c);
+	event_set(&c->ev, s, EV_READ, read_fcgi_records, c);
 	event_add(&c->ev, NULL);
 
-	evtimer_set(&c->tmo, fcgi_timeout, c);
+	evtimer_set(&c->tmo, request_timeout, c);
 	evtimer_add(&c->tmo, &timeout);
 
-	return;
-err:
-	cgi_inflight--;
-	close(s);
-	if (c != NULL)
-		free(c);
+	log_info("%u: %s: add_request %d", getpid(), __func__, c->request_id);
+	add_request(c);
 }
 
 void
