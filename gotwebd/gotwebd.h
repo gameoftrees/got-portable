@@ -124,6 +124,7 @@ struct got_reflist_head;
 enum gotwebd_proc_type {
 	GOTWEBD_PROC_PARENT,
 	GOTWEBD_PROC_SERVER,
+	GOTWEBD_PROC_FCGI,
 	GOTWEBD_PROC_GOTWEB,
 };
 
@@ -134,6 +135,9 @@ enum imsg_type {
 	GOTWEBD_IMSG_CFG_DONE,
 	GOTWEBD_IMSG_CTL_PIPE,
 	GOTWEBD_IMSG_CTL_START,
+	GOTWEBD_IMSG_FCGI_PARSE_PARAMS,
+	GOTWEBD_IMSG_FCGI_PARAMS,
+	GOTWEBD_IMSG_REQ_ABORT,
 	GOTWEBD_IMSG_REQ_PROCESS,
 };
 
@@ -239,6 +243,20 @@ enum socket_priv_fds {
 	PRIV_FDS__MAX,
 };
 
+struct gotwebd_fcgi_record {
+	uint32_t			 request_id;
+	uint8_t				 record[FCGI_RECORD_SIZE];
+	size_t				 record_len;
+};
+
+struct gotwebd_fcgi_params {
+	uint32_t			 request_id;
+	char				 querystring[MAX_QUERYSTRING];
+	char				 document_uri[MAX_DOCUMENT_URI];
+	char				 server_name[MAX_SERVER_NAME];
+	int				 https;
+};
+
 struct template;
 struct request {
 	TAILQ_ENTRY(request)		entry;
@@ -257,17 +275,14 @@ struct request {
 	uint32_t			 request_id;
 
 	uint8_t				 *buf;
-	size_t				 buf_pos;
 	size_t				 buf_len;
 
 	uint8_t				 *outbuf;
 
-	char				 querystring[MAX_QUERYSTRING];
-	char				 document_uri[MAX_DOCUMENT_URI];
-	char				 server_name[MAX_SERVER_NAME];
-	int				 https;
+	struct gotwebd_fcgi_params	 fcgi_params;
+	int				 nparams;
+	int				 nparams_parsed;
 
-	uint8_t				 request_started;
 	int				 client_status;
 };
 TAILQ_HEAD(requestlist, request);
@@ -325,6 +340,9 @@ TAILQ_HEAD(serverlist, server);
 
 enum client_action {
 	CLIENT_CONNECT,
+	CLIENT_FCGI_BEGIN,
+	CLIENT_FCGI_PARAMS,
+	CLIENT_FCGI_STDIN,
 	CLIENT_REQUEST,
 	CLIENT_DISCONNECT,
 };
@@ -367,6 +385,7 @@ struct gotwebd {
 
 	struct imsgev	*iev_parent;
 	struct imsgev	*iev_server;
+	struct imsgev	*iev_fcgi;
 	struct imsgev	*iev_gotweb;
 
 	uint16_t	 prefork;
@@ -501,11 +520,10 @@ int parse_config(const char *, struct gotwebd *);
 int cmdline_symset(char *);
 
 /* fcgi.c */
-void fcgi_request(int, short, void *);
-void fcgi_timeout(int, short, void *);
 void fcgi_cleanup_request(struct request *);
 void fcgi_create_end_record(struct request *);
 int fcgi_write(void *, const void *, size_t);
+void gotwebd_fcgi(struct gotwebd *, int);
 
 /* got_operations.c */
 const struct got_error *got_gotweb_closefile(FILE *);

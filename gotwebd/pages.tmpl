@@ -167,7 +167,7 @@ nextsep(char *s, char **t)
 	struct server		*srv = c->srv;
 	struct querystring	*qs = c->t->qs;
 	struct gotweb_url	 u_path;
-	const char		*prfx = c->document_uri;
+	const char		*prfx = c->fcgi_params.document_uri;
 	const char		*css = srv->custom_css;
 
 	memset(&u_path, 0, sizeof(u_path));
