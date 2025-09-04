@@ -122,7 +122,7 @@ sockets(struct gotwebd *env, int fd)
 	signal_add(&sigterm, NULL);
 
 #ifndef PROFILE
-	if (pledge("stdio inet recvfd sendfd", NULL) == -1)
+	if (pledge("stdio inet unix recvfd sendfd", NULL) == -1)
 		fatal("pledge");
 #endif
 
@@ -196,7 +196,7 @@ static void
 sockets_launch(struct gotwebd *env)
 {
 	struct socket *sock;
-	int i;
+	int i, have_unix = 0, have_inet = 0;
 
 	if (env->gotweb_pending != 0)
 		fatal("gotweb process not connected");
@@ -204,6 +204,27 @@ sockets_launch(struct gotwebd *env)
 	TAILQ_FOREACH(sock, &gotwebd_env->sockets, entry) {
 		log_info("%s: configuring socket %d (%d)", __func__,
 		    sock->conf.id, sock->fd);
+
+		switch (sock->conf.af_type) {
+		case AF_UNIX:
+			if (listen(sock->fd, SOCKS_BACKLOG) == -1) {
+				fatal("cannot listen on %s",
+				    sock->conf.unix_socket_name);
+			}
+			have_unix = 1;
+			break;
+		case AF_INET:
+		case AF_INET6:
+			if (listen(sock->fd, SOMAXCONN) == -1) {
+				fatal("cannot listen on %s",
+				    sock->conf.addr.ifname);
+			}
+			have_inet = 1;
+			break;
+		default:
+			fatalx("unsupported address family type %d",
+			    sock->conf.af_type);
+		}
 
 		event_set(&sock->ev, sock->fd, EV_READ | EV_PERSIST,
 		    sockets_socket_accept, sock);
@@ -218,8 +239,16 @@ sockets_launch(struct gotwebd *env)
 	}
 
 #ifndef PROFILE
-	if (pledge("stdio inet sendfd", NULL) == -1)
-		fatal("pledge");
+	if (have_unix && have_inet) {
+		if (pledge("stdio inet unix sendfd", NULL) == -1)
+			fatal("pledge");
+	} else if (have_unix) {
+		if (pledge("stdio unix sendfd", NULL) == -1)
+			fatal("pledge");
+	} else if (have_inet) {
+		if (pledge("stdio inet sendfd", NULL) == -1)
+			fatal("pledge");
+	}
 #endif
 	for (i = 0; i < env->prefork; i++)
 		event_add(&env->iev_gotweb[i].ev, NULL);
@@ -504,11 +533,6 @@ sockets_unix_socket_listen(struct gotwebd *env, struct socket *sock,
 		return -1;
 	}
 
-	if (listen(u_fd, SOCKS_BACKLOG) == -1) {
-		log_warn("%s: listen", __func__);
-		return -1;
-	}
-
 	return u_fd;
 }
 
@@ -543,12 +567,6 @@ sockets_create_socket(struct address *a)
 	if (bind(fd, (struct sockaddr *)&a->ss, a->slen) == -1) {
 		close(fd);
 		log_warn("%s: can't bind to port %d", __func__, a->port);
-		return -1;
-	}
-
-	if (listen(fd, SOMAXCONN) == -1) {
-		log_warn("%s, unable to listen on socket", __func__);
-		close(fd);
 		return -1;
 	}
 
