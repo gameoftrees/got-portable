@@ -680,6 +680,13 @@ gotwebd_shutdown(void)
 		TAILQ_REMOVE(&gotwebd_env->addresses, h, entry);
 		free(h);
 	}
+	while (!TAILQ_EMPTY(&gotwebd_env->sockets)) {
+		struct socket *sock;
+
+		sock = TAILQ_FIRST(&gotwebd_env->sockets);
+		TAILQ_REMOVE(&gotwebd_env->sockets, sock, entry);
+		free(sock);
+	}
 	while (!TAILQ_EMPTY(&gotwebd_env->servers)) {
 		struct server *srv;
 

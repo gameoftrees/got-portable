@@ -1390,6 +1390,14 @@ gotweb_shutdown(void)
 		free(srv);
 	}
 
+	while (!TAILQ_EMPTY(&gotwebd_env->sockets)) {
+		struct socket *sock;
+
+		sock = TAILQ_FIRST(&gotwebd_env->sockets);
+		TAILQ_REMOVE(&gotwebd_env->sockets, sock, entry);
+		free(sock);
+	}
+
 	free(gotwebd_env);
 
 	exit(0);

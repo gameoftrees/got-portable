@@ -400,6 +400,14 @@ sockets_shutdown(void)
 		free(h);
 	}
 
+	while (!TAILQ_EMPTY(&gotwebd_env->sockets)) {
+		struct socket *sock;
+
+		sock = TAILQ_FIRST(&gotwebd_env->sockets);
+		TAILQ_REMOVE(&gotwebd_env->sockets, sock, entry);
+		free(sock);
+	}
+
 	imsgbuf_clear(&gotwebd_env->iev_parent->ibuf);
 	free(gotwebd_env->iev_parent);
 	imsgbuf_clear(&gotwebd_env->iev_gotweb->ibuf);
