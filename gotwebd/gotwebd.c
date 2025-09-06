@@ -122,7 +122,7 @@ main_compose_sockets(struct gotwebd *env, uint32_t type, int fd,
 	size_t i;
 	int ret = 0;
 
-	for (i = 0; i < env->nserver; ++i) {
+	for (i = 0; i < env->server_cnt; ++i) {
 		ret = send_imsg(&env->iev_server[i], type, fd, data, len);
 		if (ret)
 			break;
@@ -138,7 +138,7 @@ main_compose_gotweb(struct gotwebd *env, uint32_t type, int fd,
 	size_t i;
 	int ret = 0;
 
-	for (i = 0; i < env->nserver; ++i) {
+	for (i = 0; i < env->prefork; i++) {
 		ret = send_imsg(&env->iev_gotweb[i], type, fd, data, len);
 		if (ret)
 			break;
@@ -283,7 +283,7 @@ spawn_process(struct gotwebd *env, const char *argv0, struct imsgev *iev,
     enum gotwebd_proc_type proc_type, const char *username,
     void (*handler)(int, short, void *))
 {
-	const char	*argv[9];
+	const char	*argv[10];
 	int		 argc = 0;
 	int		 p[2];
 	pid_t		 pid;
@@ -312,11 +312,21 @@ spawn_process(struct gotwebd *env, const char *argv0, struct imsgev *iev,
 
 	argv[argc++] = argv0;
 	if (proc_type == GOTWEBD_PROC_SERVER) {
+		char *s;
+
 		argv[argc++] = "-S";
 		argv[argc++] = username;
+		if (asprintf(&s, "-S%d", env->prefork) == -1)
+			fatal("asprintf");
+		argv[argc++] = s;
 	} else if (proc_type == GOTWEBD_PROC_GOTWEB) {
+		char *s;
+
 		argv[argc++] = "-G";
 		argv[argc++] = username;
+		if (asprintf(&s, "-G%d", env->server_cnt) == -1)
+			fatal("asprintf");
+		argv[argc++] = s;
 	}
 	if (strcmp(env->gotwebd_conffile, GOTWEBD_CONF) != 0) {
 		argv[argc++] = "-f";
@@ -364,7 +374,7 @@ main(int argc, char **argv)
 	const char		*www_username = GOTWEBD_WWW_USER;
 	gid_t			 gotwebd_groups[NGROUPS_MAX];
 	gid_t			 www_gid;
-	const char		*argv0;
+	const char		*argv0, *errstr;
 
 	if ((argv0 = argv[0]) == NULL)
 		argv0 = "gotwebd";
@@ -389,7 +399,11 @@ main(int argc, char **argv)
 			break;
 		case 'G':
 			proc_type = GOTWEBD_PROC_GOTWEB;
-			gotwebd_username = optarg;
+			i = strtonum(optarg, 1, INT_MAX, &errstr);
+			if (errstr)
+				gotwebd_username = optarg;
+			else
+				env->server_cnt = i;
 			break;
 		case 'f':
 			conffile = optarg;
@@ -399,7 +413,11 @@ main(int argc, char **argv)
 			break;
 		case 'S':
 			proc_type = GOTWEBD_PROC_SERVER;
-			gotwebd_username = optarg;
+			i = strtonum(optarg, 1, INT_MAX, &errstr);
+			if (errstr)
+				gotwebd_username = optarg;
+			else
+				env->prefork = i;
 			break;
 		case 'v':
 			if (env->gotwebd_verbose < 3)
@@ -488,18 +506,19 @@ main(int argc, char **argv)
 
 	evb = event_init();
 
-	env->nserver = env->prefork_gotwebd;
-	env->iev_server = calloc(env->nserver, sizeof(*env->iev_server));
+	env->iev_server = calloc(env->server_cnt, sizeof(*env->iev_server));
 	if (env->iev_server == NULL)
 		fatal("calloc");
-	env->iev_gotweb = calloc(env->nserver, sizeof(*env->iev_gotweb));
+	env->iev_gotweb = calloc(env->prefork, sizeof(*env->iev_gotweb));
 	if (env->iev_gotweb == NULL)
 		fatal("calloc");
 
-	for (i = 0; i < env->nserver; ++i) {
+	for (i = 0; i < env->server_cnt; ++i) {
 		spawn_process(env, argv0, &env->iev_server[i],
 		    GOTWEBD_PROC_SERVER, gotwebd_username,
 		    gotwebd_dispatch_server);
+	}
+	for (i = 0; i < env->prefork; ++i) {
 		spawn_process(env, argv0, &env->iev_gotweb[i],
 		    GOTWEBD_PROC_GOTWEB, gotwebd_username,
 		    gotwebd_dispatch_gotweb);
@@ -560,20 +579,26 @@ connect_children(struct gotwebd *env)
 {
 	struct imsgev *iev1, *iev2;
 	int pipe[2];
-	int i;
+	int i, j;
 
-	for (i = 0; i < env->nserver; i++) {
+	for (i = 0; i < env->server_cnt; i++) {
 		iev1 = &env->iev_server[i];
-		iev2 = &env->iev_gotweb[i];
 
-		if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, pipe) == -1)
-			fatal("socketpair");
+		for (j = 0; j < env->prefork; j++) {
+			iev2 = &env->iev_gotweb[j];
 
-		if (send_imsg(iev1, GOTWEBD_IMSG_CTL_PIPE, pipe[0], NULL, 0))
-			fatal("send_imsg");
+			if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC,
+			    pipe) == -1)
+				fatal("socketpair");
 
-		if (send_imsg(iev2, GOTWEBD_IMSG_CTL_PIPE, pipe[1], NULL, 0))
-			fatal("send_imsg");
+			if (send_imsg(iev1, GOTWEBD_IMSG_CTL_PIPE, pipe[0],
+			    NULL, 0))
+				fatal("send_imsg");
+
+			if (send_imsg(iev2, GOTWEBD_IMSG_CTL_PIPE, pipe[1],
+			    NULL, 0))
+				fatal("send_imsg");
+		}
 	}
 }
 
@@ -584,8 +609,8 @@ gotwebd_configure(struct gotwebd *env, uid_t uid, gid_t gid)
 	struct socket *sock;
 
 	/* gotweb need to reload its config. */
-	env->servers_pending = env->prefork_gotwebd;
-	env->gotweb_pending = env->prefork_gotwebd;
+	env->servers_pending = env->server_cnt;
+	env->gotweb_pending = env->prefork;
 
 	/* send our gotweb servers */
 	TAILQ_FOREACH(srv, &env->servers, entry) {
@@ -643,7 +668,7 @@ gotwebd_shutdown(void)
 	pid_t		 pid;
 	int		 i, status;
 
-	for (i = 0; i < env->nserver; ++i) {
+	for (i = 0; i < env->server_cnt; ++i) {
 		event_del(&env->iev_server[i].ev);
 		imsgbuf_clear(&env->iev_server[i].ibuf);
 		close(env->iev_server[i].ibuf.fd);
@@ -651,7 +676,7 @@ gotwebd_shutdown(void)
 	}
 	free(env->iev_server);
 
-	for (i = 0; i < env->nserver; ++i) {
+	for (i = 0; i < env->prefork; ++i) {
 		event_del(&env->iev_gotweb[i].ev);
 		imsgbuf_clear(&env->iev_gotweb[i].ibuf);
 		close(env->iev_gotweb[i].ibuf.fd);

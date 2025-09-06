@@ -49,7 +49,7 @@ config_init(struct gotwebd *env)
 
 	strlcpy(env->httpd_chroot, D_HTTPD_CHROOT, sizeof(env->httpd_chroot));
 
-	env->prefork_gotwebd = GOTWEBD_NUMPROC;
+	env->prefork = GOTWEBD_NUMPROC;
 	env->server_cnt = 0;
 	TAILQ_INIT(&env->servers);
 	TAILQ_INIT(&env->sockets);
@@ -162,7 +162,7 @@ config_setfd(struct gotwebd *env)
 	    __func__, PRIV_FDS__MAX + GOTWEB_PACK_NUM_TEMPFILES);
 
 	for (i = 0; i < PRIV_FDS__MAX + GOTWEB_PACK_NUM_TEMPFILES; i++) {
-		for (j = 0; j < env->nserver; ++j) {
+		for (j = 0; j < env->prefork; j++) {
 			fd = got_opentempfd();
 			if (fd == -1)
 				fatal("got_opentemp");
