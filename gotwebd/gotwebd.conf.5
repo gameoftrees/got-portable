@@ -81,9 +81,13 @@ While the specified
 must be absolute, it should usually point inside the web server's chroot
 directory such that the web server can access the socket.
 .It Ic prefork Ar number
-Run the specified number of server processes.
+Spawn enough processes such that
+.Ar number
+requests can be handled in parallel.
+By default,
 .Xr gotwebd 8
-runs 3 server processes by default.
+will handle up to 3 requests in parallel.
+The maximum allowed is 32.
 .It Ic user Ar user
 Set the
 .Ar user

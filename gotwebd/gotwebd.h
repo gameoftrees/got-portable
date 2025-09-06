@@ -368,11 +368,11 @@ struct gotwebd {
 	struct imsgev	*iev_parent;
 	struct imsgev	*iev_server;
 	struct imsgev	*iev_gotweb;
-	size_t		 nserver;
 
-	uint16_t	 prefork_gotwebd;
+	uint16_t	 prefork;
 	int		 servers_pending;
 	int		 gotweb_pending;
+	int		 gotweb_cur;
 
 	int		 server_cnt;
 

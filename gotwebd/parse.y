@@ -184,7 +184,7 @@ main		: PREFORK NUMBER {
 				    $2 <= 0 ? "too small" : "too large", $2);
 				YYERROR;
 			}
-			gotwebd->prefork_gotwebd = $2;
+			gotwebd->prefork = $2;
 		}
 		| CHROOT STRING {
 			if (*$2 == '\0') {

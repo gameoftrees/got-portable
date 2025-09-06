@@ -198,6 +198,7 @@ static void
 process_request(struct request *c)
 {
 	struct gotwebd *env = gotwebd_env;
+	struct imsgev *iev_gotweb;
 	int ret, i;
 	struct request ic;
 
@@ -216,11 +217,15 @@ process_request(struct request *c)
 		ic.priv_fd[i] = -1;
 	ic.fd = -1;
 
-	ret = imsg_compose_event(env->iev_gotweb, GOTWEBD_IMSG_REQ_PROCESS,
+	/* Round-robin requests across gotweb processes. */
+	iev_gotweb = &env->iev_gotweb[env->gotweb_cur];
+	env->gotweb_cur = (env->gotweb_cur + 1) % env->prefork;
+
+	ret = imsg_compose_event(iev_gotweb, GOTWEBD_IMSG_REQ_PROCESS,
 	    GOTWEBD_PROC_SERVER, -1, c->fd, &ic, sizeof(ic));
 	if (ret == -1) {
 		log_warn("imsg_compose_event");
-		close(c->fd);
+		return;
 	}
 	c->fd = -1;
 

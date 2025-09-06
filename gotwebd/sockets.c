@@ -89,8 +89,9 @@ sockets(struct gotwebd *env, int fd)
 
 	sockets_rlimit(-1);
 
-	if ((env->iev_parent = malloc(sizeof(*env->iev_parent))) == NULL)
-		fatal("malloc");
+	env->iev_parent = calloc(1, sizeof(*env->iev_parent));
+	if (env->iev_parent == NULL)
+		fatal("calloc");
 	if (imsgbuf_init(&env->iev_parent->ibuf, fd) == -1)
 		fatal("imsgbuf_init");
 	imsgbuf_allow_fdpass(&env->iev_parent->ibuf);
@@ -99,6 +100,13 @@ sockets(struct gotwebd *env, int fd)
 	event_set(&env->iev_parent->ev, fd, EV_READ, sockets_dispatch_main,
 	    env->iev_parent);
 	event_add(&env->iev_parent->ev, NULL);
+
+	if (env->prefork <= 0)
+		fatalx("invalid prefork count: %d", env->prefork);
+	env->iev_gotweb = calloc(env->prefork, sizeof(*env->iev_gotweb));
+	if (env->iev_gotweb == NULL)
+		fatal("calloc");
+	env->gotweb_pending = env->prefork;
 
 	signal(SIGPIPE, SIG_IGN);
 
@@ -188,8 +196,9 @@ static void
 sockets_launch(struct gotwebd *env)
 {
 	struct socket *sock;
+	int i;
 
-	if (env->iev_gotweb == NULL)
+	if (env->gotweb_pending != 0)
 		fatal("gotweb process not connected");
 
 	TAILQ_FOREACH(sock, &gotwebd_env->sockets, entry) {
@@ -212,7 +221,8 @@ sockets_launch(struct gotwebd *env)
 	if (pledge("stdio inet sendfd", NULL) == -1)
 		fatal("pledge");
 #endif
-	event_add(&env->iev_gotweb->ev, NULL);
+	for (i = 0; i < env->prefork; i++)
+		event_add(&env->iev_gotweb[i].ev, NULL);
 
 }
 
@@ -268,7 +278,7 @@ recv_gotweb_pipe(struct gotwebd *env, struct imsg *imsg)
 	struct imsgev *iev;
 	int fd;
 
-	if (env->iev_gotweb != NULL) {
+	if (env->gotweb_pending <= 0) {
 		log_warn("gotweb pipe already received");
 		return;
 	}
@@ -277,10 +287,7 @@ recv_gotweb_pipe(struct gotwebd *env, struct imsg *imsg)
 	if (fd == -1)
 		fatalx("invalid gotweb pipe fd");
 
-	iev = calloc(1, sizeof(*iev));
-	if (iev == NULL)
-		fatal("calloc");
-
+	iev = &env->iev_gotweb[env->gotweb_pending - 1];
 	if (imsgbuf_init(&iev->ibuf, fd) == -1)
 		fatal("imsgbuf_init");
 	imsgbuf_allow_fdpass(&iev->ibuf);
@@ -290,7 +297,7 @@ recv_gotweb_pipe(struct gotwebd *env, struct imsg *imsg)
 	event_set(&iev->ev, fd, EV_READ, server_dispatch_gotweb, iev);
 	imsg_event_add(iev);
 
-	env->iev_gotweb = iev;
+	env->gotweb_pending--;
 }
 
 static void
@@ -383,6 +390,8 @@ sockets_sighdlr(int sig, short event, void *arg)
 static void
 sockets_shutdown(void)
 {
+	int i;
+
 	/* clean servers */
 	while (!TAILQ_EMPTY(&gotwebd_env->servers)) {
 		struct server *srv;
@@ -410,7 +419,8 @@ sockets_shutdown(void)
 
 	imsgbuf_clear(&gotwebd_env->iev_parent->ibuf);
 	free(gotwebd_env->iev_parent);
-	imsgbuf_clear(&gotwebd_env->iev_gotweb->ibuf);
+	for (i = 0; i < gotwebd_env->prefork; i++)
+		imsgbuf_clear(&gotwebd_env->iev_gotweb[i].ibuf);
 	free(gotwebd_env->iev_gotweb);
 	free(gotwebd_env);
 
