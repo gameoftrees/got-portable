@@ -320,6 +320,7 @@ static void
 sockets_launch(struct gotwebd *env)
 {
 	struct socket *sock;
+	const char *sockname;
 	int i, have_unix = 0, have_inet = 0;
 
 	if (env->iev_fcgi == NULL)
@@ -328,29 +329,19 @@ sockets_launch(struct gotwebd *env)
 		fatal("gotweb process not connected");
 
 	TAILQ_FOREACH(sock, &gotwebd_env->sockets, entry) {
-		log_info("%s: configuring socket %d (%d)", __func__,
-		    sock->conf.id, sock->fd);
-
-		switch (sock->conf.af_type) {
-		case AF_UNIX:
-			if (listen(sock->fd, SOCKS_BACKLOG) == -1) {
-				fatal("cannot listen on %s",
-				    sock->conf.unix_socket_name);
-			}
+		if (sock->conf.af_type == AF_UNIX) {
 			have_unix = 1;
-			break;
-		case AF_INET:
-		case AF_INET6:
-			if (listen(sock->fd, SOMAXCONN) == -1) {
-				fatal("cannot listen on %s",
-				    sock->conf.addr.ifname);
-			}
+			sockname = sock->conf.unix_socket_name;
+		} else {
 			have_inet = 1;
-			break;
-		default:
-			fatalx("unsupported address family type %d",
-			    sock->conf.af_type);
+			sockname = sock->conf.addr.ifname;
 		}
+
+		log_info("%s: configuring socket %s %d (%d)", __func__,
+		    sockname, sock->conf.id, sock->fd);
+
+		if (listen(sock->fd, SOCKS_BACKLOG) == -1)
+			fatal("cannot listen on %s", sockname);
 
 		event_set(&sock->ev, sock->fd, EV_READ | EV_PERSIST,
 		    sockets_socket_accept, sock);
