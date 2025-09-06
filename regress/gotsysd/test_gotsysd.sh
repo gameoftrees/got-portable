@@ -954,9 +954,9 @@ EOF
 		return 1
 	fi
 
-	# The repositories should have 700 permissions and be owned by _gotd.
+	# The repositories should have 750 permissions and be owned by _gotd.
 	ssh -q -i ${GOTSYSD_SSH_KEY} root@${VMIP} ls -l /git | \
-		grep -v ^total | awk '{print $1" "$3}' > $testroot/stdout
+		grep -v ^total | awk '{print $1" "$3" "$4}' > $testroot/stdout
 	ret=$?
 	if [ $ret -ne 0 ]; then
 		echo "ls /git failed unexpectedly" >&2
@@ -965,8 +965,8 @@ EOF
 	fi
 
 	cat > $testroot/stdout.expected <<EOF
-drwx------ _gotd
-drwx------ _gotd
+drwxr-x--- _gotd _gotd
+drwxr-x--- _gotd _gotd
 EOF
 	cmp -s $testroot/stdout.expected $testroot/stdout
 	ret=$?

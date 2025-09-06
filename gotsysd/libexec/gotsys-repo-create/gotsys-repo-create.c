@@ -81,9 +81,12 @@ sighdlr(int sig, short event, void *arg)
 	}
 }
 
-/* Ensure that repositories are only accessible to the gotd user. */
+/*
+ * Ensure that repositories are only writeable by the gotd user and
+ * readable by the gotd group.
+ */
 static const struct got_error *
-chmod_700_repo(const char *repo_name)
+chmod_750_repo(const char *repo_name)
 {
 	struct stat sb;
 
@@ -92,10 +95,11 @@ chmod_700_repo(const char *repo_name)
 		    repos_path, repo_name);
 	}
 
-	if (!S_ISDIR(sb.st_mode) || sb.st_uid != gotd_uid)
+	if (!S_ISDIR(sb.st_mode) || sb.st_uid != gotd_uid ||
+	    sb.st_gid != gotd_gid)
 		return NULL;
 
-	if (fchmodat(repos_dir_fd, repo_name, S_IRWXU,
+	if (fchmodat(repos_dir_fd, repo_name, S_IRWXU | S_IRGRP | S_IXGRP,
 	    AT_SYMLINK_NOFOLLOW) == -1) {
 		return got_error_from_errno_fmt("chmod %o %s/%s",
 		    S_IRWXU, repos_path, repo_name);
@@ -267,9 +271,10 @@ create_repo(struct imsg *imsg)
 		goto done;
 	}
 
-	if (mkdirat(repos_dir_fd, fullname, S_IRWXU) == -1) {
+	if (mkdirat(repos_dir_fd, fullname,
+	    S_IRWXU | S_IRGRP | S_IXGRP) == -1) {
 		if (errno == EEXIST) {
-			err = chmod_700_repo(fullname);
+			err = chmod_750_repo(fullname);
 			if (err)
 				goto done;
 			if (headref) {
