@@ -86,6 +86,7 @@ write_sshd_config(void)
 	    "AuthorizedKeysFile .ssh/authorized_keys\n"
 	    "DisableForwarding yes\n"
 	    "PermitTTY no\n"
+	    "Subsystem sftp /usr/libexec/sftp-server\n"
 	    "\n"
 	    "Match Group wheel\n"
 	    "\tPermitTTY yes\n"
