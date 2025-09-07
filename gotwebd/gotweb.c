@@ -161,7 +161,7 @@ cleanup_request(struct request *c)
 
 	fcgi_cleanup_request(c);
 
-	if (imsg_compose_event(gotwebd_env->iev_server, GOTWEBD_IMSG_REQ_ABORT,
+	if (imsg_compose_event(gotwebd_env->iev_sockets, GOTWEBD_IMSG_REQ_ABORT,
 	    GOTWEBD_PROC_GOTWEB, -1, -1, &request_id, sizeof(request_id)) == -1)
 		log_warn("imsg_compose_event");
 }
@@ -1387,15 +1387,11 @@ gotweb_render_age(struct template *tp, time_t committer_time)
 static void
 gotweb_shutdown(void)
 {
-	struct gotwebd *env = gotwebd_env;
-	int i;
-
 	imsgbuf_clear(&gotwebd_env->iev_parent->ibuf);
 	free(gotwebd_env->iev_parent);
 
-	for (i = 0; i < env->server_cnt - env->servers_pending; i++)
-		imsgbuf_clear(&gotwebd_env->iev_server[i].ibuf);
-	free(gotwebd_env->iev_server);
+	imsgbuf_clear(&gotwebd_env->iev_sockets->ibuf);
+	free(gotwebd_env->iev_sockets);
 
 	while (!TAILQ_EMPTY(&gotwebd_env->servers)) {
 		struct server *srv;
@@ -1447,10 +1443,9 @@ gotweb_launch(struct gotwebd *env)
 {
 	struct server *srv;
 	const struct got_error *error;
-	int i;
 
-	if (env->servers_pending != 0)
-		fatal("server process not connected");
+	if (env->iev_sockets == NULL)
+		fatal("sockets process not connected");
 
 #ifndef PROFILE
 	if (pledge("stdio rpath recvfd sendfd proc exec unveil", NULL) == -1)
@@ -1469,8 +1464,7 @@ gotweb_launch(struct gotwebd *env)
 	if (unveil(NULL, NULL) == -1)
 		fatal("unveil");
 
-	for (i = 0; i < env->server_cnt; i++)
-		event_add(&env->iev_server[i].ev, NULL);
+	event_add(&env->iev_sockets->ev, NULL);
 }
 
 static void
@@ -1545,16 +1539,13 @@ recv_server_pipe(struct gotwebd *env, struct imsg *imsg)
 	struct imsgev *iev;
 	int fd;
 
-	if (env->servers_pending <= 0) {
-		log_warn("server pipes already received");
-		return;
-	}
-
 	fd = imsg_get_fd(imsg);
 	if (fd == -1)
 		fatalx("invalid server pipe fd");
 
-	iev = &env->iev_server[env->servers_pending - 1];
+	iev = calloc(1, sizeof(*iev));
+	if (iev == NULL)
+		fatal("calloc");
 	if (imsgbuf_init(&iev->ibuf, fd) == -1)
 		fatal("imsgbuf_init");
 	imsgbuf_allow_fdpass(&iev->ibuf);
@@ -1564,7 +1555,7 @@ recv_server_pipe(struct gotwebd *env, struct imsg *imsg)
 	event_set(&iev->ev, fd, EV_READ, gotweb_dispatch_server, iev);
 	imsg_event_add(iev);
 
-	env->servers_pending--;
+	env->iev_sockets = iev;
 }
 
 static void
@@ -1653,13 +1644,6 @@ gotweb(struct gotwebd *env, int fd)
 	event_set(&env->iev_parent->ev, fd, EV_READ, gotweb_dispatch_main,
 	    env->iev_parent);
 	event_add(&env->iev_parent->ev, NULL);
-
-	if (env->server_cnt <= 0)
-		fatalx("invalid server count: %d", env->server_cnt);
-	env->iev_server = calloc(env->server_cnt, sizeof(*env->iev_server));
-	if (env->iev_server == NULL)
-		fatal("calloc");
-	env->servers_pending = env->server_cnt;
 
 	signal(SIGPIPE, SIG_IGN);
 

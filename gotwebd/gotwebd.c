@@ -120,16 +120,7 @@ int
 main_compose_sockets(struct gotwebd *env, uint32_t type, int fd,
     const void *data, uint16_t len)
 {
-	size_t i;
-	int ret = 0;
-
-	for (i = 0; i < env->server_cnt; ++i) {
-		ret = send_imsg(&env->iev_server[i], type, fd, data, len);
-		if (ret)
-			break;
-	}
-
-	return ret;
+	return send_imsg(env->iev_sockets, type, fd, data, len);
 }
 
 int
@@ -529,8 +520,8 @@ main(int argc, char **argv)
 
 	switch (proc_type) {
 	case GOTWEBD_PROC_SERVER:
-		setproctitle("server");
-		log_procinit("server");
+		setproctitle("sockets");
+		log_procinit("sockets");
 
 		if (chroot(env->httpd_chroot) == -1)
 			fatal("chroot %s", env->httpd_chroot);
@@ -580,11 +571,11 @@ main(int argc, char **argv)
 
 	evb = event_init();
 
-	env->iev_server = calloc(env->server_cnt, sizeof(*env->iev_server));
-	if (env->iev_server == NULL)
+	env->iev_sockets = calloc(1, sizeof(*env->iev_sockets));
+	if (env->iev_sockets == NULL)
 		fatal("calloc");
 
-	env->iev_fcgi = calloc(env->server_cnt, sizeof(*env->iev_fcgi));
+	env->iev_fcgi = calloc(1, sizeof(*env->iev_fcgi));
 	if (env->iev_fcgi == NULL)
 		fatal("calloc");
 
@@ -592,15 +583,13 @@ main(int argc, char **argv)
 	if (env->iev_gotweb == NULL)
 		fatal("calloc");
 
-	for (i = 0; i < env->server_cnt; ++i) {
-		spawn_process(env, argv0, &env->iev_server[i],
-		    GOTWEBD_PROC_SERVER, gotwebd_username,
-		    gotwebd_dispatch_server);
+	spawn_process(env, argv0, env->iev_sockets,
+	    GOTWEBD_PROC_SERVER, gotwebd_username,
+	    gotwebd_dispatch_server);
 
-		spawn_process(env, argv0, &env->iev_fcgi[i],
-		    GOTWEBD_PROC_FCGI, gotwebd_username,
-		    gotwebd_dispatch_fcgi);
-	}
+	spawn_process(env, argv0, env->iev_fcgi,
+	    GOTWEBD_PROC_FCGI, gotwebd_username,
+	    gotwebd_dispatch_fcgi);
 
 	for (i = 0; i < env->prefork; ++i) {
 		spawn_process(env, argv0, &env->iev_gotweb[i],
@@ -662,40 +651,32 @@ main(int argc, char **argv)
 static void
 connect_children(struct gotwebd *env)
 {
-	struct imsgev *iev_server, *iev_fcgi, *iev_gotweb;
+	struct imsgev *iev_gotweb;
 	int pipe[2];
-	int i, j;
+	int i;
 
-	for (i = 0; i < env->server_cnt; i++) {
-		iev_server = &env->iev_server[i];
-		iev_fcgi = &env->iev_fcgi[i];
+	if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, pipe) == -1)
+		fatal("socketpair");
+
+	if (main_compose_sockets(env, GOTWEBD_IMSG_CTL_PIPE, pipe[0], NULL, 0))
+		fatal("main_compose_sockets");
+
+	if (send_imsg(env->iev_fcgi, GOTWEBD_IMSG_CTL_PIPE, pipe[1], NULL, 0))
+		fatal("send_imsg");
+
+	for (i = 0; i < env->prefork; i++) {
+		iev_gotweb = &env->iev_gotweb[i];
 
 		if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, pipe) == -1)
 			fatal("socketpair");
 
-		if (send_imsg(iev_server, GOTWEBD_IMSG_CTL_PIPE, pipe[0],
-		    NULL, 0))
+		if (main_compose_sockets(env, GOTWEBD_IMSG_CTL_PIPE,
+		    pipe[0], NULL, 0))
 			fatal("send_imsg");
 
-		if (send_imsg(iev_fcgi, GOTWEBD_IMSG_CTL_PIPE, pipe[1],
-		    NULL, 0))
+		if (send_imsg(iev_gotweb, GOTWEBD_IMSG_CTL_PIPE,
+		    pipe[1], NULL, 0))
 			fatal("send_imsg");
-
-		for (j = 0; j < env->prefork; j++) {
-			iev_gotweb = &env->iev_gotweb[j];
-
-			if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC,
-			    pipe) == -1)
-				fatal("socketpair");
-
-			if (send_imsg(iev_server, GOTWEBD_IMSG_CTL_PIPE,
-			    pipe[0], NULL, 0))
-				fatal("send_imsg");
-
-			if (send_imsg(iev_gotweb, GOTWEBD_IMSG_CTL_PIPE,
-			    pipe[1], NULL, 0))
-				fatal("send_imsg");
-		}
 	}
 }
 
@@ -706,14 +687,13 @@ gotwebd_configure(struct gotwebd *env, uid_t uid, gid_t gid)
 	struct socket *sock;
 
 	/* gotweb need to reload its config. */
-	env->servers_pending = env->server_cnt;
 	env->gotweb_pending = env->prefork;
 
 	/* send our gotweb servers */
 	TAILQ_FOREACH(srv, &env->servers, entry) {
 		if (main_compose_sockets(env, GOTWEBD_IMSG_CFG_SRV,
 		    -1, srv, sizeof(*srv)) == -1)
-			fatal("main_compose_sockets GOTWEBD_IMSG_CFG_SRV");
+			fatal("send_imsg GOTWEBD_IMSG_CFG_SRV");
 		if (main_compose_gotweb(env, GOTWEBD_IMSG_CFG_SRV,
 		    -1, srv, sizeof(*srv)) == -1)
 			fatal("main_compose_gotweb GOTWEBD_IMSG_CFG_SRV");
@@ -732,8 +712,9 @@ gotwebd_configure(struct gotwebd *env, uid_t uid, gid_t gid)
 	/* Connect servers and gotwebs. */
 	connect_children(env);
 
-	if (main_compose_sockets(env, GOTWEBD_IMSG_CFG_DONE, -1, NULL, 0) == -1)
-		fatal("main_compose_sockets GOTWEBD_IMSG_CFG_DONE");
+	if (main_compose_sockets(env, GOTWEBD_IMSG_CFG_DONE, -1,
+	    NULL, 0) == -1)
+		fatal("send_imsg GOTWEBD_IMSG_CFG_DONE");
 
 	return (0);
 }
@@ -741,13 +722,9 @@ gotwebd_configure(struct gotwebd *env, uid_t uid, gid_t gid)
 void
 gotwebd_configure_done(struct gotwebd *env)
 {
-	if (env->servers_pending > 0) {
-		env->servers_pending--;
-		if (env->servers_pending == 0 &&
-		    main_compose_sockets(env, GOTWEBD_IMSG_CTL_START,
-		        -1, NULL, 0) == -1)
-			fatal("main_compose_sockets GOTWEBD_IMSG_CTL_START");
-	}
+	if (main_compose_sockets(env, GOTWEBD_IMSG_CTL_START,
+	    -1, NULL, 0) == -1)
+		fatal("send_imsg GOTWEBD_IMSG_CTL_START");
 
 	if (env->gotweb_pending > 0) {
 		env->gotweb_pending--;
@@ -765,13 +742,17 @@ gotwebd_shutdown(void)
 	pid_t		 pid;
 	int		 i, status;
 
-	for (i = 0; i < env->server_cnt; ++i) {
-		event_del(&env->iev_server[i].ev);
-		imsgbuf_clear(&env->iev_server[i].ibuf);
-		close(env->iev_server[i].ibuf.fd);
-		env->iev_server[i].ibuf.fd = -1;
-	}
-	free(env->iev_server);
+	event_del(&env->iev_sockets->ev);
+	imsgbuf_clear(&env->iev_sockets->ibuf);
+	close(env->iev_sockets->ibuf.fd);
+	env->iev_sockets->ibuf.fd = -1;
+	free(env->iev_sockets);
+
+	event_del(&env->iev_fcgi->ev);
+	imsgbuf_clear(&env->iev_fcgi->ibuf);
+	close(env->iev_fcgi->ibuf.fd);
+	env->iev_fcgi->ibuf.fd = -1;
+	free(env->iev_fcgi);
 
 	for (i = 0; i < env->prefork; ++i) {
 		event_del(&env->iev_gotweb[i].ev);

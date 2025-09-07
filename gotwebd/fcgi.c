@@ -68,9 +68,9 @@ fcgi_shutdown(void)
 {
 	imsgbuf_clear(&gotwebd_env->iev_parent->ibuf);
 	free(gotwebd_env->iev_parent);
-	if (gotwebd_env->iev_server) {
-		imsgbuf_clear(&gotwebd_env->iev_server->ibuf);
-		free(gotwebd_env->iev_server);
+	if (gotwebd_env->iev_sockets) {
+		imsgbuf_clear(&gotwebd_env->iev_sockets->ibuf);
+		free(gotwebd_env->iev_sockets);
 	}
 
 	free(gotwebd_env);
@@ -108,7 +108,7 @@ send_parsed_params(struct gotwebd_fcgi_params *params)
 {
 	struct gotwebd *env = gotwebd_env;
 
-	if (imsg_compose_event(env->iev_server, GOTWEBD_IMSG_FCGI_PARAMS,
+	if (imsg_compose_event(env->iev_sockets, GOTWEBD_IMSG_FCGI_PARAMS,
 	    GOTWEBD_PROC_SERVER, -1, -1, params, sizeof(*params)) == -1)
 		log_warn("imsg_compose_event");
 }
@@ -118,7 +118,7 @@ abort_request(uint32_t request_id)
 {
 	struct gotwebd *env = gotwebd_env;
 
-	if (imsg_compose_event(env->iev_server, GOTWEBD_IMSG_REQ_ABORT,
+	if (imsg_compose_event(env->iev_sockets, GOTWEBD_IMSG_REQ_ABORT,
 	    GOTWEBD_PROC_SERVER, -1, -1, &request_id, sizeof(request_id)) == -1)
 		log_warn("imsg_compose_event");
 }
@@ -441,13 +441,13 @@ dump_fcgi_end_request_body(const char *p, struct fcgi_end_request_body *b)
 static void
 fcgi_launch(struct gotwebd *env)
 {
-	if (env->iev_server == NULL)
-		fatalx("server process not connected");
+	if (env->iev_sockets == NULL)
+		fatalx("sockets process not connected");
 #ifndef PROFILE
 	if (pledge("stdio", NULL) == -1)
 		fatal("pledge");
 #endif
-	event_add(&env->iev_server->ev, NULL);
+	event_add(&env->iev_sockets->ev, NULL);
 }
 
 static struct gotwebd_fcgi_record *
@@ -532,8 +532,8 @@ recv_server_pipe(struct gotwebd *env, struct imsg *imsg)
 	struct imsgev *iev;
 	int fd;
 
-	if (env->iev_server != NULL) {
-		log_warn("server pipe already received");
+	if (env->iev_sockets != NULL) {
+		log_warn("sockets pipe already received");
 		return;
 	}
 
@@ -555,7 +555,7 @@ recv_server_pipe(struct gotwebd *env, struct imsg *imsg)
 	event_set(&iev->ev, fd, EV_READ, fcgi_dispatch_server, iev);
 	imsg_event_add(iev);
 
-	env->iev_server = iev;
+	env->iev_sockets = iev;
 }
 
 static void
