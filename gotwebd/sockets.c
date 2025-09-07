@@ -134,7 +134,15 @@ find_request(uint32_t request_id)
 static void
 cleanup_request(struct request *c)
 {
+	struct gotwebd *env = gotwebd_env;
+
 	cgi_inflight--;
+
+	if (c->worker_idx != -1) {
+		if (env->worker_load[c->worker_idx] <= 0)
+			fatalx("request in flight on worker with zero load");
+		env->worker_load[c->worker_idx]--;
+	}
 
 	del_request(c);
 
@@ -468,6 +476,29 @@ recv_gotweb_pipe(struct gotwebd *env, struct imsg *imsg)
 	env->gotweb_pending--;
 }
 
+static struct imsgev *
+select_worker(struct request *c)
+{
+	struct gotwebd *env = gotwebd_env;
+	int i, least_busy_worker_idx, min_load;
+
+	min_load = env->worker_load[0];
+	least_busy_worker_idx = 0;
+	for (i = 1; i < env->prefork; i++) {
+		if (env->worker_load[i] > min_load) 
+			continue;
+
+		min_load = env->worker_load[i];
+		least_busy_worker_idx = i;
+	}
+
+	log_debug("dispatching request %u to gotweb %d",
+	    c->request_id, least_busy_worker_idx);
+
+	c->worker_idx = least_busy_worker_idx;
+	return &env->iev_gotweb[least_busy_worker_idx];
+}
+
 static int
 process_request(struct request *c)
 {
@@ -491,19 +522,18 @@ process_request(struct request *c)
 		ic.priv_fd[i] = -1;
 	ic.fd = -1;
 
-	/* Round-robin requests across gotweb processes. */
-	iev_gotweb = &env->iev_gotweb[env->gotweb_cur];
-	env->gotweb_cur = (env->gotweb_cur + 1) % env->prefork;
-
+	iev_gotweb = select_worker(c);
 	ret = imsg_compose_event(iev_gotweb, GOTWEBD_IMSG_REQ_PROCESS,
 	    GOTWEBD_PROC_SERVER, -1, c->fd, &ic, sizeof(ic));
 	if (ret == -1) {
 		log_warn("imsg_compose_event");
+		c->worker_idx = -1;
 		return -1;
 	}
 
 	c->fd = -1;
 	c->client_status = CLIENT_REQUEST;
+	env->worker_load[c->worker_idx]++;
 	return 0;
 }
 
@@ -782,7 +812,7 @@ sockets_shutdown(void)
 	for (i = 0; i < gotwebd_env->prefork; i++)
 		imsgbuf_clear(&gotwebd_env->iev_gotweb[i].ibuf);
 	free(gotwebd_env->iev_gotweb);
-
+	free(gotwebd_env->worker_load);
 	free(gotwebd_env);
 
 	exit(0);
@@ -1175,6 +1205,7 @@ sockets_socket_accept(int fd, short event, void *arg)
 	c->buf_len = 0;
 	c->client_status = CLIENT_CONNECT;
 	c->request_id = get_request_id();
+	c->worker_idx = -1;
 
 	event_set(&c->ev, s, EV_READ, read_fcgi_records, c);
 	event_add(&c->ev, NULL);

@@ -273,6 +273,7 @@ struct request {
 	struct event			*resp_event;
 	int				 sock_id;
 	uint32_t			 request_id;
+	int				 worker_idx;
 
 	uint8_t				 *buf;
 	size_t				 buf_len;
@@ -391,6 +392,7 @@ struct gotwebd {
 	uint16_t	 prefork;
 	int		 gotweb_pending;
 	int		 gotweb_cur;
+	int		 *worker_load;
 
 	int		 server_cnt;
 

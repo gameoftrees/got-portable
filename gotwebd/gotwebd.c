@@ -499,6 +499,13 @@ main(int argc, char **argv)
 			www_username = env->www_user;
 	}
 
+	if (proc_type == GOTWEBD_PROC_SERVER) {
+		env->worker_load = calloc(env->prefork,
+		    sizeof(env->worker_load[0]));
+		if (env->worker_load == NULL)
+			fatal("calloc");
+	}
+
 	pw = getpwnam(www_username);
 	if (pw == NULL)
 		fatalx("unknown user %s", www_username);
