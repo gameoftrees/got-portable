@@ -320,15 +320,12 @@ assign_querystring(struct querystring *qs, char *key, char *value)
 		case INDEX_PAGE:
 			if (*value == '\0')
 				break;
-			qs->index_page = strtonum(value, INT64_MIN,
-			    INT64_MAX, &errstr);
+			qs->index_page = strtonum(value, 0, INT_MAX, &errstr);
 			if (errstr) {
 				error = got_error_from_errno3(__func__,
 				    "strtonum", errstr);
 				goto done;
 			}
-			if (qs->index_page < 0)
-				qs->index_page = 0;
 			break;
 		case PATH:
 			if (strlcpy(qs->path, value, sizeof(qs->path)) >=
