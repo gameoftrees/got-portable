@@ -105,7 +105,7 @@ nextsep(char *s, char **t)
 {{ define breadcumbs(struct template *tp) }}
 {!
 	struct request		*c = tp->tp_arg;
-	struct querystring	*qs = c->t->qs;
+	const struct querystring *qs = c->t->qs;
 	struct gotweb_url	 url;
 	const char		*folder = qs->folder;
 	const char		*action = "tree";
@@ -115,15 +115,15 @@ nextsep(char *s, char **t)
 	memset(&url, 0, sizeof(url));
 	url.index_page = -1;
 	url.action = TREE;
-	url.path = qs->path;
-	url.commit = qs->commit;
+	url.path = qs->path[0] ? qs->path : NULL;
+	url.commit = qs->commit[0] ? qs->commit : NULL;
 
 	if (qs->action != TREE && qs->action != BLOB) {
 		action = gotweb_action_name(qs->action);
 		url.action = qs->action;
 	}
 
-	if (folder && *folder != '\0') {
+	if (*folder != '\0') {
 		while (*folder == '/')
 			folder++;
 		dir = strdup(folder);
@@ -152,7 +152,7 @@ nextsep(char *s, char **t)
     {{ end }}
   {{ end }}
 
-  {{ if qs->file }}
+  {{ if qs->file[0] }}
     {{ qs->file }}
   {{ end}}
 
@@ -165,7 +165,7 @@ nextsep(char *s, char **t)
 {!
 	struct request		*c = tp->tp_arg;
 	struct server		*srv = c->srv;
-	struct querystring	*qs = c->t->qs;
+	const struct querystring *qs = c->t->qs;
 	struct gotweb_url	 u_path;
 	const char		*prfx = c->fcgi_params.document_uri;
 	const char		*css = srv->custom_css;
@@ -202,8 +202,8 @@ nextsep(char *s, char **t)
         <a href="?index_page={{ printf "%d", qs->index_page }}">
           {{ srv->site_link }}
         </a>
-        {{ if qs->path }}
-          {! u_path.path = qs->path; !}
+        {{ if qs->path[0] }}
+          {! u_path.path = qs->path[0] ? qs->path : NULL; !}
           {{ " / " }}
           <a href="{{ render gotweb_render_url(tp->tp_arg, &u_path)}}">
             {{ qs->path }}
@@ -344,7 +344,7 @@ nextsep(char *s, char **t)
 {!
 	struct request		*c = tp->tp_arg;
 	struct transport	*t = c->t;
-	struct querystring	*qs = c->t->qs;
+	const struct querystring *qs = c->t->qs;
 	struct repo_commit	*rc;
 	struct repo_dir		*repo_dir = t->repo_dir;
 	struct gotweb_url	 diff_url, patch_url, tree_url;
@@ -451,15 +451,15 @@ nextsep(char *s, char **t)
 {!
 	struct request		*c = tp->tp_arg;
 	struct transport	*t = c->t;
-	struct querystring	*qs = t->qs;
+	const struct querystring *qs = t->qs;
 	struct gotweb_url	 more = {
 		.action = action,
 		.index_page = -1,
-		.path = qs->path,
+		.path = qs->path[0] ? qs->path : NULL,
 		.commit = t->more_id,
 		.headref = qs->headref,
-		.folder = qs->folder,
-		.file = qs->file,
+		.folder = qs->folder[0] ? qs->folder : NULL,
+		.file = qs->file[0] ? qs->file : NULL,
 	};
 
 	if (action == TAGS)
@@ -576,7 +576,7 @@ nextsep(char *s, char **t)
 {!
 	struct request		*c = tp->tp_arg;
 	struct transport	*t = c->t;
-	struct querystring	*qs = t->qs;
+	const struct querystring *qs = t->qs;
 	struct got_blob_object	*blob = t->blob;
 	struct repo_commit	*rc = TAILQ_FIRST(&t->repo_commits);
 	struct gotweb_url	 briefs_url, blame_url, raw_url;
@@ -584,10 +584,10 @@ nextsep(char *s, char **t)
 	memset(&briefs_url, 0, sizeof(briefs_url));
 	briefs_url.index_page = -1,
 	briefs_url.action = BRIEFS,
-	briefs_url.path = qs->path,
-	briefs_url.commit = qs->commit,
-	briefs_url.folder = qs->folder,
-	briefs_url.file = qs->file,
+	briefs_url.path = qs->path[0] ? qs->path : NULL,
+	briefs_url.commit = qs->commit[0] ? qs->commit : NULL,
+	briefs_url.folder = qs->folder[0] ? qs->folder : NULL,
+	briefs_url.file = qs->file[0] ? qs->file : NULL,
 
 	memcpy(&blame_url, &briefs_url, sizeof(blame_url));
 	blame_url.action = BLAME;
@@ -653,7 +653,7 @@ nextsep(char *s, char **t)
 	const struct got_error	*error;
 	struct request		*c = tp->tp_arg;
 	struct transport	*t = c->t;
-	struct querystring	*qs = c->t->qs;
+	const struct querystring *qs = c->t->qs;
 	struct gotweb_url	 url;
 	char			*readme = NULL;
 	int			 binary;
@@ -666,7 +666,8 @@ nextsep(char *s, char **t)
   {{ if readme }}
     {!
 	error = got_open_blob_for_output(&t->blob, &t->fd, &binary, c,
-	    qs->folder, readme, qs->commit);
+	    qs->folder[0] ? qs->folder : NULL, readme,
+	    qs->commit[0] ? qs->commit : NULL);
 	if (error) {
 		free(readme);
 		return (-1);
@@ -675,10 +676,10 @@ nextsep(char *s, char **t)
 	memset(&url, 0, sizeof(url));
 	url.index_page = -1;
 	url.action = BLOB;
-	url.path = t->qs->path;
+	url.path = t->qs->path[0] ? t->qs->path : NULL;
 	url.file = readme;
-	url.folder = t->qs->folder ? t->qs->folder : "";
-	url.commit = t->qs->commit;
+	url.folder = t->qs->folder[0] ? t->qs->folder : "";
+	url.commit = t->qs->commit[0] ? t->qs->commit : NULL;
     !}
     {{ if !binary }}
       <h2>
@@ -742,7 +743,7 @@ nextsep(char *s, char **t)
 {!
 	struct request		*c = tp->tp_arg;
 	struct transport	*t = c->t;
-	struct querystring	*qs = t->qs;
+	const struct querystring *qs = t->qs;
 	struct repo_commit	*rc = TAILQ_FIRST(&t->repo_commits);
 	const char		*modestr = "";
 	const char		*name;
@@ -752,13 +753,13 @@ nextsep(char *s, char **t)
 	struct gotweb_url	 url = {
 	       .index_page = -1,
 	       .commit = rc->commit_id,
-	       .path = qs->path,
+	       .path = qs->path[0] ? qs->path : NULL,
 	};
 
 	name = got_tree_entry_get_name(te);
 	mode = got_tree_entry_get_mode(te);
 
-	folder = qs->folder ? qs->folder : "";
+	folder = qs->folder[0] ? qs->folder : "";
 	if (S_ISDIR(mode)) {
 		if (asprintf(&dir, "%s/%s", folder, name) == -1)
 			return (-1);
@@ -928,7 +929,7 @@ nextsep(char *s, char **t)
 {!
 	struct request		*c = tp->tp_arg;
 	struct transport	*t = c->t;
-	struct querystring	*qs = t->qs;
+	const struct querystring *qs = t->qs;
 	FILE			*fp = t->fp;
 	struct repo_commit	*rc = TAILQ_FIRST(&t->repo_commits);
 	char			*line = NULL;
@@ -937,7 +938,7 @@ nextsep(char *s, char **t)
 	struct gotweb_url	 patch_url, tree_url = {
 		.action = TREE,
 		.index_page = -1,
-		.path = qs->path,
+		.path = qs->path[0] ? qs->path : NULL,
 		.commit = rc->commit_id,
 	};
 
@@ -1038,13 +1039,13 @@ nextsep(char *s, char **t)
 {!
 	const struct got_error	*err;
 	struct request		*c = tp->tp_arg;
-	struct querystring	*qs = c->t->qs;
+	const struct querystring *qs = c->t->qs;
 	const char		*refname;
 	time_t			 age;
 	struct gotweb_url	 url = {
 		.action = SUMMARY,
 		.index_page = -1,
-		.path = qs->path,
+		.path = qs->path[0] ? qs->path : NULL,
 	};
 
 	refname = got_ref_get_name(re->ref);
@@ -1133,17 +1134,17 @@ nextsep(char *s, char **t)
 	const struct got_error	*err;
 	struct request		*c = tp->tp_arg;
 	struct transport	*t = c->t;
-	struct querystring	*qs = t->qs;
+	const struct querystring *qs = t->qs;
 	struct repo_commit	*rc = TAILQ_FIRST(&t->repo_commits);
 	struct gotweb_url	 briefs_url, blob_url, raw_url;
 
 	memset(&briefs_url, 0, sizeof(briefs_url));
 	briefs_url.index_page = -1,
 	briefs_url.action = BRIEFS,
-	briefs_url.path = qs->path,
-	briefs_url.commit = qs->commit,
-	briefs_url.folder = qs->folder,
-	briefs_url.file = qs->file,
+	briefs_url.path = qs->path[0] ? qs->path : NULL;
+	briefs_url.commit = qs->commit[0] ? qs->commit : NULL,
+	briefs_url.folder = qs->folder[0] ? qs->folder : NULL,
+	briefs_url.file = qs->file[0] ? qs->file : NULL,
 
 	memcpy(&blob_url, &briefs_url, sizeof(blob_url));
 	blob_url.action = BLOB;

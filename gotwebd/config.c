@@ -35,9 +35,13 @@
 #include <event.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <imsg.h>
+#include <sha1.h>
+#include <sha2.h>
 
 #include "got_opentemp.h"
 #include "got_reference.h"
+#include "got_object.h"
 
 #include "gotwebd.h"
 #include "log.h"

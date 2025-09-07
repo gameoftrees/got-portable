@@ -34,6 +34,8 @@
 #include <event.h>
 #include <fcntl.h>
 #include <pwd.h>
+#include <sha1.h>
+#include <sha2.h>
 #include <signal.h>
 #include <syslog.h>
 #include <unistd.h>
@@ -41,6 +43,7 @@
 
 #include "got_opentemp.h"
 #include "got_reference.h"
+#include "got_object.h"
 
 #include "gotwebd.h"
 #include "log.h"

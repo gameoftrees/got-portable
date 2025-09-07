@@ -201,7 +201,7 @@ got_get_repo_commit(struct request *c, struct repo_commit *repo_commit,
 	struct got_object_id *id2 = NULL;
 	struct got_object_qid *parent_id;
 	struct transport *t = c->t;
-	struct querystring *qs = c->t->qs;
+	const struct querystring *qs = c->t->qs;
 	char *commit_msg = NULL, *commit_msg0;
 
 	TAILQ_FOREACH(re, refs, entry) {
@@ -331,7 +331,7 @@ got_get_repo_commits(struct request *c, size_t limit)
 	struct repo_commit *repo_commit = NULL;
 	struct transport *t = c->t;
 	struct got_repository *repo = t->repo;
-	struct querystring *qs = t->qs;
+	const struct querystring *qs = t->qs;
 	char *file_path = NULL;
 	int chk_next = 0;
 
@@ -349,12 +349,13 @@ got_get_repo_commits(struct request *c, size_t limit)
 
 	TAILQ_INIT(&refs);
 
-	if (qs->file != NULL && *qs->file != '\0')
-		if (asprintf(&file_path, "%s/%s", qs->folder ? qs->folder : "",
-		    qs->file) == -1)
+	if (qs->file[0]) {
+		if (asprintf(&file_path, "%s/%s",
+		    qs->folder[0] ? qs->folder : "", qs->file) == -1)
 			return got_error_from_errno("asprintf");
+	}
 
-	if (qs->commit) {
+	if (qs->commit[0]) {
 		error = got_repo_match_object_id_prefix(&id, qs->commit,
 		    GOT_OBJ_TYPE_COMMIT, repo);
 		if (error)
@@ -373,7 +374,7 @@ got_get_repo_commits(struct request *c, size_t limit)
 	if (error)
 		goto done;
 
-	if (qs->file != NULL && *qs->file != '\0') {
+	if (qs->file[0]) {
 		error = got_commit_graph_open(&graph, file_path, 0);
 		if (error)
 			goto done;
@@ -456,7 +457,7 @@ got_get_repo_tags(struct request *c, size_t limit)
 	struct server *srv = c->srv;
 	struct transport *t = c->t;
 	struct got_repository *repo = t->repo;
-	struct querystring *qs = t->qs;
+	const struct querystring *qs = t->qs;
 	struct repo_dir *repo_dir = t->repo_dir;
 	struct got_tag_object *tag = NULL;
 	char *repo_path = NULL, *id_str = NULL;
@@ -473,7 +474,8 @@ got_get_repo_tags(struct request *c, size_t limit)
 	    repo_dir->name) == -1)
 		return got_error_from_errno("asprintf");
 
-	if (qs->commit == NULL && (qs->action == TAGS || qs->action == RSS)) {
+	if (qs->commit[0] == '\0' &&
+	    (qs->action == TAGS || qs->action == RSS)) {
 		error = got_ref_open(&ref, repo, qs->headref, 0);
 		if (error)
 			goto done;
@@ -481,7 +483,7 @@ got_get_repo_tags(struct request *c, size_t limit)
 		got_ref_close(ref);
 		if (error)
 			goto done;
-	} else if (qs->commit == NULL && qs->action == TAG) {
+	} else if (qs->commit[0] == '\0' && qs->action == TAG) {
 		error = got_error_msg(GOT_ERR_EOF, "commit id missing");
 		goto done;
 	} else {
@@ -576,7 +578,7 @@ got_get_repo_tags(struct request *c, size_t limit)
 		if (new_repo_tag->commit_id == NULL)
 			goto done;
 
-		if (commit_found == 0 && qs->commit != NULL &&
+		if (commit_found == 0 && qs->commit[0] &&
 		    strncmp(id_str, qs->commit, strlen(id_str)) != 0) {
 			if (commit) {
 				got_object_commit_close(commit);
@@ -674,7 +676,7 @@ got_output_repo_tree(struct request *c, char **readme,
 	struct transport *t = c->t;
 	struct got_commit_object *commit = NULL;
 	struct got_repository *repo = t->repo;
-	struct querystring *qs = t->qs;
+	const struct querystring *qs = t->qs;
 	struct repo_commit *rc = NULL;
 	struct got_object_id *tree_id = NULL, *commit_id = NULL;
 	struct got_reflist_head refs;
@@ -700,7 +702,7 @@ got_output_repo_tree(struct request *c, char **readme,
 		goto done;
 
 	error = got_object_id_by_path(&tree_id, repo, commit,
-	    qs->folder ? qs->folder : "/");
+	    qs->folder[0] ? qs->folder : "/");
 	if (error)
 		goto done;
 
@@ -966,7 +968,7 @@ got_output_file_blame(struct request *c, got_render_blame_line_cb cb)
 	const struct got_error *error = NULL;
 	struct transport *t = c->t;
 	struct got_repository *repo = t->repo;
-	struct querystring *qs = c->t->qs;
+	const struct querystring *qs = c->t->qs;
 	struct got_object_id *obj_id = NULL, *commit_id = NULL;
 	struct got_commit_object *commit = NULL;
 	struct got_reflist_head refs;
