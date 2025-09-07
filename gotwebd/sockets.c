@@ -205,8 +205,7 @@ request_done(struct request *c)
 	 * If we have not yet handed the client off to gotweb.c we
 	 * must send an FCGI end record ourselves.
 	 */
-	if (c->client_status > CLIENT_CONNECT &&
-	    c->client_status < CLIENT_REQUEST)
+	if (c->client_status < CLIENT_REQUEST)
 		fcgi_create_end_record(c);
 
 	cleanup_request(c);
