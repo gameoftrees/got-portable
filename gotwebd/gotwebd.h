@@ -212,7 +212,7 @@ struct transport {
 	struct got_reflist_head	 refs;
 	struct got_repository	*repo;
 	struct repo_dir		*repo_dir;
-	struct querystring	*qs;
+	const struct querystring *qs;
 	char			*more_id;
 	char			*tags_more_id;
 	unsigned int		 repos_total;
@@ -249,9 +249,37 @@ struct gotwebd_fcgi_record {
 	size_t				 record_len;
 };
 
+enum query_actions {
+	NO_ACTION = 0,
+	BLAME,
+	BLOB,
+	BLOBRAW,
+	BRIEFS,
+	COMMITS,
+	DIFF,
+	ERR,
+	INDEX,
+	PATCH,
+	SUMMARY,
+	TAG,
+	TAGS,
+	TREE,
+	RSS,
+};
+
+struct querystring {
+	enum query_actions action;
+	char		 commit[GOT_OBJECT_ID_HEX_MAXLEN];
+	char		 file[NAME_MAX];
+	char		 folder[PATH_MAX];
+	char		 headref[MAX_DOCUMENT_URI];
+	int		 index_page;
+	char		 path[PATH_MAX];
+};
+
 struct gotwebd_fcgi_params {
 	uint32_t			 request_id;
-	char				 querystring[MAX_QUERYSTRING];
+	struct querystring		 qs;
 	char				 document_uri[MAX_DOCUMENT_URI];
 	char				 server_name[MAX_SERVER_NAME];
 	int				 https;
@@ -413,16 +441,6 @@ struct gotweb_url {
 	const char	*path;
 };
 
-struct querystring {
-	uint8_t		 action;
-	char		*commit;
-	char		*file;
-	char		*folder;
-	char		*headref;
-	int		 index_page;
-	char		*path;
-};
-
 struct querystring_keys {
 	const char	*name;
 	int		 element;
@@ -441,23 +459,6 @@ enum querystring_elements {
 	HEADREF,
 	INDEX_PAGE,
 	PATH,
-};
-
-enum query_actions {
-	BLAME,
-	BLOB,
-	BLOBRAW,
-	BRIEFS,
-	COMMITS,
-	DIFF,
-	ERR,
-	INDEX,
-	PATCH,
-	SUMMARY,
-	TAG,
-	TAGS,
-	TREE,
-	RSS,
 };
 
 extern struct gotwebd	*gotwebd_env;
@@ -521,6 +522,7 @@ int parse_config(const char *, struct gotwebd *);
 int cmdline_symset(char *);
 
 /* fcgi.c */
+void fcgi_init_querystring(struct querystring *);
 void fcgi_cleanup_request(struct request *);
 void fcgi_create_end_record(struct request *);
 int fcgi_write(void *, const void *, size_t);

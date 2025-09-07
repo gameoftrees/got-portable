@@ -42,6 +42,8 @@
 #include <netdb.h>
 #include <poll.h>
 #include <pwd.h>
+#include <sha1.h>
+#include <sha2.h>
 #include <siphash.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -51,6 +53,7 @@
 #include <util.h>
 
 #include "got_reference.h"
+#include "got_object.h"
 
 #include "gotwebd.h"
 #include "log.h"
@@ -503,9 +506,23 @@ static int
 process_request(struct request *c)
 {
 	struct gotwebd *env = gotwebd_env;
+	struct querystring *qs = &c->fcgi_params.qs;
 	struct imsgev *iev_gotweb;
 	int ret, i;
 	struct request ic;
+
+	/* Fill in defaults for unspecified parameters where needed. */
+	if (qs->action == NO_ACTION)
+		qs->action = INDEX;
+	if (qs->index_page == -1)
+		qs->index_page = 0;
+	if (qs->headref[0] == '\0') {
+		if (strlcpy(qs->headref, GOT_REF_HEAD, sizeof(qs->headref)) >=
+		    sizeof(qs->headref)) {
+			log_warnx("head reference buffer too small");
+			return -1;
+		}
+	}
 
 	memcpy(&ic, c, sizeof(ic));
 
@@ -560,10 +577,44 @@ recv_parsed_params(struct imsg *imsg)
 
 	p = &c->fcgi_params;
 
-	if (params.querystring[0] != '\0' &&
-	    strlcpy(p->querystring, params.querystring,
-	    sizeof(p->querystring)) >= sizeof(p->querystring)) {
-		log_warnx("querystring too long");
+	if (params.qs.action != NO_ACTION)
+		p->qs.action = params.qs.action;
+
+	if (params.qs.commit[0] &&
+	    strlcpy(p->qs.commit, params.qs.commit,
+	    sizeof(p->qs.commit)) >= sizeof(p->qs.commit)) {
+		log_warnx("commit ID too long");
+		goto fail;
+	}
+
+	if (params.qs.file[0] &&
+	    strlcpy(p->qs.file, params.qs.file,
+	    sizeof(p->qs.file)) >= sizeof(p->qs.file)) {
+		log_warnx("file path too long");
+		goto fail;
+	}
+
+	if (params.qs.folder[0] &&
+	    strlcpy(p->qs.folder, params.qs.folder,
+	    sizeof(p->qs.folder)) >= sizeof(p->qs.folder)) {
+		log_warnx("folder path too long");
+		goto fail;
+	}
+
+	if (params.qs.headref[0] &&
+	    strlcpy(p->qs.headref, params.qs.headref,
+	    sizeof(p->qs.headref)) >= sizeof(p->qs.headref)) {
+		log_warnx("headref too long");
+		goto fail;
+	}
+
+	if (params.qs.index_page != -1)
+		p->qs.index_page = params.qs.index_page;
+
+	if (params.qs.path[0] &&
+	    strlcpy(p->qs.path, params.qs.path,
+	    sizeof(p->qs.path)) >= sizeof(p->qs.path)) {
+		log_warnx("path path too long");
 		goto fail;
 	}
 
@@ -1182,6 +1233,7 @@ sockets_socket_accept(int fd, short event, void *arg)
 		return;
 	}
 
+	fcgi_init_querystring(&c->fcgi_params.qs);
 	c->buf = buf;
 	c->fd = s;
 	c->sock = sock;

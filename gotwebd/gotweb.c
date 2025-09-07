@@ -25,7 +25,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <event.h>
@@ -56,38 +55,6 @@
 #include "log.h"
 #include "tmpl.h"
 
-static const struct querystring_keys querystring_keys[] = {
-	{ "action",		ACTION },
-	{ "commit",		COMMIT },
-	{ "file",		RFILE },
-	{ "folder",		FOLDER },
-	{ "headref",		HEADREF },
-	{ "index_page",		INDEX_PAGE },
-	{ "path",		PATH },
-};
-
-static const struct action_keys action_keys[] = {
-	{ "blame",	BLAME },
-	{ "blob",	BLOB },
-	{ "blobraw",	BLOBRAW },
-	{ "briefs",	BRIEFS },
-	{ "commits",	COMMITS },
-	{ "diff",	DIFF },
-	{ "error",	ERR },
-	{ "index",	INDEX },
-	{ "patch",	PATCH },
-	{ "summary",	SUMMARY },
-	{ "tag",	TAG },
-	{ "tags",	TAGS },
-	{ "tree",	TREE },
-	{ "rss",	RSS },
-};
-
-static const struct got_error *gotweb_init_querystring(struct querystring **);
-static const struct got_error *gotweb_parse_querystring(struct querystring *,
-    char *);
-static const struct got_error *gotweb_assign_querystring(struct querystring *,
-    char *, char *);
 static int gotweb_render_index(struct template *);
 static const struct got_error *gotweb_load_got_path(struct repo_dir **,
     const char *, struct request *);
@@ -98,7 +65,6 @@ static const struct got_error *gotweb_get_repo_description(char **,
 static const struct got_error *gotweb_get_clone_url(char **, struct server *,
     const char *, int);
 
-static void gotweb_free_querystring(struct querystring *);
 static void gotweb_free_repo_dir(struct repo_dir *);
 
 struct server *gotweb_get_server(const char *);
@@ -267,49 +233,43 @@ gotweb_process_request(struct request *c)
 	size_t len;
 	int r, binary = 0;
 
-	/* parse our querystring */
-	error = gotweb_init_querystring(&qs);
-	if (error) {
-		log_warnx("%s: %s", __func__, error->msg);
-		goto err;
-	}
+	/* querystring */
+	qs = &c->fcgi_params.qs;
 	c->t->qs = qs;
-	error = gotweb_parse_querystring(qs, c->fcgi_params.querystring);
-	if (error) {
-		log_warnx("%s: %s", __func__, error->msg);
-		goto err;
-	}
 
 	/* Log the request. */
 	if (gotwebd_env->gotwebd_verbose > 0) {
 		struct gotwebd_fcgi_params *p = &c->fcgi_params;
 		char *server_name = NULL;
-		char *querystring = NULL;
 		char *document_uri = NULL;
+		const char *action_name = NULL;
 
 		if (p->server_name[0] &&
 		    stravis(&server_name, p->server_name, VIS_SAFE) == -1) {
 			log_warn("stravis");
 			server_name = NULL;
 		}
-		if (p->querystring[0] &&
-		    stravis(&querystring, p->querystring, VIS_SAFE) == -1) {
-			log_warn("stravis");
-			querystring = NULL;
-		}
+
 		if (p->document_uri[0] &&
 		    stravis(&document_uri, p->document_uri, VIS_SAFE) == -1) {
 			log_warn("stravis");
 			document_uri = NULL;
 		}
 
-		log_info("processing request: server='%s' query='%s' "
-		    "document_uri='%s'",
+		action_name = gotweb_action_name(qs->action);
+		log_info("processing request: server='%s' action='%s' "
+		    "commit='%s', file='%s', folder='%s', headref='%s' "
+		    "index_page=%d path='%s' document_uri='%s'",
 		    server_name ? server_name : "",
-		    querystring ? querystring : "",
+		    action_name ? action_name : "",
+		    qs->commit,
+		    qs->file,
+		    qs->folder,
+		    qs->headref,
+		    qs->index_page,
+		    qs->path,
 		    document_uri ? document_uri : "");
 		free(server_name);
-		free(querystring);
 		free(document_uri);
 	}
 
@@ -322,14 +282,14 @@ gotweb_process_request(struct request *c)
 	if (qs->action == BLAME || qs->action == BLOB ||
 	    qs->action == BLOBRAW || qs->action == DIFF ||
 	    qs->action == PATCH) {
-		if (qs->commit == NULL) {
+		if (qs->commit[0] == '\0') {
 			error = got_error(GOT_ERR_BAD_QUERYSTRING);
 			goto err;
 		}
 	}
 
 	if (qs->action != INDEX) {
-		if (qs->path == NULL) {
+		if (qs->path[0] == '\0') {
 			error = got_error(GOT_ERR_BAD_QUERYSTRING);
 			goto err;
 		}
@@ -341,7 +301,7 @@ gotweb_process_request(struct request *c)
 	}
 
 	if (qs->action == BLOBRAW || qs->action == BLOB) {
-		if (qs->folder == NULL || qs->file == NULL) {
+		if (qs->folder[0] == '\0' || qs->file[0] == '\0') {
 			error = got_error(GOT_ERR_BAD_QUERYSTRING);
 			goto err;
 		}
@@ -358,7 +318,7 @@ gotweb_process_request(struct request *c)
 
 	switch (qs->action) {
 	case BLAME:
-		if (qs->folder == NULL || qs->file == NULL) {
+		if (qs->folder[0] == '\0' || qs->file[0] == '\0') {
 			error = got_error(GOT_ERR_BAD_QUERYSTRING);
 			goto err;
 		}
@@ -375,10 +335,10 @@ gotweb_process_request(struct request *c)
 			struct gotweb_url url = {
 				.index_page = -1,
 				.action = BLOBRAW,
-				.path = qs->path,
-				.commit = qs->commit,
-				.folder = qs->folder,
-				.file = qs->file,
+				.path = qs->path[0] ? qs->path : NULL,
+				.commit = qs->commit[0] ? qs->commit : NULL,
+				.folder = qs->folder[0] ? qs->folder : NULL,
+				.file = qs->file[0] ? qs->file : NULL,
 			};
 
 			return gotweb_reply(c, 302, NULL, &url);
@@ -493,11 +453,12 @@ gotweb_process_request(struct request *c)
 		}
 		qs->action = SUMMARY;
 		commit = TAILQ_FIRST(&c->t->repo_commits);
-		if (commit && qs->commit == NULL) {
-			qs->commit = strdup(commit->commit_id);
-			if (qs->commit == NULL) {
-				error = got_error_from_errno("strdup");
-				log_warn("%s: strdup", __func__);
+		if (commit && qs->commit[0] == '\0') {
+			if (strlcpy(qs->commit, commit->commit_id,
+			    sizeof(qs->commit)) >= sizeof(qs->commit)) {
+				error = got_error_msg(GOT_ERR_NO_SPACE,
+				    "commit ID too long");
+				log_warn("%s: %s", __func__, error->msg);
 				goto err;
 			}
 		}
@@ -581,211 +542,6 @@ gotweb_init_transport(struct transport **t)
 	return error;
 }
 
-static const struct got_error *
-gotweb_init_querystring(struct querystring **qs)
-{
-	const struct got_error *error = NULL;
-
-	*qs = calloc(1, sizeof(**qs));
-	if (*qs == NULL)
-		return got_error_from_errno2(__func__, "calloc");
-
-	(*qs)->headref = strdup("HEAD");
-	if ((*qs)->headref == NULL) {
-		free(*qs);
-		*qs = NULL;
-		return got_error_from_errno2(__func__, "strdup");
-	}
-
-	(*qs)->action = INDEX;
-
-	return error;
-}
-
-static const struct got_error *
-gotweb_parse_querystring(struct querystring *qs, char *qst)
-{
-	const struct got_error *error = NULL;
-	char *tok1 = NULL, *tok1_pair = NULL, *tok1_end = NULL;
-	char *tok2 = NULL, *tok2_pair = NULL, *tok2_end = NULL;
-
-	if (qst == NULL)
-		return error;
-
-	tok1 = strdup(qst);
-	if (tok1 == NULL)
-		return got_error_from_errno2(__func__, "strdup");
-
-	tok1_pair = tok1;
-	tok1_end = tok1;
-
-	while (tok1_pair != NULL) {
-		strsep(&tok1_end, "&");
-
-		tok2 = strdup(tok1_pair);
-		if (tok2 == NULL) {
-			free(tok1);
-			return got_error_from_errno2(__func__, "strdup");
-		}
-
-		tok2_pair = tok2;
-		tok2_end = tok2;
-
-		while (tok2_pair != NULL) {
-			strsep(&tok2_end, "=");
-			if (tok2_end) {
-				error = gotweb_assign_querystring(qs, tok2_pair,
-				    tok2_end);
-				if (error)
-					goto err;
-			}
-			tok2_pair = tok2_end;
-		}
-		free(tok2);
-		tok1_pair = tok1_end;
-	}
-	free(tok1);
-	return error;
-err:
-	free(tok2);
-	free(tok1);
-	return error;
-}
-
-/*
- * Adapted from usr.sbin/httpd/httpd.c url_decode.
- */
-static const struct got_error *
-gotweb_urldecode(char *url)
-{
-	char		*p, *q;
-	char		 hex[3];
-	unsigned long	 x;
-
-	hex[2] = '\0';
-	p = q = url;
-
-	while (*p != '\0') {
-		switch (*p) {
-		case '%':
-			/* Encoding character is followed by two hex chars */
-			if (!isxdigit((unsigned char)p[1]) ||
-			    !isxdigit((unsigned char)p[2]) ||
-			    (p[1] == '0' && p[2] == '0'))
-				return got_error(GOT_ERR_BAD_QUERYSTRING);
-
-			hex[0] = p[1];
-			hex[1] = p[2];
-
-			/*
-			 * We don't have to validate "hex" because it is
-			 * guaranteed to include two hex chars followed by nul.
-			 */
-			x = strtoul(hex, NULL, 16);
-			*q = (char)x;
-			p += 2;
-			break;
-		default:
-			*q = *p;
-			break;
-		}
-		p++;
-		q++;
-	}
-	*q = '\0';
-
-	return NULL;
-}
-
-static const struct got_error *
-gotweb_assign_querystring(struct querystring *qs, char *key, char *value)
-{
-	const struct got_error *error = NULL;
-	const char *errstr;
-	int a_cnt, el_cnt;
-
-	error = gotweb_urldecode(value);
-	if (error)
-		return error;
-
-	for (el_cnt = 0; el_cnt < nitems(querystring_keys); el_cnt++) {
-		if (strcmp(key, querystring_keys[el_cnt].name) != 0)
-			continue;
-
-		switch (querystring_keys[el_cnt].element) {
-		case ACTION:
-			for (a_cnt = 0; a_cnt < nitems(action_keys); a_cnt++) {
-				if (strcmp(value, action_keys[a_cnt].name) != 0)
-					continue;
-				qs->action = action_keys[a_cnt].action;
-				break;
-			}
-			if (a_cnt == nitems(action_keys))
-				qs->action = ERR;
-			break;
-		case COMMIT:
-			qs->commit = strdup(value);
-			if (qs->commit == NULL) {
-				error = got_error_from_errno2(__func__,
-				    "strdup");
-				goto done;
-			}
-			break;
-		case RFILE:
-			qs->file = strdup(value);
-			if (qs->file == NULL) {
-				error = got_error_from_errno2(__func__,
-				    "strdup");
-				goto done;
-			}
-			break;
-		case FOLDER:
-			qs->folder = strdup(value);
-			if (qs->folder == NULL) {
-				error = got_error_from_errno2(__func__,
-				    "strdup");
-				goto done;
-			}
-			break;
-		case HEADREF:
-			free(qs->headref);
-			qs->headref = strdup(value);
-			if (qs->headref == NULL) {
-				error = got_error_from_errno2(__func__,
-				    "strdup");
-				goto done;
-			}
-			break;
-		case INDEX_PAGE:
-			if (*value == '\0')
-				break;
-			qs->index_page = strtonum(value, INT64_MIN,
-			    INT64_MAX, &errstr);
-			if (errstr) {
-				error = got_error_from_errno3(__func__,
-				    "strtonum", errstr);
-				goto done;
-			}
-			if (qs->index_page < 0)
-				qs->index_page = 0;
-			break;
-		case PATH:
-			qs->path = strdup(value);
-			if (qs->path == NULL) {
-				error = got_error_from_errno2(__func__,
-				    "strdup");
-				goto done;
-			}
-			break;
-		}
-
-		/* entry found */
-		break;
-	}
-done:
-	return error;
-}
-
 void
 gotweb_free_repo_tag(struct repo_tag *rt)
 {
@@ -813,19 +569,6 @@ gotweb_free_repo_commit(struct repo_commit *rc)
 		free(rc->commit_msg);
 	}
 	free(rc);
-}
-
-static void
-gotweb_free_querystring(struct querystring *qs)
-{
-	if (qs != NULL) {
-		free(qs->commit);
-		free(qs->file);
-		free(qs->folder);
-		free(qs->headref);
-		free(qs->path);
-	}
-	free(qs);
 }
 
 static void
@@ -859,7 +602,7 @@ gotweb_free_transport(struct transport *t)
 		gotweb_free_repo_tag(rt);
 	}
 	gotweb_free_repo_dir(t->repo_dir);
-	gotweb_free_querystring(t->qs);
+	t->qs = NULL;
 	free(t->more_id);
 	free(t->tags_more_id);
 	if (t->blob)
@@ -887,7 +630,7 @@ gotweb_index_navs(struct request *c, struct gotweb_url *prev, int *have_prev,
     struct gotweb_url *next, int *have_next)
 {
 	struct transport *t = c->t;
-	struct querystring *qs = t->qs;
+	const struct querystring *qs = t->qs;
 	struct server *srv = c->srv;
 
 	*have_prev = *have_next = 0;
@@ -917,7 +660,7 @@ gotweb_render_index(struct template *tp)
 	struct request *c = tp->tp_arg;
 	struct server *srv = c->srv;
 	struct transport *t = c->t;
-	struct querystring *qs = t->qs;
+	const struct querystring *qs = t->qs;
 	struct repo_dir *repo_dir = NULL;
 	struct dirent **sd_dent = t->repos;
 	unsigned int d_i, d_disp = 0;
@@ -1062,6 +805,8 @@ const char *
 gotweb_action_name(int action)
 {
 	switch (action) {
+	case NO_ACTION:
+		return "no action";
 	case BLAME:
 		return "blame";
 	case BLOB:

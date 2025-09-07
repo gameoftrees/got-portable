@@ -22,9 +22,12 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 
+#include <ctype.h>
 #include <errno.h>
 #include <event.h>
 #include <imsg.h>
+#include <sha1.h>
+#include <sha2.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -35,6 +38,7 @@
 
 #include "got_error.h"
 #include "got_reference.h"
+#include "got_object.h"
 
 #include "got_lib_poll.h"
 
@@ -128,6 +132,8 @@ fcgi_parse_record(struct gotwebd_fcgi_record *rec)
 	uint8_t *record_body;
 	struct gotwebd_fcgi_params params = { 0 };
 
+	fcgi_init_querystring(&params.qs);
+
 	if (rec->record_len < sizeof(struct fcgi_record_header) ||
 	    rec->record_len > sizeof(rec->record)) {
 		log_warnx("invalid fcgi record size");
@@ -171,9 +177,230 @@ fcgi_parse_record(struct gotwebd_fcgi_record *rec)
 	}
 }
 
+static const struct querystring_keys querystring_keys[] = {
+	{ "action",		ACTION },
+	{ "commit",		COMMIT },
+	{ "file",		RFILE },
+	{ "folder",		FOLDER },
+	{ "headref",		HEADREF },
+	{ "index_page",		INDEX_PAGE },
+	{ "path",		PATH },
+};
+
+static const struct action_keys action_keys[] = {
+	{ "blame",	BLAME },
+	{ "blob",	BLOB },
+	{ "blobraw",	BLOBRAW },
+	{ "briefs",	BRIEFS },
+	{ "commits",	COMMITS },
+	{ "diff",	DIFF },
+	{ "error",	ERR },
+	{ "index",	INDEX },
+	{ "patch",	PATCH },
+	{ "summary",	SUMMARY },
+	{ "tag",	TAG },
+	{ "tags",	TAGS },
+	{ "tree",	TREE },
+	{ "rss",	RSS },
+};
+
+
+void
+fcgi_init_querystring(struct querystring *qs)
+{
+	memset(qs, 0, sizeof(*qs));
+	qs->action = NO_ACTION;
+	qs->index_page = -1;
+}
+
+/*
+ * Adapted from usr.sbin/httpd/httpd.c url_decode.
+ */
+static const struct got_error *
+urldecode(char *url)
+{
+	char		*p, *q;
+	char		 hex[3];
+	unsigned long	 x;
+
+	hex[2] = '\0';
+	p = q = url;
+
+	while (*p != '\0') {
+		switch (*p) {
+		case '%':
+			/* Encoding character is followed by two hex chars */
+			if (!isxdigit((unsigned char)p[1]) ||
+			    !isxdigit((unsigned char)p[2]) ||
+			    (p[1] == '0' && p[2] == '0'))
+				return got_error(GOT_ERR_BAD_QUERYSTRING);
+
+			hex[0] = p[1];
+			hex[1] = p[2];
+
+			/*
+			 * We don't have to validate "hex" because it is
+			 * guaranteed to include two hex chars followed by nul.
+			 */
+			x = strtoul(hex, NULL, 16);
+			*q = (char)x;
+			p += 2;
+			break;
+		default:
+			*q = *p;
+			break;
+		}
+		p++;
+		q++;
+	}
+	*q = '\0';
+
+	return NULL;
+}
+
+static const struct got_error *
+assign_querystring(struct querystring *qs, char *key, char *value)
+{
+	const struct got_error *error = NULL;
+	const char *errstr;
+	int a_cnt, el_cnt;
+
+	error = urldecode(value);
+	if (error)
+		return error;
+
+	for (el_cnt = 0; el_cnt < nitems(querystring_keys); el_cnt++) {
+		if (strcmp(key, querystring_keys[el_cnt].name) != 0)
+			continue;
+
+		switch (querystring_keys[el_cnt].element) {
+		case ACTION:
+			for (a_cnt = 0; a_cnt < nitems(action_keys); a_cnt++) {
+				if (strcmp(value, action_keys[a_cnt].name) != 0)
+					continue;
+				qs->action = action_keys[a_cnt].action;
+				break;
+			}
+			if (a_cnt == nitems(action_keys))
+				qs->action = ERR;
+			break;
+		case COMMIT:
+			if (strlcpy(qs->commit, value, sizeof(qs->commit)) >=
+			    sizeof(qs->commit)) {
+				error = got_error_msg(GOT_ERR_NO_SPACE,
+				    "requested commit ID too long");
+				goto done;
+			}
+			break;
+		case RFILE:
+			if (strlcpy(qs->file, value, sizeof(qs->file)) >=
+			    sizeof(qs->file)) {
+				error = got_error_msg(GOT_ERR_NO_SPACE,
+				    "requested in-repository path too long");
+				goto done;
+			}
+			break;
+		case FOLDER:
+			if (strlcpy(qs->folder, value[0] ? value : "/",
+			    sizeof(qs->folder)) >= sizeof(qs->folder)) {
+				error = got_error_msg(GOT_ERR_NO_SPACE,
+				    "requested repository folder path "
+				    "too long");
+				goto done;
+			}
+			break;
+		case HEADREF:
+			if (strlcpy(qs->headref, value, sizeof(qs->headref)) >=
+			    sizeof(qs->headref)) {
+				error = got_error_msg(GOT_ERR_NO_SPACE,
+				    "requested repository head ref too long");
+				goto done;
+			}
+			break;
+		case INDEX_PAGE:
+			if (*value == '\0')
+				break;
+			qs->index_page = strtonum(value, INT64_MIN,
+			    INT64_MAX, &errstr);
+			if (errstr) {
+				error = got_error_from_errno3(__func__,
+				    "strtonum", errstr);
+				goto done;
+			}
+			if (qs->index_page < 0)
+				qs->index_page = 0;
+			break;
+		case PATH:
+			if (strlcpy(qs->path, value, sizeof(qs->path)) >=
+			    sizeof(qs->path)) {
+				error = got_error_msg(GOT_ERR_NO_SPACE,
+				    "requested repository path too long");
+				goto done;
+			}
+			break;
+		}
+
+		/* entry found */
+		break;
+	}
+done:
+	return error;
+}
+
+static const struct got_error *
+parse_querystring(struct querystring *qs, char *qst)
+{
+	const struct got_error *error = NULL;
+	char *tok1 = NULL, *tok1_pair = NULL, *tok1_end = NULL;
+	char *tok2 = NULL, *tok2_pair = NULL, *tok2_end = NULL;
+
+	if (qst == NULL)
+		return error;
+
+	tok1 = strdup(qst);
+	if (tok1 == NULL)
+		return got_error_from_errno2(__func__, "strdup");
+
+	tok1_pair = tok1;
+	tok1_end = tok1;
+
+	while (tok1_pair != NULL) {
+		strsep(&tok1_end, "&");
+
+		tok2 = strdup(tok1_pair);
+		if (tok2 == NULL) {
+			free(tok1);
+			return got_error_from_errno2(__func__, "strdup");
+		}
+
+		tok2_pair = tok2;
+		tok2_end = tok2;
+
+		while (tok2_pair != NULL) {
+			strsep(&tok2_end, "=");
+			if (tok2_end) {
+				error = assign_querystring(qs, tok2_pair,
+				    tok2_end);
+				if (error)
+					goto err;
+			}
+			tok2_pair = tok2_end;
+		}
+		free(tok2);
+		tok1_pair = tok1_end;
+	}
+	free(tok1);
+	return error;
+err:
+	free(tok2);
+	free(tok1);
+	return error;
+}
+
 int
 fcgi_parse_params(uint8_t *buf, uint16_t n, struct gotwebd_fcgi_params *params)
 {
+	const struct got_error *error;
 	uint32_t name_len, val_len;
 	uint8_t *val;
 
@@ -218,12 +445,20 @@ fcgi_parse_params(uint8_t *buf, uint16_t n, struct gotwebd_fcgi_params *params)
 
 		val = buf + name_len;
 
-		if (val_len < MAX_QUERYSTRING &&
-		    name_len == 12 &&
+		if (val_len < MAX_QUERYSTRING && name_len == 12 &&
 		    strncmp(buf, "QUERY_STRING", 12) == 0) {
-			/* TODO: parse querystring here */
-			memcpy(params->querystring, val, val_len);
-			params->querystring[val_len] = '\0';
+			char querystring[MAX_QUERYSTRING];
+
+			memcpy(querystring, val, val_len);
+			querystring[val_len] = '\0';
+
+			fcgi_init_querystring(&params->qs);
+
+			error = parse_querystring(&params->qs, querystring);
+			if (error) {
+				log_warnx("%s: %s", __func__, error->msg);
+				return -1;
+			}
 		}
 
 		if (val_len < MAX_DOCUMENT_URI &&
