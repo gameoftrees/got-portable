@@ -384,12 +384,11 @@ struct gotwebd {
 	int		 gotwebd_verbose;
 
 	struct imsgev	*iev_parent;
-	struct imsgev	*iev_server;
+	struct imsgev	*iev_sockets;
 	struct imsgev	*iev_fcgi;
 	struct imsgev	*iev_gotweb;
 
 	uint16_t	 prefork;
-	int		 servers_pending;
 	int		 gotweb_pending;
 	int		 gotweb_cur;
 
