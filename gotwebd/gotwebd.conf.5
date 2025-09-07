@@ -99,7 +99,9 @@ Set the
 .Ar user
 which runs
 .Xr httpd 8 .
-Needed to ensure that the web server can access UNIX-domain sockets created by
+Needed to ensure that the web server can access
+.Ux Ns -domain
+sockets created by
 .Xr gotwebd 8 .
 If not specified, the user www will be used.
 .El
@@ -243,7 +245,8 @@ configuration file.
 .It Pa /var/www/run/gotweb.sock
 Default location for the
 .Xr gotwebd 8
-listening socket.
+.Ux Ns -domain
+socket.
 .El
 .Sh EXAMPLES
 A sample configuration:
@@ -259,7 +262,7 @@ server "localhost" {
 .Pp
 Another example, this time listening on a local port instead of the
 implicit
-.Ux
+.Ux Ns -domain
 socket, and serving repositories located outside the web server's chroot:
 .Bd -literal -offset indent
 listen on 127.0.0.1 port 9000
