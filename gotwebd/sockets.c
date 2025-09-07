@@ -1001,7 +1001,6 @@ read_fcgi_records(int fd, short events, void *arg)
 	size_t record_len;
 
 	n = read(fd, c->buf + c->buf_len, FCGI_RECORD_SIZE - c->buf_len);
-	log_info("%u: %s: request %u, read=%zd", getpid(), __func__, c->request_id, n);
 
 	switch (n) {
 	case -1:
@@ -1133,14 +1132,11 @@ sockets_socket_accept(int fd, short event, void *arg)
 	socklen_t len;
 	int s;
 
-	log_info("%u: %s: %d clients", getpid(), __func__, client_cnt);
-
 	backoff.tv_sec = 1;
 	backoff.tv_usec = 0;
 
 	if (event & EV_TIMEOUT) {
 		event_add(&sock->ev, NULL);
-		log_info("%u: %s: timeout", getpid(), __func__);
 		return;
 	}
 
@@ -1154,7 +1150,6 @@ sockets_socket_accept(int fd, short event, void *arg)
 		case EINTR:
 		case EWOULDBLOCK:
 		case ECONNABORTED:
-			log_info("%u: %s: errno %d", getpid(), __func__, errno);
 			event_add(&sock->ev, NULL);
 			return;
 		case EMFILE:
@@ -1213,7 +1208,6 @@ sockets_socket_accept(int fd, short event, void *arg)
 	evtimer_set(&c->tmo, request_timeout, c);
 	evtimer_add(&c->tmo, &timeout);
 
-	log_info("%u: %s: add_request %d", getpid(), __func__, c->request_id);
 	add_request(c);
 }
 

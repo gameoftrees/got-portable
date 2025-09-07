@@ -1501,7 +1501,6 @@ gotweb_dispatch_server(int fd, short event, void *arg)
 			c = recv_request(&imsg);
 			if (c) {
 				int request_id = c->request_id;
-				log_info("%u: %s: request %u", getpid(), __func__, c->request_id);
 				if (gotweb_process_request(c) == -1) {
 					log_warnx("request %u failed",
 					    request_id);
