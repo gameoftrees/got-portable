@@ -260,6 +260,24 @@ urldecode(char *url)
 }
 
 static const struct got_error *
+validate_path(const char *path)
+{
+	size_t len = strlen(path);
+
+	if (len >= 3 && strncmp(path, "../", 3) == 0)
+		return got_error(GOT_ERR_BAD_QUERYSTRING);
+
+	if (len >= 4 && strstr(path, "/../") != NULL)
+		return got_error(GOT_ERR_BAD_QUERYSTRING);
+
+	if (len >= 3 && strcmp(path + len - 3, "/..") == 0)
+		return got_error(GOT_ERR_BAD_QUERYSTRING);
+
+	return NULL;
+
+}
+
+static const struct got_error *
 assign_querystring(struct querystring *qs, char *key, char *value)
 {
 	const struct got_error *error = NULL;
@@ -294,6 +312,9 @@ assign_querystring(struct querystring *qs, char *key, char *value)
 			}
 			break;
 		case RFILE:
+			error = validate_path(value);
+			if (error)
+				goto done;
 			if (strlcpy(qs->file, value, sizeof(qs->file)) >=
 			    sizeof(qs->file)) {
 				error = got_error_msg(GOT_ERR_NO_SPACE,
@@ -302,6 +323,9 @@ assign_querystring(struct querystring *qs, char *key, char *value)
 			}
 			break;
 		case FOLDER:
+			error = validate_path(value);
+			if (error)
+				goto done;
 			if (strlcpy(qs->folder, value[0] ? value : "/",
 			    sizeof(qs->folder)) >= sizeof(qs->folder)) {
 				error = got_error_msg(GOT_ERR_NO_SPACE,
@@ -311,6 +335,9 @@ assign_querystring(struct querystring *qs, char *key, char *value)
 			}
 			break;
 		case HEADREF:
+			error = validate_path(value);
+			if (error)
+				goto done;
 			if (strlcpy(qs->headref, value, sizeof(qs->headref)) >=
 			    sizeof(qs->headref)) {
 				error = got_error_msg(GOT_ERR_NO_SPACE,
@@ -329,6 +356,9 @@ assign_querystring(struct querystring *qs, char *key, char *value)
 			}
 			break;
 		case PATH:
+			error = validate_path(value);
+			if (error)
+				goto done;
 			if (strlcpy(qs->path, value, sizeof(qs->path)) >=
 			    sizeof(qs->path)) {
 				error = got_error_msg(GOT_ERR_NO_SPACE,
