@@ -540,7 +540,7 @@ process_request(struct request *c)
 
 	iev_gotweb = select_worker(c);
 	ret = imsg_compose_event(iev_gotweb, GOTWEBD_IMSG_REQ_PROCESS,
-	    GOTWEBD_PROC_SERVER, -1, c->fd, &ic, sizeof(ic));
+	    GOTWEBD_PROC_SOCKETS, -1, c->fd, &ic, sizeof(ic));
 	if (ret == -1) {
 		log_warn("imsg_compose_event");
 		c->worker_idx = -1;
@@ -1035,7 +1035,7 @@ parse_params(struct request *c, uint8_t *record, size_t record_len)
 
 	ret = imsg_compose_event(env->iev_fcgi,
 	    GOTWEBD_IMSG_FCGI_PARSE_PARAMS,
-	    GOTWEBD_PROC_SERVER, -1, -1, &rec, sizeof(rec));
+	    GOTWEBD_PROC_SOCKETS, -1, -1, &rec, sizeof(rec));
 	if (ret == -1)
 		log_warn("imsg_compose_event");
 
