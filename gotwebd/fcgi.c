@@ -114,7 +114,7 @@ send_parsed_params(struct gotwebd_fcgi_params *params)
 	struct gotwebd *env = gotwebd_env;
 
 	if (imsg_compose_event(env->iev_sockets, GOTWEBD_IMSG_FCGI_PARAMS,
-	    GOTWEBD_PROC_SERVER, -1, -1, params, sizeof(*params)) == -1)
+	    GOTWEBD_PROC_FCGI, -1, -1, params, sizeof(*params)) == -1)
 		log_warn("imsg_compose_event");
 }
 
@@ -124,7 +124,7 @@ abort_request(uint32_t request_id)
 	struct gotwebd *env = gotwebd_env;
 
 	if (imsg_compose_event(env->iev_sockets, GOTWEBD_IMSG_REQ_ABORT,
-	    GOTWEBD_PROC_SERVER, -1, -1, &request_id, sizeof(request_id)) == -1)
+	    GOTWEBD_PROC_FCGI, -1, -1, &request_id, sizeof(request_id)) == -1)
 		log_warn("imsg_compose_event");
 }
 
