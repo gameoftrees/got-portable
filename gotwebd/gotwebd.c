@@ -357,7 +357,7 @@ spawn_process(struct gotwebd *env, const char *argv0, struct imsgev *iev,
 	close(p[1]);
 
 	argv[argc++] = argv0;
-	if (proc_type == GOTWEBD_PROC_SERVER) {
+	if (proc_type == GOTWEBD_PROC_SOCKETS) {
 		char *s;
 
 		argv[argc++] = "-S";
@@ -456,7 +456,7 @@ main(int argc, char **argv)
 			no_action = 1;
 			break;
 		case 'S':
-			proc_type = GOTWEBD_PROC_SERVER;
+			proc_type = GOTWEBD_PROC_SOCKETS;
 			i = strtonum(optarg, 1, INT_MAX, &errstr);
 			if (errstr)
 				gotwebd_username = optarg;
@@ -494,7 +494,7 @@ main(int argc, char **argv)
 			www_username = env->www_user;
 	}
 
-	if (proc_type == GOTWEBD_PROC_SERVER) {
+	if (proc_type == GOTWEBD_PROC_SOCKETS) {
 		env->worker_load = calloc(env->prefork,
 		    sizeof(env->worker_load[0]));
 		if (env->worker_load == NULL)
@@ -521,7 +521,7 @@ main(int argc, char **argv)
 	log_setverbose(env->gotwebd_verbose);
 
 	switch (proc_type) {
-	case GOTWEBD_PROC_SERVER:
+	case GOTWEBD_PROC_SOCKETS:
 		setproctitle("sockets");
 		log_procinit("sockets");
 
@@ -586,7 +586,7 @@ main(int argc, char **argv)
 		fatal("calloc");
 
 	spawn_process(env, argv0, env->iev_sockets,
-	    GOTWEBD_PROC_SERVER, gotwebd_username,
+	    GOTWEBD_PROC_SOCKETS, gotwebd_username,
 	    gotwebd_dispatch_server);
 
 	spawn_process(env, argv0, env->iev_fcgi,

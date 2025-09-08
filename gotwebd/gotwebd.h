@@ -123,7 +123,7 @@ struct got_reflist_head;
 
 enum gotwebd_proc_type {
 	GOTWEBD_PROC_PARENT,
-	GOTWEBD_PROC_SERVER,
+	GOTWEBD_PROC_SOCKETS,
 	GOTWEBD_PROC_FCGI,
 	GOTWEBD_PROC_GOTWEB,
 };
