@@ -927,6 +927,33 @@ gotweb_render_absolute_url(struct request *c, struct gotweb_url *url)
 	return gotweb_render_url(c, url);
 }
 
+/* 
+ * Ensure that a path sent in the request will not escape from the given
+ * parent directory. This matters for got-portable where we are not
+ * necessarily running in chroot and cannot be protected by unveil(2).
+ */
+static const struct got_error *
+validate_path(const char *path, const char *parent_path,
+    const char *orig_path)
+{
+	const struct got_error *error = NULL;
+	char *abspath;
+
+	abspath = realpath(path, NULL);
+	if (abspath == NULL) {
+		/* Paths which cannot be resolved are safe. */
+		if (errno == ENOENT || errno == EACCES || errno == ENOTDIR)
+			return NULL;
+		return got_error_from_errno("realpath");
+	}
+
+	if (!got_path_is_child(abspath, parent_path, strlen(parent_path)))
+		error = got_error_path(orig_path, GOT_ERR_NOT_GIT_REPO);
+
+	free(abspath);
+	return error;
+}
+
 static const struct got_error *
 gotweb_load_got_path(struct repo_dir **rp, const char *dir,
     struct request *c)
@@ -946,6 +973,12 @@ gotweb_load_got_path(struct repo_dir **rp, const char *dir,
 	if (asprintf(&dir_test, "%s/%s/%s", srv->repos_path, dir,
 	    GOTWEB_GIT_DIR) == -1)
 		return got_error_from_errno("asprintf");
+
+	error = validate_path(dir_test, srv->repos_path, dir);
+	if (error) {
+		free(dir_test);
+		return error;
+	}
 
 	dt = opendir(dir_test);
 	if (dt == NULL) {
