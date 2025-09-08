@@ -422,8 +422,6 @@ struct gotwebd {
 	int		 gotweb_cur;
 	int		 *worker_load;
 
-	int		 server_cnt;
-
 	char		 httpd_chroot[PATH_MAX];
 };
 

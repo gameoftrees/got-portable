@@ -844,7 +844,7 @@ parse_config(const char *filename, struct gotwebd *env)
 	}
 
 	/* just add default server if no config specified */
-	if (gotwebd->server_cnt == 0)
+	if (TAILQ_EMPTY(&gotwebd->servers))
 		add_default_server();
 
 	/* add the implicit listen on socket */
@@ -930,7 +930,6 @@ conf_new_server(const char *name)
 	srv->summary_tags_display = D_MAXSLTAGDISP;
 
 	TAILQ_INSERT_TAIL(&gotwebd->servers, srv, entry);
-	gotwebd->server_cnt++;
 
 	return srv;
 };
