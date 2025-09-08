@@ -419,7 +419,6 @@ struct gotwebd {
 
 	uint16_t	 prefork;
 	int		 gotweb_pending;
-	int		 gotweb_cur;
 	int		 *worker_load;
 
 	char		 httpd_chroot[PATH_MAX];
