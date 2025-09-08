@@ -624,10 +624,6 @@ fcgi_cleanup_request(struct request *c)
 		template_free(c->tp);
 	if (c->t != NULL)
 		gotweb_free_transport(c->t);
-	if (c->resp_event) {
-		event_del(c->resp_event);
-		free(c->resp_event);
-	}
 	free(c->buf);
 	free(c->outbuf);
 	free(c);
