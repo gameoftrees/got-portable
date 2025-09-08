@@ -298,7 +298,6 @@ struct request {
 	uint16_t			 id;
 	int				 fd;
 	int				 priv_fd[PRIV_FDS__MAX];
-	struct event			*resp_event;
 	int				 sock_id;
 	uint32_t			 request_id;
 	int				 worker_idx;
