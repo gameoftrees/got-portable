@@ -53,7 +53,6 @@ config_init(struct gotwebd *env)
 	strlcpy(env->httpd_chroot, D_HTTPD_CHROOT, sizeof(env->httpd_chroot));
 
 	env->prefork = GOTWEBD_NUMPROC;
-	env->server_cnt = 0;
 	TAILQ_INIT(&env->servers);
 	TAILQ_INIT(&env->sockets);
 	TAILQ_INIT(&env->addresses);

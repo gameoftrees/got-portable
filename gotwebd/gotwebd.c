@@ -369,13 +369,8 @@ spawn_process(struct gotwebd *env, const char *argv0, struct imsgev *iev,
 		argv[argc++] = "-F";
 		argv[argc++] = username;
 	} else if (proc_type == GOTWEBD_PROC_GOTWEB) {
-		char *s;
-
 		argv[argc++] = "-G";
 		argv[argc++] = username;
-		if (asprintf(&s, "-G%d", env->server_cnt) == -1)
-			fatal("asprintf");
-		argv[argc++] = s;
 	}
 	if (strcmp(env->gotwebd_conffile, GOTWEBD_CONF) != 0) {
 		argv[argc++] = "-f";
@@ -448,11 +443,7 @@ main(int argc, char **argv)
 			break;
 		case 'G':
 			proc_type = GOTWEBD_PROC_GOTWEB;
-			i = strtonum(optarg, 1, INT_MAX, &errstr);
-			if (errstr)
-				gotwebd_username = optarg;
-			else
-				env->server_cnt = i;
+			gotwebd_username = optarg;
 			break;
 		case 'f':
 			conffile = optarg;
