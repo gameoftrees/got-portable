@@ -871,10 +871,14 @@ gotweb_render_url(struct request *c, struct gotweb_url *url)
 	}
 
 	if (url->folder) {
-		tmp = gotweb_urlencode(url->folder);
-		if (tmp == NULL)
-			return -1;
-		r = tp_writef(c->tp, "%sfolder=%s", sep, tmp);
+		if (got_path_is_root_dir(url->folder))
+			tmp = NULL;
+		else {
+			tmp = gotweb_urlencode(url->folder);
+			if (tmp == NULL)
+				return -1;
+		}
+		r = tp_writef(c->tp, "%sfolder=%s", sep, tmp ? tmp : "");
 		free(tmp);
 		if (r == -1)
 			return -1;
