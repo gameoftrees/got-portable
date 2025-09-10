@@ -42,8 +42,6 @@
 #include <ifaddrs.h>
 #include <limits.h>
 #include <netdb.h>
-#include <sha1.h>
-#include <sha2.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>

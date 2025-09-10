@@ -43,8 +43,6 @@
 #include <netdb.h>
 #include <poll.h>
 #include <pwd.h>
-#include <sha1.h>
-#include <sha2.h>
 #include <siphash.h>
 #include <stddef.h>
 #include <stdio.h>
