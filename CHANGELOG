@@ -6,6 +6,12 @@ other than OpenBSD.
 
 All changes are on top of the versioned changes listed in CHANGES.
 
+# got-portable 0.118.1 (2025-09-10)
+
+  This a -portable maintenance/bug-fix release:
+
+  - Remove sha{1,2}.h from source files as these are included portably.
+
 # got-portable 0.118 (2025-09-09)
 
 * Changes from got-0.118
