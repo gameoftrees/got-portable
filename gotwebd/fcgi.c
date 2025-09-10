@@ -29,8 +29,6 @@
 #include <errno.h>
 #include <event.h>
 #include <imsg.h>
-#include <sha1.h>
-#include <sha2.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdlib.h>
