@@ -733,7 +733,7 @@ gotwebd_configure_done(struct gotwebd *env)
 		if (env->gotweb_pending == 0 &&
 		    main_compose_gotweb(env, GOTWEBD_IMSG_CTL_START,
 		        -1, NULL, 0) == -1)
-			fatal("main_compose_sockets GOTWEBD_IMSG_CTL_START");
+			fatal("main_compose_gotewb GOTWEBD_IMSG_CTL_START");
 	}
 }
 

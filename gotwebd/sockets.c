@@ -712,7 +712,7 @@ recv_fcgi_pipe(struct gotwebd *env, struct imsg *imsg)
 
 	fd = imsg_get_fd(imsg);
 	if (fd == -1)
-		fatalx("invalid gotweb pipe fd");
+		fatalx("invalid fcgi pipe fd");
 
 	iev = calloc(1, sizeof(*iev));
 	if (iev == NULL)
