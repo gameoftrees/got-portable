@@ -826,6 +826,8 @@ sockets_shutdown(void)
 {
 	int i;
 
+	requests_purge();
+
 	/* clean servers */
 	while (!TAILQ_EMPTY(&gotwebd_env->servers)) {
 		struct server *srv;
@@ -850,8 +852,6 @@ sockets_shutdown(void)
 		TAILQ_REMOVE(&gotwebd_env->sockets, sock, entry);
 		free(sock);
 	}
-
-	requests_purge();
 
 	imsgbuf_clear(&gotwebd_env->iev_parent->ibuf);
 	free(gotwebd_env->iev_parent);
