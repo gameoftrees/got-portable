@@ -468,7 +468,7 @@ recv_gotweb_pipe(struct gotwebd *env, struct imsg *imsg)
 	if (imsgbuf_init(&iev->ibuf, fd) == -1)
 		fatal("imsgbuf_init");
 	imsgbuf_allow_fdpass(&iev->ibuf);
-	imsgbuf_set_maxsize(&iev->ibuf, sizeof(struct gotwebd_fcgi_record));
+	imsgbuf_set_maxsize(&iev->ibuf, sizeof(struct request));
 
 	iev->handler = server_dispatch_gotweb;
 	iev->data = iev;
