@@ -9,7 +9,8 @@ NOOBJ=Yes
 CLEANFILES= SHA256.sig bsd.rd bsd.rd.fs bsd.rd.decomp ${AUTOINSTALL_CONF} \
 	${GOTSYSD_BSD_RD} ${GOTSYSD_SSH_KEY} ${GOTSYSD_SSH_PUBKEY} \
 	${GOTSYSD_TEST_VM_BASE_IMAGE} ${GOTSYSD_VM_PASSWD_FILE} ${GOTD_CONF} \
-	${GOTSYSD_CONF} ${GOTSYS_CONF} ${GOT_CONF} ${INSTALL_SITE}
+	${GOTSYSD_CONF} ${GOTSYS_CONF} ${GOT_CONF} ${INSTALL_SITE} \
+	${HTTPD_CONF} ${GOTWEBD_CONF}
 
 .PHONY: ensure_root vm start_test_vm build_got
 
@@ -36,6 +37,8 @@ GOTWEBD_UID=593	# /usr/ports/infrastructure/db/user.list
 GOTSYSD_TEST_SMTP_PORT=2525
 GOTSYSD_TEST_HTTP_PORT=8000
 GOTSYSD_TEST_HMAC_SECRET!=openssl rand -base64 32
+HTTPD_CONF=httpd.conf
+GOTWEBD_CONF=gotwebd.conf
 
 GOTSYSD_TEST_USER?=${DOAS_USER}
 .if empty(GOTSYSD_TEST_USER)
@@ -206,6 +209,21 @@ ${GOTSYS_CONF}: ${GOTSYSD_SSH_PUBKEY}
 ${GOT_CONF}:
 	@${UNPRIV} "echo author \\'${GOTSYSD_TEST_USER} \\<${GOTSYSD_TEST_USER}@localhost\\>\\' > $@"
 
+
+$(HTTPD_CONF):
+	@${UNPRIV} 'echo server "VMIP" { > $@'
+	@${UNPRIV} 'echo \ \ listen on VMIP port http >> $@'
+	@${UNPRIV} 'echo \ \ root \"/htdocs/gotwebd\" >> $@'
+	@${UNPRIV} 'echo \ \ location \"/\" { >> $@'
+	@${UNPRIV} 'echo \ \ \ \ fastcgi socket \"/run/gotweb.sock\" >> $@'
+	@${UNPRIV} 'echo \ \ } >> $@'
+	@${UNPRIV} 'echo } >> $@'
+
+$(GOTWEBD_CONF):
+	@${UNPRIV} 'echo server "VMIP" { > $@'
+	@${UNPRIV} 'echo \ \ repos_path \"/git\" >> $@'
+	@${UNPRIV} 'echo } >> $@'
+
 build_got:
 	@set -e; \
 	VMID=`vmctl status ${GOTSYSD_VM_NAME} | tail -n1 | \
@@ -229,18 +247,18 @@ build_got:
 	${UNPRIV} "${GOTSYSD_SSH_CMD} -- root@$${VMIP} \
 		ln -f -s gitwrapper /usr/local/bin/git-receive-pack"
 
-setup_test_vm: start_test_vm build_got ${GOTD_CONF} ${GOTSYSD_CONF} ${GOTSYS_CONF} ${GOT_CONF}
+setup_test_vm: start_test_vm build_got ${GOTD_CONF} ${GOTSYSD_CONF} ${GOTSYS_CONF} ${GOT_CONF} ${HTTPD_CONF} ${GOTWEBD_CONF}
 	@set -e; \
 	VMID=`vmctl status ${GOTSYSD_VM_NAME} | tail -n1 | \
 		awk '{print $$1}'`; \
 	VMIP="100.64.$$VMID.3"; \
 	${UNPRIV} "ssh-keygen -R $${VMIP}"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} sysctl kern.nosuidcoredump=3"; \
-	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} mkdir -p /var/crash/gotd "; \
-	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} mkdir -p /var/crash/gotsysd "; \
+	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} mkdir -p -m 700 \
+		/var/crash/gotd /var/crash/gotsysd /var/crash/gotwebd"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} sed -i 's/daemon.info/daemon.*/' /etc/syslog.conf"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} rcctl restart syslogd"; \
-	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} mkdir -m 700 /git "; \
+	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} mkdir -m 750 /git "; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
 		got init /git/${GOTSYS_REPO}"; \
 	${UNPRIV} "${GOTSYSD_SCP_CMD} \
@@ -275,7 +293,14 @@ setup_test_vm: start_test_vm build_got ${GOTD_CONF} ${GOTSYSD_CONF} ${GOTSYS_CON
 		groupadd -g ${GOTWEBD_UID} _gotwebd"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
 		useradd -d /nonexistent -s /sbin/nologin \
-		-u ${GOTWEBD_UID} -g ${GOTWEBD_UID} _gotwebd"; \
+		-u ${GOTWEBD_UID} -g ${GOTWEBD_UID} -G _gotd _gotwebd"; \
+	${UNPRIV} "${GOTSYSD_SCP_CMD} ${GOTWEBD_CONF} root@$${VMIP}:/etc/"; \
+	${UNPRIV} "${GOTSYSD_SCP_CMD} ${HTTPD_CONF} root@$${VMIP}:/etc/"; \
+	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
+		sed -i s/VMIP/$${VMIP}/ /etc/httpd.conf /etc/gotwebd.conf"; \
+	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} rcctl -f start httpd"; \
+	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
+		/usr/local/sbin/gotwebd -v"; \
 	
 stop_test_vm: ensure_root
 	@vmctl stop ${GOTSYSD_VM_NAME}
