@@ -80,6 +80,18 @@ While the specified
 .Ar path
 must be absolute, it should usually point inside the web server's chroot
 directory such that the web server can access the socket.
+.It Ic login socket Ar path
+Set the
+.Ar path
+to the
+.Ux Ns -domain
+socket for
+.Xr gotsh 1
+.Ic weblogin
+commands.
+By default the path
+.Pa /var/run/gotweb-login.sock
+will be used.
 .It Ic prefork Ar number
 Spawn enough processes such that
 .Ar number
