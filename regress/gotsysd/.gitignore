@@ -4,6 +4,7 @@ bsd.rd
 bsd.rd.fs
 got.conf
 gotd.conf
+gotwebd.conf
 gotsys.conf
 gotsysd.conf
 gotsysd_bsd.rd
@@ -11,5 +12,6 @@ gotsysd_sshkey
 gotsysd_sshkey.pub
 gotsysd_test_vm_base.qcow2
 gotsysd_vm_passwd
+httpd.conf
 install.site
 stamp-setup_test_vm
