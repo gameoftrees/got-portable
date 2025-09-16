@@ -2994,6 +2994,65 @@ EOF
 	test_done "$testroot" "$ret"
 }
 
+test_histedit_added_file() {
+	local testroot=`test_init histedit_added_file`
+	local orig_commit=`git_show_head $testroot/repo`
+
+	got checkout $testroot/repo $testroot/wt > /dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got checkout failed unexpectedly"
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	echo new > $testroot/wt/new
+	(cd $testroot/wt && got add new > /dev/null)
+
+	(cd $testroot/wt && got commit -m 'add new file' \
+		> $testroot/stdout 2> $testroot/stderr)
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got commit failed unexpectedly" >&2
+		test_done "$testroot" "1"
+		return 1
+	fi
+	local commit2=`git_show_head $testroot/repo`
+
+	(cd $testroot/wt && got up -q -c $orig_commit > /dev/null)
+
+	# Place an unversioned file into the work tree where the new
+	# file was added. This triggered a bug where histedit would
+	# assume the file was already present in earlier commits and then
+	# treat the commit which actually adds this file as a no-op change.
+	# This test then failed with:
+	# -2f81c7988242 -> c53428a3640e: add new file
+	# +2f81c7988242 -> no-op change: add new file
+	echo new > $testroot/wt/new
+
+	(cd $testroot/wt && got histedit -f > $testroot/stdout)
+	local new_commit=`git_show_head $testroot/repo`
+
+	local short_commit2=`trim_obj_id 12 $commit2`
+	local short_new_commit=`trim_obj_id 12 $new_commit`
+
+	echo "A  new" > $testroot/stdout.expected
+	echo "$short_commit2 -> $short_new_commit: add new file" \
+		>> $testroot/stdout.expected
+	echo "Switching work tree to refs/heads/master" \
+		>> $testroot/stdout.expected
+
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	test_done "$testroot" "$ret"
+}
+
 test_parseargs "$@"
 run_test test_histedit_no_op
 run_test test_histedit_swap
@@ -3024,3 +3083,4 @@ run_test test_histedit_drop_only
 run_test test_histedit_conflict_revert
 run_test test_histedit_no_eof_newline
 run_test test_histedit_preserve_bad_link
+run_test test_histedit_added_file

@@ -1155,7 +1155,7 @@ install_blob(struct got_worktree *worktree, const char *ondisk_path,
     const char *path, mode_t te_mode, mode_t st_mode,
     struct got_blob_object *blob, int restoring_missing_file,
     int reverting_versioned_file, int installing_bad_symlink,
-    int path_is_unversioned, int *update_timestamps,
+    int path_is_unversioned, int adding_merged_file, int *update_timestamps,
     struct got_repository *repo,
     got_worktree_checkout_cb progress_cb, void *progress_arg);
 
@@ -1302,7 +1302,7 @@ install_symlink(int *is_bad_symlink, struct got_worktree *worktree,
 			return install_blob(worktree, ondisk_path, path,
 			    GOT_DEFAULT_FILE_MODE, GOT_DEFAULT_FILE_MODE, blob,
 			    restoring_missing_file, reverting_versioned_file,
-			    1, path_is_unversioned, NULL, repo, progress_cb,
+			    1, path_is_unversioned, 0, NULL, repo, progress_cb,
 			    progress_arg);
 		}
 		if (len > 0) {
@@ -1326,7 +1326,7 @@ install_symlink(int *is_bad_symlink, struct got_worktree *worktree,
 		err = install_blob(worktree, ondisk_path, path,
 		    GOT_DEFAULT_FILE_MODE, GOT_DEFAULT_FILE_MODE, blob,
 		    restoring_missing_file, reverting_versioned_file, 1,
-		    path_is_unversioned, NULL, repo,
+		    path_is_unversioned, 0, NULL, repo,
 		    progress_cb, progress_arg);
 		return err;
 	}
@@ -1390,7 +1390,7 @@ install_symlink(int *is_bad_symlink, struct got_worktree *worktree,
 			err = install_blob(worktree, ondisk_path, path,
 			    GOT_DEFAULT_FILE_MODE, GOT_DEFAULT_FILE_MODE, blob,
 			    restoring_missing_file, reverting_versioned_file, 1,
-			    path_is_unversioned, NULL, repo,
+			    path_is_unversioned, 0, NULL, repo,
 			    progress_cb, progress_arg);
 		} else if (errno == ENOTDIR) {
 			err = got_error_path(ondisk_path,
@@ -1410,8 +1410,8 @@ install_blob(struct got_worktree *worktree, const char *ondisk_path,
     const char *path, mode_t te_mode, mode_t st_mode,
     struct got_blob_object *blob, int restoring_missing_file,
     int reverting_versioned_file, int installing_bad_symlink,
-    int path_is_unversioned, int *update_timestamps,
-    struct got_repository *repo,
+    int path_is_unversioned, int adding_merged_file,
+    int *update_timestamps, struct got_repository *repo,
     got_worktree_checkout_cb progress_cb, void *progress_arg)
 {
 	const struct got_error *err = NULL;
@@ -1450,7 +1450,8 @@ install_blob(struct got_worktree *worktree, const char *ondisk_path,
 				if (update_timestamps)
 					*update_timestamps = 0;
 				err = (*progress_cb)(progress_arg,
-				    GOT_STATUS_EXISTS, path);
+				    adding_merged_file ?
+				    GOT_STATUS_ADD : GOT_STATUS_EXISTS, path);
 				goto done;
 			}
 			if (!(S_ISLNK(st_mode) && S_ISREG(te_mode)) &&
@@ -2150,7 +2151,7 @@ update_blob(struct got_worktree *worktree,
 			err = install_blob(worktree, ondisk_path, path,
 			    te->mode, sb.st_mode, blob,
 			    status == GOT_STATUS_MISSING, 0, 0,
-			    status == GOT_STATUS_UNVERSIONED,
+			    status == GOT_STATUS_UNVERSIONED, 0,
 			    &update_timestamps,
 			    repo, progress_cb, progress_arg);
 		}
@@ -2966,7 +2967,7 @@ add_file(struct got_worktree *worktree, struct got_fileindex *fileindex,
 		err = install_blob(worktree, ondisk_path, path2,
 		    mode2, GOT_DEFAULT_FILE_MODE, blob2,
 		    restoring_missing_file, reverting_versioned_file, 0,
-		    path_is_unversioned, NULL, repo,
+		    path_is_unversioned, 1, NULL, repo,
 		    progress_cb, progress_arg);
 	}
 	if (err)
@@ -5365,7 +5366,7 @@ revert_file(void *arg, unsigned char status, unsigned char staged_status,
 				    ie->path,
 				    te ? te->mode : GOT_DEFAULT_FILE_MODE,
 				    got_fileindex_perms_to_st(ie), blob,
-				    0, 1, 0, 0, NULL, a->repo,
+				    0, 1, 0, 0, 0, NULL, a->repo,
 				    a->progress_cb, a->progress_arg);
 				if (err != NULL)
 					goto done;
@@ -5416,7 +5417,7 @@ revert_file(void *arg, unsigned char status, unsigned char staged_status,
 				    ie->path,
 				    te ? te->mode : GOT_DEFAULT_FILE_MODE,
 				    got_fileindex_perms_to_st(ie), blob,
-				    0, 1, 0, 0, NULL, a->repo,
+				    0, 1, 0, 0, 0, NULL, a->repo,
 				    a->progress_cb, a->progress_arg);
 			}
 			if (err)
