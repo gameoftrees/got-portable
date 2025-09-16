@@ -77,7 +77,7 @@ gotweb_reply(struct request *c, int status, const char *ctype,
 
 	if (location) {
 		if (tp_writes(c->tp, "Location: ") == -1 ||
-		    gotweb_render_url(c, location) == -1 ||
+		    gotweb_render_absolute_url(c, location) == -1 ||
 		    tp_writes(c->tp, "\r\n") == -1)
 			return -1;
 	}
