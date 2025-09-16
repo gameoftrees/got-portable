@@ -22,6 +22,7 @@
 .Sh SYNOPSIS
 .Nm Fl c Sq Cm git-receive-pack Ar repository-path
 .Nm Fl c Sq Cm git-upload-pack Ar repository-path
+.Nm Fl c Sq Cm weblogin Oo Ar hostname Oc
 .Sh DESCRIPTION
 .Nm
 is the network-facing interface to
@@ -74,6 +75,27 @@ accessing the unix socket of
 .Xr gotd 8
 via
 .Nm .
+.Pp
+The
+.Cm weblogin
+command provides user authentication for
+.Xr gotwebd 8 .
+.Nm
+will connect to
+.Xr gotwebd 8
+and obtain a login URL which allows browsing private repositories the user
+has been granted read access to in
+.Xr gotwebd.conf 5 .
+If multiple servers are declared in
+.Xr gotwebd.conf 5
+the
+.Ar hostname
+parameter is required and indicates the desired virtual host to use in the URL.
+If no
+.Ar hostname
+is specified and only one server is declared in
+.Xr gotwebd.conf 5
+then the name of this server will be used in the URL.
 .Pp
 It is recommended to restrict
 .Xr ssh 1
@@ -139,12 +161,48 @@ Match User anonymous
     DisableForwarding yes
     PermitTTY no
 .Ed
+.Pp
+Obtain a
+.Xr gotwebd 8
+login URL for got.example.com:
+.Bd -literal -offset indent
+$ ssh got.example.com weblogin
+.Ed
+.Pp
+If the web server at got.example.com serves virtual hosts then two
+hostnames must be provided.
+One for
+.Xr ssh 1
+to connect to, and another to identify the virtual host served by
+.Xr gotwebd 8 :
+.Bd -literal -offset indent
+$ ssh got.example.com weblogin got.example.com
+.Ed
+.Pp
+In practice both hostnames will often be the same, but this is not guaranteed.
+There is no reliable way determine the desired virtual host automatically.
+An
+.Xr ssh_config 5
+entry like the following can save some typing:
+.Bd -literal -offset indent
+Host weblogin
+	Hostname got.example.com
+	RemoteCommand weblogin %h
+.Ed
+.Pp
+The following command is now equivalent to the above:
+.Bd -literal -offset indent
+$ ssh weblogin
+.Ed
+.Ed
 .Sh SEE ALSO
 .Xr gitwrapper 1 ,
 .Xr got 1 ,
 .Xr ssh 1 ,
 .Xr gotd.conf 5 ,
+.Xr gotwebd.conf 5 ,
 .Xr sshd_config 5 ,
-.Xr gotd 8
+.Xr gotd 8 ,
+.Xr gotwebd 8
 .Sh AUTHORS
 .An Stefan Sperling Aq Mt stsp@openbsd.org

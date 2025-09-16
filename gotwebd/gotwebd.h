@@ -39,6 +39,10 @@
 #define GOTWEBD_WWW_USER	 "www"
 #endif
 
+#define GOTWEBD_LOGIN_CMD	"weblogin"
+#define GOTWEBD_LOGIN_SOCKET	 "/var/run/gotweb-login.sock"
+#define GOTWEBD_LOGIN_TIMEOUT	 300 /* in seconds */
+
 #define GOTWEBD_MAXDESCRSZ	 1024
 #define GOTWEBD_MAXCLONEURLSZ	 1024
 #define GOTWEBD_CACHESIZE	 1024

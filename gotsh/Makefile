@@ -9,7 +9,8 @@ SRCS=		gotsh.c error.c pkt.c hash.c serve.c path.c gitproto.c \
 
 MAN =		${PROG}.1
 
-CPPFLAGS = -I${.CURDIR}/../include -I${.CURDIR}/../lib -I${.CURDIR}/../gotd
+CPPFLAGS = -I${.CURDIR}/../include -I${.CURDIR}/../lib -I${.CURDIR}/../gotd \
+	-I${.CURDIR}/../gotwebd
 
 .if defined(PROFILE)
 LDADD = -lutil_p -lc_p -levent_p

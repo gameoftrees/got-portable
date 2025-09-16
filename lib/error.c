@@ -248,6 +248,8 @@ static const struct got_error got_errors[] = {
 	{ GOT_ERR_AUTHORIZED_KEY, "no authorized key found" },
 	{ GOT_ERR_CONNECTION_LIMIT, "connection limit exceeded" },
 	{ GOT_ERR_ON_SERVER_SIDE, "see server-side logs for error details" },
+	{ GOT_ERR_LOGIN_FAILED, "login failed" },
+	{ GOT_ERR_UNKNOWN_COMMAND, "command not found" },
 };
 
 static struct got_custom_error {

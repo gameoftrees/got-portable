@@ -230,6 +230,7 @@ EOF
 
 	cat > $testroot/stderr.expected <<EOF
 usage: gotsh -c 'git-receive-pack|git-upload-pack repository-path'
+       gotsh -c 'weblogin [hostname]'
 EOF
 	cmp -s $testroot/stderr.expected $testroot/stderr
 	ret=$?
@@ -268,6 +269,7 @@ EOF
 
 	cat > $testroot/stderr.expected <<EOF
 usage: gotsh -c 'git-receive-pack|git-upload-pack repository-path'
+       gotsh -c 'weblogin [hostname]'
 EOF
 	cmp -s $testroot/stderr.expected $testroot/stderr
 	ret=$?
