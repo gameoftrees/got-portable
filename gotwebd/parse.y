@@ -103,6 +103,13 @@ struct address *get_unix_addr(const char *);
 int		 addr_dup_check(struct addresslist *, struct address *);
 void		 add_addr(struct address *);
 
+static struct gotwebd_repo	*new_repo;
+static struct gotwebd_repo	*conf_new_repo(struct server *, const char *);
+static void			 conf_new_access_rule(
+				    struct gotwebd_access_rule_list *,
+				    enum gotwebd_access, char *);
+
+
 typedef struct {
 	union {
 		long long	 number;
@@ -118,12 +125,14 @@ typedef struct {
 %token	MAX_REPOS_DISPLAY REPOS_PATH MAX_COMMITS_DISPLAY ON ERROR
 %token	SHOW_SITE_OWNER SHOW_REPO_CLONEURL PORT PREFORK RESPECT_EXPORTOK
 %token	SERVER CHROOT CUSTOM_CSS SOCKET
-%token	SUMMARY_COMMITS_DISPLAY SUMMARY_TAGS_DISPLAY USER
+%token	SUMMARY_COMMITS_DISPLAY SUMMARY_TAGS_DISPLAY USER AUTHENTICATION
+%token	ENABLE DISABLE INSECURE REPOSITORY PERMIT DENY
 
 %token	<v.string>	STRING
 %token	<v.number>	NUMBER
 %type	<v.number>	boolean
 %type	<v.string>	listen_addr
+%type	<v.string>	numberstring
 
 %%
 
@@ -152,6 +161,16 @@ varset		: STRING '=' STRING	{
 			free($3);
 		}
 		;
+
+numberstring	: STRING
+		| NUMBER {
+			if (asprintf(&$$, "%lld", (long long)$1) == -1) {
+				yyerror("asprintf: %s", strerror(errno));
+				YYERROR;
+			}
+		}
+		;
+
 
 boolean		: STRING {
 			if (strcasecmp($1, "1") == 0 ||
@@ -259,6 +278,38 @@ main		: PREFORK NUMBER {
 				yyerror("www user already specified");
 			free(gotwebd->www_user);
 			gotwebd->www_user = $3;
+		}
+		| DISABLE AUTHENTICATION {
+			if (gotwebd->auth_config != 0) {
+				yyerror("ambiguous global authentication "
+				    "setting");
+				YYERROR;
+			}
+			gotwebd->auth_config = GOTWEBD_AUTH_DISABLED;
+		}
+		| ENABLE AUTHENTICATION {
+			if (gotwebd->auth_config != 0) {
+				yyerror("ambiguous global authentication "
+				    "setting");
+				YYERROR;
+			}
+			gotwebd->auth_config = GOTWEBD_AUTH_SECURE;
+		}
+		| ENABLE AUTHENTICATION INSECURE {
+			if (gotwebd->auth_config != 0) {
+				yyerror("ambiguous global authentication "
+				    "setting");
+				YYERROR;
+			}
+			gotwebd->auth_config = GOTWEBD_AUTH_INSECURE;
+		}
+		| PERMIT numberstring {
+			conf_new_access_rule(&gotwebd->access_rules,
+			    GOTWEBD_ACCESS_PERMITTED, $2);
+		}
+		| DENY numberstring {
+			conf_new_access_rule(&gotwebd->access_rules,
+			    GOTWEBD_ACCESS_DENIED, $2);
 		}
 		| LOGIN SOCKET STRING {
 			struct address *h;
@@ -427,10 +478,106 @@ serveropts1	: REPOS_PATH STRING {
 			}
 			new_srv->summary_tags_display = $2;
 		}
+		| DISABLE AUTHENTICATION {
+			if (new_srv->auth_config != 0) {
+				yyerror("ambiguous authentication "
+				    "setting for server %s",
+				    new_srv->name);
+				YYERROR;
+			}
+			new_srv->auth_config = GOTWEBD_AUTH_DISABLED;
+		}
+		| ENABLE AUTHENTICATION {
+			if (new_srv->auth_config != 0) {
+				yyerror("ambiguous authentication "
+				    "setting for server %s",
+				    new_srv->name);
+				YYERROR;
+			}
+			new_srv->auth_config = GOTWEBD_AUTH_SECURE;
+		}
+		| ENABLE AUTHENTICATION INSECURE {
+			if (new_srv->auth_config != 0) {
+				yyerror("ambiguous authentication "
+				    "setting for server %s",
+				    new_srv->name);
+				YYERROR;
+			}
+			new_srv->auth_config = GOTWEBD_AUTH_INSECURE;
+		}
+		| PERMIT numberstring {
+			conf_new_access_rule(&new_srv->access_rules,
+			    GOTWEBD_ACCESS_PERMITTED, $2);
+		}
+		| DENY numberstring {
+			conf_new_access_rule(&new_srv->access_rules,
+			    GOTWEBD_ACCESS_DENIED, $2);
+		}
+		| repository
 		;
 
 serveropts2	: serveropts2 serveropts1 nl
 		| serveropts1 optnl
+		;
+
+repository	: REPOSITORY STRING {
+			struct gotwebd_repo *repo;
+
+			TAILQ_FOREACH(repo, &new_srv->repos, entry) {
+				if (strcmp(repo->name, $2) == 0) {
+					yyerror("duplicate repository "
+					    "'%s' in server '%s'", $2,
+					    new_srv->name);
+					free($2);
+					YYERROR;
+				}
+			}
+
+			new_repo = conf_new_repo(new_srv, $2);
+			free($2);
+		} '{' optnl repoopts2 '}' {
+		}
+		;
+
+repoopts2	: repoopts2 repoopts1 nl
+		| repoopts1 optnl
+		;
+
+repoopts1	: DISABLE AUTHENTICATION {
+			if (new_repo->auth_config != 0) {
+				yyerror("ambiguous authentication "
+				    "setting for repository %s",
+				    new_repo->name);
+				YYERROR;
+			}
+			new_repo->auth_config = GOTWEBD_AUTH_DISABLED;
+		}
+		| ENABLE AUTHENTICATION {
+			if (new_repo->auth_config != 0) {
+				yyerror("ambiguous authentication "
+				    "setting for repository %s",
+				    new_repo->name);
+				YYERROR;
+			}
+			new_repo->auth_config = GOTWEBD_AUTH_SECURE;
+		}
+		| ENABLE AUTHENTICATION INSECURE {
+			if (new_repo->auth_config != 0) {
+				yyerror("ambiguous authentication "
+				    "setting for repository %s",
+				    new_repo->name);
+				YYERROR;
+			}
+			new_repo->auth_config = GOTWEBD_AUTH_INSECURE;
+		}
+		| PERMIT numberstring {
+			conf_new_access_rule(&new_repo->access_rules,
+			    GOTWEBD_ACCESS_PERMITTED, $2);
+		}
+		| DENY numberstring {
+			conf_new_access_rule(&new_repo->access_rules,
+			    GOTWEBD_ACCESS_DENIED, $2);
+		}
 		;
 
 nl		: '\n' optnl
@@ -474,8 +621,13 @@ lookup(char *s)
 {
 	/* This has to be sorted always. */
 	static const struct keywords keywords[] = {
+		{ "authentication",		AUTHENTICATION },
 		{ "chroot",			CHROOT },
 		{ "custom_css",			CUSTOM_CSS },
+		{ "deny",			DENY },
+		{ "disable",			DISABLE },
+		{ "enable",			ENABLE },
+		{ "insecure",			INSECURE },
 		{ "listen",			LISTEN },
 		{ "login",			LOGIN },
 		{ "logo",			LOGO },
@@ -483,9 +635,11 @@ lookup(char *s)
 		{ "max_commits_display",	MAX_COMMITS_DISPLAY },
 		{ "max_repos_display",		MAX_REPOS_DISPLAY },
 		{ "on",				ON },
+		{ "permit",			PERMIT },
 		{ "port",			PORT },
 		{ "prefork",			PREFORK },
 		{ "repos_path",			REPOS_PATH },
+		{ "repository",			REPOSITORY },
 		{ "respect_exportok",		RESPECT_EXPORTOK },
 		{ "server",			SERVER },
 		{ "show_repo_age",		SHOW_REPO_AGE },
@@ -833,6 +987,8 @@ int
 parse_config(const char *filename, struct gotwebd *env)
 {
 	struct sym *sym, *next;
+	struct server *srv;
+	struct gotwebd_repo *repo;
 
 	if (config_init(env) == -1)
 		fatalx("failed to initialize configuration");
@@ -904,6 +1060,27 @@ parse_config(const char *filename, struct gotwebd *env)
 		gotwebd->login_sock = sockets_conf_new_socket(-1, h);
 	}
 
+	/* Enable authentication if not explicitly configured. */
+	switch (env->auth_config) {
+	case GOTWEBD_AUTH_SECURE:
+	case GOTWEBD_AUTH_INSECURE:
+	case GOTWEBD_AUTH_DISABLED:
+		break;
+	default:
+		env->auth_config = GOTWEBD_AUTH_SECURE;
+		break;
+	}
+
+	/* Inherit implicit authentication config from parent scope. */
+	TAILQ_FOREACH(srv, &env->servers, entry) {
+		if (srv->auth_config == 0)
+			srv->auth_config = env->auth_config;
+		TAILQ_FOREACH(repo, &srv->repos, entry) {
+			if (repo->auth_config == 0)
+				repo->auth_config = srv->auth_config;
+		}
+	}
+
 	return (0);
 }
 
@@ -961,6 +1138,9 @@ conf_new_server(const char *name)
 	srv->max_commits_display = D_MAXCOMMITDISP;
 	srv->summary_commits_display = D_MAXSLCOMMDISP;
 	srv->summary_tags_display = D_MAXSLTAGDISP;
+
+	STAILQ_INIT(&srv->access_rules);
+	TAILQ_INIT(&srv->repos);
 
 	TAILQ_INSERT_TAIL(&gotwebd->servers, srv, entry);
 
@@ -1156,4 +1336,70 @@ add_addr(struct address *h)
 	}
 
 	free(h);
+}
+
+
+struct gotwebd_repo *
+gotwebd_new_repo(const char *name)
+{
+	struct gotwebd_repo *repo;
+
+	repo = calloc(1, sizeof(*repo));
+	if (repo == NULL)
+		return NULL;
+
+	STAILQ_INIT(&repo->access_rules);
+
+	if (strlcpy(repo->name, name, sizeof(repo->name)) >=
+	    sizeof(repo->name)) {
+		free(repo);
+		errno = ENOSPC;
+		return NULL;
+	}
+
+	return repo;
+}
+
+static struct gotwebd_repo *
+conf_new_repo(struct server *server, const char *name)
+{
+	struct gotwebd_repo *repo;
+
+	if (name[0] == '\0') {
+		fatalx("syntax error: empty repository name found in %s",
+		    file->name);
+	}
+
+	if (strchr(name, '/') != NULL)
+		fatalx("repository names must not contain slashes: %s", name);
+
+	if (strchr(name, '\n') != NULL)
+		fatalx("repository names must not contain linefeeds: %s", name);
+
+	repo = gotwebd_new_repo(name);
+	if (repo == NULL)
+		fatal("gotwebd_new_repo");
+
+	TAILQ_INSERT_TAIL(&server->repos, repo, entry);
+
+	return repo;
+};
+
+static void
+conf_new_access_rule(struct gotwebd_access_rule_list *rules,
+    enum gotwebd_access access, char *identifier)
+{
+	struct gotwebd_access_rule *rule;
+
+	rule = calloc(1, sizeof(*rule));
+	if (rule == NULL)
+		fatal("calloc");
+
+	rule->access = access;
+	if (strlcpy(rule->identifier, identifier,
+	    sizeof(rule->identifier)) >= sizeof(rule->identifier))
+		fatalx("identifier too long (max %zu bytes): %s",
+		    sizeof(rule->identifier) - 1, identifier);
+
+	STAILQ_INSERT_TAIL(rules, rule, entry);
 }

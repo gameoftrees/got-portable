@@ -59,6 +59,8 @@
 #define MAX_QUERYSTRING		 2048
 #define MAX_DOCUMENT_URI	 255
 #define MAX_SERVER_NAME		 255
+#define MAX_AUTH_COOKIE		 255
+#define MAX_IDENTIFIER_SIZE	 32
 
 #define GOTWEB_GIT_DIR		 ".git"
 
@@ -280,6 +282,7 @@ struct querystring {
 	char		 headref[MAX_DOCUMENT_URI];
 	int		 index_page;
 	char		 path[PATH_MAX];
+	char		 login[MAX_AUTH_COOKIE];
 };
 
 struct gotwebd_fcgi_params {
@@ -287,6 +290,7 @@ struct gotwebd_fcgi_params {
 	struct querystring		 qs;
 	char				 document_uri[MAX_DOCUMENT_URI];
 	char				 server_name[MAX_SERVER_NAME];
+	char				 auth_cookie[MAX_AUTH_COOKIE];
 	int				 https;
 };
 
@@ -317,6 +321,9 @@ struct request {
 	int				 nparams_parsed;
 
 	int				 client_status;
+
+	uid_t				 client_uid;
+	char				 access_identifier[MAX_IDENTIFIER_SIZE];
 };
 TAILQ_HEAD(requestlist, request);
 
@@ -344,6 +351,35 @@ struct address {
 };
 TAILQ_HEAD(addresslist, address);
 
+enum gotwebd_auth_config {
+	GOTWEBD_AUTH_DISABLED	= 0xf00000ff,
+	GOTWEBD_AUTH_SECURE	= 0x00808000,
+	GOTWEBD_AUTH_INSECURE	= 0x0f7f7f00
+};
+
+enum gotwebd_access {
+	GOTWEBD_ACCESS_DENIED = -1,
+	GOTWEBD_ACCESS_PERMITTED = 1
+};
+
+struct gotwebd_access_rule {
+	STAILQ_ENTRY(gotwebd_access_rule) entry;
+
+	enum gotwebd_access access;
+	char identifier[MAX_IDENTIFIER_SIZE];
+};
+STAILQ_HEAD(gotwebd_access_rule_list, gotwebd_access_rule);
+
+struct gotwebd_repo {
+	TAILQ_ENTRY(gotwebd_repo)	 entry;
+
+	char name[NAME_MAX];
+
+	enum gotwebd_auth_config	auth_config;
+	struct gotwebd_access_rule_list access_rules;
+};
+TAILQ_HEAD(gotwebd_repolist, gotwebd_repo);
+
 struct server {
 	TAILQ_ENTRY(server)	 entry;
 
@@ -368,6 +404,11 @@ struct server {
 	int		 show_repo_description;
 	int		 show_repo_cloneurl;
 	int		 respect_exportok;
+
+	enum gotwebd_auth_config auth_config;
+	struct gotwebd_access_rule_list access_rules;
+
+	struct gotwebd_repolist	 repos;
 };
 TAILQ_HEAD(serverlist, server);
 
@@ -409,6 +450,9 @@ struct gotwebd {
 	struct socket	*login_sock;
 	struct event	 login_pause_ev;
 
+	enum gotwebd_auth_config auth_config;
+	struct gotwebd_access_rule_list access_rules;
+
 	int		 pack_fds[GOTWEB_PACK_NUM_TEMPFILES];
 	int		 priv_fd[PRIV_FDS__MAX];
 
@@ -424,9 +468,11 @@ struct gotwebd {
 	struct imsgev	*iev_fcgi;
 	struct imsgev	*iev_login;
 	struct imsgev	*iev_gotsh;
+	struct imsgev	*iev_auth;
 	struct imsgev	*iev_gotweb;
 
 	uint16_t	 prefork;
+	int		 auth_pending;
 	int		 gotweb_pending;
 	int		 *worker_load;
 
@@ -465,6 +511,7 @@ enum querystring_elements {
 	HEADREF,
 	INDEX_PAGE,
 	PATH,
+	LOGIN,
 };
 
 extern struct gotwebd	*gotwebd_env;
@@ -533,6 +580,7 @@ int	gotweb_render_patch(struct template *);
 int	gotweb_render_rss(struct template *);
 
 /* parse.y */
+struct gotwebd_repo * gotwebd_new_repo(const char *);
 int parse_config(const char *, struct gotwebd *);
 int cmdline_symset(char *);
 
