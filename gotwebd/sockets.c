@@ -67,7 +67,6 @@ static struct timeval	timeout = { TIMEOUT_DEFAULT, 0 };
 static void	 sockets_sighdlr(int, short, void *);
 static void	 sockets_shutdown(void);
 static void	 sockets_launch(struct gotwebd *);
-static void	 sockets_accept_paused(int, short, void *);
 
 static void	 sockets_dispatch_main(int, short, void *);
 static int	 sockets_unix_socket_listen(struct gotwebd *, struct socket *, uid_t, gid_t);
@@ -357,7 +356,7 @@ sockets_launch(struct gotwebd *env)
 		if (event_add(&sock->ev, NULL))
 			fatalx("event add sock");
 
-		evtimer_set(&sock->pause, sockets_accept_paused, sock);
+		evtimer_set(&sock->pause, sockets_socket_accept, sock);
 
 		log_info("%s: running socket listener %d", __func__,
 		    sock->conf.id);
@@ -989,8 +988,7 @@ sockets_accept_reserve(int sockfd, struct sockaddr *addr, socklen_t *addrlen,
 {
 	int ret;
 
-	if (getdtablecount() + reserve +
-	    ((*counter + 1) * FD_NEEDED) >= getdtablesize()) {
+	if (getdtablecount() + reserve + *counter + 1 >= getdtablesize()) {
 		log_warnx("inflight fds exceeded");
 		errno = EMFILE;
 		return -1;
@@ -1008,14 +1006,6 @@ sockets_accept_reserve(int sockfd, struct sockaddr *addr, socklen_t *addrlen,
 	}
 
 	return ret;
-}
-
-static void
-sockets_accept_paused(int fd, short events, void *arg)
-{
-	struct socket *sock = (struct socket *)arg;
-
-	event_add(&sock->ev, NULL);
 }
 
 static int
@@ -1204,8 +1194,7 @@ sockets_socket_accept(int fd, short event, void *arg)
 		case ENFILE:
 			log_warn("accept");
 			event_del(&sock->ev);
-			if (!evtimer_pending(&sock->pause, NULL))
-				evtimer_add(&sock->pause, &backoff);
+			evtimer_add(&sock->pause, &backoff);
 			return;
 		default:
 			log_warn("%s: accept", __func__);
