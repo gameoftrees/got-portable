@@ -44,6 +44,11 @@ the VM can be shut down from the host:
 
   # vmctl stop gotsysd-test
 
+The gotsysd test suite also tests gotwebd user authentication. These tests
+require the w3m browser to be installed:
+
+  # pkg_add w3m
+
 Now the actual test suite can be run with:
 
   # make
