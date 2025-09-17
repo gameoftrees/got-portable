@@ -94,7 +94,6 @@
     (((n) + (FCGI_ALIGNMENT - 1)) & ~(FCGI_ALIGNMENT - 1))
 
 #define FD_RESERVE		 5
-#define FD_NEEDED		 6
 
 #define FCGI_BEGIN_REQUEST	 1
 #define FCGI_ABORT_REQUEST	 2
