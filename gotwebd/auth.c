@@ -262,6 +262,7 @@ do_login(struct request *c)
 	const char *identifier = NULL;
 	const time_t validity = 24 * 60 * 60; /* 1 day */
 	struct gotweb_url url;
+	struct gotwebd_repo *repo;
 
 	int r;
 
@@ -292,6 +293,20 @@ do_login(struct request *c)
 		error = got_error_msg(GOT_ERR_LOGIN_FAILED,
 		    "invalid server name for login");
 		goto err;
+	}
+
+	TAILQ_FOREACH(repo, &srv->repos, entry) {
+		switch (auth_check(&identifier, uid, &repo->access_rules)) {
+		case GOTWEBD_ACCESS_PERMITTED:
+			goto logged_in;
+		case GOTWEBD_ACCESS_DENIED:
+		case GOTWEBD_ACCESS_NO_MATCH:
+			break;
+		default:
+			error = got_error_fmt(GOT_ERR_LOGIN_FAILED,
+			     "access check error for uid %u\n", uid);
+			goto err;
+		}
 	}
 
 	switch (auth_check(&identifier, uid, &srv->access_rules)) {
@@ -450,6 +465,36 @@ process_request(struct request *c)
 			    "access check error for uid %u\n", uid);
 			goto done;
 		}
+	} else if (c->fcgi_params.qs.action == INDEX) {
+		int have_public_repo = 0;
+
+		/*
+		 * The index page may contain a mix of repositories we have
+		 * access to and/or for which authentication is disabled.
+		 */
+		TAILQ_FOREACH(repo, &srv->repos, entry) {
+			if (repo->auth_config == GOTWEBD_AUTH_DISABLED)
+				have_public_repo = -1;
+
+			switch (auth_check(&identifier, uid,
+			    &repo->access_rules)) {
+			case GOTWEBD_ACCESS_PERMITTED:
+				goto permitted;
+			case GOTWEBD_ACCESS_DENIED:
+			case GOTWEBD_ACCESS_NO_MATCH:
+				break;
+			default:
+				error = got_error_fmt(GOT_ERR_LOGIN_FAILED,
+				     "access check error for uid %u\n", uid);
+				goto done;
+			}
+		}
+
+		/* We have access to public repositories only. */
+		if (have_public_repo) {
+			identifier = "";
+			goto permitted;
+		}
 	}
 
 	switch (auth_check(&identifier, uid, &srv->access_rules)) {
@@ -482,6 +527,14 @@ process_request(struct request *c)
 	}
 
 permitted:
+	/*
+	 * At this point, identifier should either be the empty string (if
+	 * the request is allowed because authentication is partly disabled),
+	 * or a user or group name.
+	 */
+	if (identifier == NULL)
+		fatalx("have no known user identifier");
+
 	if (strlcpy(c->access_identifier, identifier,
 	    sizeof(c->access_identifier)) >= sizeof(c->access_identifier)) {
 		error = got_error_msg(GOT_ERR_NO_SPACE,
