@@ -60,6 +60,37 @@ Setting the
 to
 .Pa /
 effectively disables chroot.
+.It Ic disable authentication
+Disable authentication, allowing any browser to view any repository
+not hidden via the
+.Ic respect_exportok
+directive.
+Authentication can also be configured on a per-server or per-repository basis.
+.It Ic enable authentication Oo Ic insecure Oc
+Enable authentication, requiring browsers to present a login token cookie
+before read-only repository access is granted.
+Authentication can also be configured on a per-server or per-repository basis.
+.Pp
+Browsers presenting a valid login token cookie will be mapped to the
+user account which obtained the login token over SSH from the
+.Cm weblogin
+command of
+.Xr gotsh 1 .
+.Pp
+Unauthenticated browsers will be mapped to the user account which runs
+.Xr httpd 8 .
+This user account can be set with the
+.Ic www user
+directive.
+Attempts to read repositories as this user will be denied unless
+authentication is disabled for the repository.
+.Pp
+Unless the
+.Ic insecure
+keyword is used, the login token cookie will be marked as
+.Dq Secure ,
+which causes browsers to only send the cookie when connected to the
+web server over a TLS connection.
 .It Ic listen on Ar address Ic port Ar number
 Configure an address and port for incoming FastCGI connections.
 Valid
@@ -140,6 +171,9 @@ followed by server-specific configuration directives inside curly braces:
 .Pp
 .Ic server Ar name Brq ...
 .Pp
+If more than one server is defined, each
+.Ar name
+should match the hostname which browsers use to reach the corresponding server.
 The first server defined is used if the requested hostname is not
 matched by any server block.
 .Pp
@@ -160,6 +194,22 @@ Defaults to
 .Pp
 This path must be valid in the web server's URL space since browsers
 will attempt to fetch it.
+.It Ic disable authentication
+Disable authentication for this server, allowing any browser to view any
+repository not hidden via the
+.Ic respect_exportok
+directive.
+Authentication can also configured on a per-repository basis.
+.Pp
+If not specified, the global configuration context determines
+whether authentication is disabled.
+.It Ic enable authentication Oo Ic insecure Oc
+Enable authentication, requiring browsers to present a login token cookie
+before read-only repository access is granted.
+Authentication can also configured on a per-repository basis.
+.Pp
+If not specified, the global configuration context determines
+whether authentication is enabled.
 .It Ic logo_url Ar url
 Set a hyperlink for the logo.
 Defaults to
@@ -185,10 +235,79 @@ The
 .Cm chroot
 directive must be used before the server declaration in order to
 take effect.
+.It Ic repository Ar name Brq ...
+Set options which apply to a particular repository served by this server.
+.Pp
+A repository context is declared with a unique
+.Ar name ,
+followed by repository-specific configuration directives inside curly braces.
+.Pp
+The repository will be looked up within the server's
+.Ar repos_path ,
+where the directory
+.Ar name
+can exist with or without a
+.Dq .git
+suffix.
+.Pp
+For each repository, access rules can be configured using the
+.Ic permit
+and
+.Ic deny
+configuration directives.
+Multiple access rules can be specified, and the last matching rule
+determines the action taken.
+.Pp
+If no access rules are set in a repository context, or if a repository exists
+in the server's
+.Ar repos_path
+without being mentioned in
+.Nm
+at all, then the access rules set in the server and global configuration
+contexts apply.
+If no rule matches then the repository will be inaccessible if authentication
+is enabled.
+.Pp
+The available repository configuration directives are as follows:
+.Bl -tag -width Ds
+.It Ic deny Ar identity
+Deny repository access to users with the username
+.Ar identity .
+Group names may be matched by prepending a colon
+.Pq Sq \&:
+to
+.Ar identity .
+Numeric IDs are also accepted.
+.It Ic permit Ar identity
+Permit repository access to users with the username
+.Ar identity .
+Group names may be matched by prepending a colon
+.Pq Sq \&:
+to
+.Ar identity .
+Numeric IDs are also accepted.
+.It Ic disable authentication
+Disable authentication, allowing any browser to view the repository.
+Any access rules configured with
+.Ic permit
+or
+.Ic deny
+directives for this repository will be ignored.
+.Pp
+If not specified, the server context or global context determines
+whether authentication is disabled.
+.It Ic enable authentication Oo Ic insecure Oc
+Enable authentication, requiring browsers to present a login token cookie
+before read-only repository access is granted.
+.Pp
+If not specified, the server context or global context determines
+whether authentication is enabled.
+.El
 .It Ic respect_exportok Ar on | off
 Set whether to display the repository only if it contains the magic
 .Pa git-daemon-export-ok
-file.
+file, regardless of whether authentication is enabled and has failed or
+succeeded.
 Disabled by default.
 .It Ic show_repo_age Ar on | off
 Toggle display of last repository modification date.
@@ -261,7 +380,7 @@ Default location for the
 socket.
 .El
 .Sh EXAMPLES
-A sample configuration:
+A sample configuration which allows public browsing:
 .Bd -literal -offset indent
 www user "www"   # www username needs quotes since www is a keyword
 
@@ -269,6 +388,7 @@ server "localhost" {
 	site_name	"my public repos"
 	site_owner	"Flan Hacker"
 	site_link	"Flan' Projects"
+	disable authentication
 }
 .Ed
 .Pp
@@ -283,6 +403,51 @@ listen on ::1 port 9000
 server "localhost" {
 	site_name	"my public repos"
 	repos_path	"/var/git"
+	disable authentication
+}
+.Ed
+.Pp
+The following example illustrates the use of directives related to
+authentication:
+.Bd -literal -offset indent
+# 3 scopes: global, per-server, per-repository
+
+disable authentication  # override the default which is 'enable'
+
+# Allow user "admin" to read anything unless overridden with a
+# "deny" rule later.
+permit "admin"
+
+server "public.example.com" {
+	# inherit global default, i.e. authentication is disabled
+	repos_path "/var/www/got/public"
+}
+
+server "secure.example.com" {
+	enable authentication	# override global default
+
+	permit flan_squee	# grant access to flan_squee
+	permit :developers	# grant access to developers group
+
+	repos_path		"/var/git"
+
+	repository "got" {  # /var/git/got and /var/git/got.git
+		# Grant access to users who have authenticated as
+		# the anonymous user to gotsh(1), which anyone with
+		# an SSH client sbould be able to do.
+		# Dumb web crawlers will remain locked out.
+		permit anonymous
+	}
+
+	repository "public" {
+		# As an exception, allow any web browsers and
+		# web crawlers to view this repository.
+		disable authentication
+	}
+
+	repository "secret" {
+		deny admin # not even the admin can read this
+	}
 }
 .Ed
 .Sh SEE ALSO
