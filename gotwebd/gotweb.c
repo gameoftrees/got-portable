@@ -980,16 +980,48 @@ validate_path(const char *path, const char *parent_path,
 	return error;
 }
 
+static enum gotwebd_access
+auth_check(struct request *c, struct gotwebd_access_rule_list *rules)
+{
+	struct gotwebd *env = gotwebd_env;
+	enum gotwebd_access access = GOTWEBD_ACCESS_NO_MATCH;
+	struct gotwebd_access_rule *rule;
+
+	/*
+	 * The www user ID implies that no user authentication occurred.
+	 * But authentication is enabled so we must deny this request.
+	 */
+	if (c->client_uid == env->www_uid)
+		return GOTWEBD_ACCESS_DENIED;
+
+	/*
+	 * We cannot access /etc/passwd in this process so we cannot
+	 * verify the client's user ID outselves here.
+	 * Match rules against the access identifier which has already
+	 * passed authentication in the auth process.
+	 */
+	STAILQ_FOREACH(rule, rules, entry) {
+		if (strcmp(rule->identifier, c->access_identifier) == 0)
+			access = rule->access;
+	}
+
+	return access;
+}
+
 static const struct got_error *
 gotweb_load_got_path(struct repo_dir **rp, const char *dir,
     struct request *c)
 {
 	const struct got_error *error = NULL;
+	struct gotwebd *env = gotwebd_env;
 	struct server *srv = c->srv;
 	struct transport *t = c->t;
 	struct repo_dir *repo_dir;
 	DIR *dt;
 	char *dir_test;
+	struct gotwebd_repo *repo;
+	enum gotwebd_auth_config auth_config = 0;
+	enum gotwebd_access access = GOTWEBD_ACCESS_DENIED;
 
 	*rp = calloc(1, sizeof(**rp));
 	if (*rp == NULL)
@@ -1032,6 +1064,50 @@ gotweb_load_got_path(struct repo_dir **rp, const char *dir,
 	error = got_path_basename(&repo_dir->name, repo_dir->path);
 	if (error)
 		goto err;
+
+	repo = gotweb_get_repository(srv, repo_dir->name);
+	if (repo) {
+		auth_config = repo->auth_config;
+		switch (auth_config) {
+		case GOTWEBD_AUTH_DISABLED:
+			access = GOTWEBD_ACCESS_PERMITTED;
+			break;
+		case GOTWEBD_AUTH_SECURE:
+		case GOTWEBD_AUTH_INSECURE:
+			access = auth_check(c, &repo->access_rules);
+			if (access == GOTWEBD_ACCESS_NO_MATCH)
+				access = auth_check(c, &srv->access_rules);
+			if (access == GOTWEBD_ACCESS_NO_MATCH)
+				access = auth_check(c, &env->access_rules);
+			if (access == GOTWEBD_ACCESS_NO_MATCH)
+				access = GOTWEBD_ACCESS_DENIED;
+			break;
+		}
+	} else {
+		auth_config = srv->auth_config;
+		switch (auth_config) {
+		case GOTWEBD_AUTH_DISABLED:
+			access = GOTWEBD_ACCESS_PERMITTED;
+			break;
+		case GOTWEBD_AUTH_SECURE:
+		case GOTWEBD_AUTH_INSECURE:
+			access = auth_check(c, &srv->access_rules);
+			if (access == GOTWEBD_ACCESS_NO_MATCH)
+				access = auth_check(c, &env->access_rules);
+			if (access == GOTWEBD_ACCESS_NO_MATCH)
+				access = GOTWEBD_ACCESS_DENIED;
+			break;
+		}
+	}
+
+	if (access != GOTWEBD_ACCESS_PERMITTED &&
+	    access != GOTWEBD_ACCESS_DENIED)
+		fatalx("invalid access check result %d", access);
+
+	if (access != GOTWEBD_ACCESS_PERMITTED) {
+		error = got_error_path(repo_dir->name, GOT_ERR_NOT_GIT_REPO);
+		goto err;
+	}
 
 	if (srv->respect_exportok &&
 	    faccessat(dirfd(dt), "git-daemon-export-ok", F_OK, 0) == -1) {
