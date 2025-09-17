@@ -186,6 +186,7 @@ static const struct querystring_keys querystring_keys[] = {
 	{ "headref",		HEADREF },
 	{ "index_page",		INDEX_PAGE },
 	{ "path",		PATH },
+	{ "login",		LOGIN },
 };
 
 static const struct action_keys action_keys[] = {
