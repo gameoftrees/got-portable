@@ -99,7 +99,7 @@ int				 getservice(const char *);
 int				 n;
 
 int		 get_addrs(const char *, const char *);
-int		 get_unix_addr(const char *);
+struct address *get_unix_addr(const char *);
 int		 addr_dup_check(struct addresslist *, struct address *);
 void		 add_addr(struct address *);
 
@@ -113,7 +113,7 @@ typedef struct {
 
 %}
 
-%token	LISTEN WWW SITE_NAME SITE_OWNER SITE_LINK LOGO
+%token	LISTEN LOGIN WWW SITE_NAME SITE_OWNER SITE_LINK LOGO
 %token	LOGO_URL SHOW_REPO_OWNER SHOW_REPO_AGE SHOW_REPO_DESCRIPTION
 %token	MAX_REPOS_DISPLAY REPOS_PATH MAX_COMMITS_DISPLAY ON ERROR
 %token	SHOW_SITE_OWNER SHOW_REPO_CLONEURL PORT PREFORK RESPECT_EXPORTOK
@@ -237,11 +237,15 @@ main		: PREFORK NUMBER {
 			free($3);
 		}
 		| LISTEN ON SOCKET STRING {
-			if (get_unix_addr($4) == -1) {
+			struct address *h;
+
+			h = get_unix_addr($4);
+			if (h == NULL) {
 				yyerror("can't listen on %s", $4);
 				free($4);
 				YYERROR;
 			}
+			add_addr(h);
 			free($4);
 		}
 		| USER STRING {
@@ -255,6 +259,19 @@ main		: PREFORK NUMBER {
 				yyerror("www user already specified");
 			free(gotwebd->www_user);
 			gotwebd->www_user = $3;
+		}
+		| LOGIN SOCKET STRING {
+			struct address *h;
+			h = get_unix_addr($3);
+			if (h == NULL) {
+				yyerror("can't listen on %s", $3);
+				free($3);
+				YYERROR;
+			}
+			if (gotwebd->login_sock != NULL)
+				free(gotwebd->login_sock);
+			gotwebd->login_sock = sockets_conf_new_socket(-1, h);
+			free($3);
 		}
 		;
 
@@ -460,6 +477,7 @@ lookup(char *s)
 		{ "chroot",			CHROOT },
 		{ "custom_css",			CUSTOM_CSS },
 		{ "listen",			LISTEN },
+		{ "login",			LOGIN },
 		{ "logo",			LOGO },
 		{ "logo_url",			LOGO_URL },
 		{ "max_commits_display",	MAX_COMMITS_DISPLAY },
@@ -849,6 +867,7 @@ parse_config(const char *filename, struct gotwebd *env)
 	/* add the implicit listen on socket */
 	if (TAILQ_EMPTY(&gotwebd->addresses)) {
 		char path[_POSIX_PATH_MAX];
+		struct address *h;
 
 		if (strlcpy(path, gotwebd->httpd_chroot, sizeof(path))
 		    >= sizeof(path)) {
@@ -860,8 +879,11 @@ parse_config(const char *filename, struct gotwebd *env)
 			yyerror("chroot path too long: %s",
 			    gotwebd->httpd_chroot);
 		}
-		if (get_unix_addr(path) == -1)
+		h = get_unix_addr(path);
+		if (h == NULL)
 			yyerror("can't listen on %s", path);
+		else
+			add_addr(h);
 	}
 
 	if (errors)
@@ -869,6 +891,18 @@ parse_config(const char *filename, struct gotwebd *env)
 
 	/* setup our listening sockets */
 	sockets_parse_sockets(env);
+
+	/* Add implicit login socket */
+	if (gotwebd->login_sock == NULL) {
+		struct address *h;
+		h = get_unix_addr(GOTWEBD_LOGIN_SOCKET);
+		if (h == NULL) {
+			fprintf(stderr, "cannot listen on %s",
+			    GOTWEBD_LOGIN_SOCKET);
+			return (-1);
+		}
+		gotwebd->login_sock = sockets_conf_new_socket(-1, h);
+	}
 
 	return (0);
 }
@@ -1070,7 +1104,7 @@ get_addrs(const char *hostname, const char *servname)
 	return (0);
 }
 
-int
+struct address *
 get_unix_addr(const char *path)
 {
 	struct address *h;
@@ -1089,11 +1123,10 @@ get_unix_addr(const char *path)
 	if (strlcpy(sun->sun_path, path, sizeof(sun->sun_path)) >=
 	    sizeof(sun->sun_path)) {
 		log_warnx("socket path too long: %s", sun->sun_path);
-		return (-1);
+		return NULL;
 	}
 
-	add_addr(h);
-	return (0);
+	return h;
 }
 
 int

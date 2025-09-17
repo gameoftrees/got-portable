@@ -5,7 +5,7 @@
 .include "Makefile.inc"
 
 PROG =		gotwebd
-SRCS =		config.c sockets.c gotwebd.c parse.y \
+SRCS =		config.c sockets.c login.c gotwebd.c parse.y \
 		fcgi.c gotweb.c got_operations.c tmpl.c pages.c
 SRCS +=		blame.c commit_graph.c delta.c diff.c \
 		diffreg.c error.c object.c object_cache.c \
@@ -37,9 +37,9 @@ MAN =		${PROG}.conf.5 ${PROG}.8
 
 CPPFLAGS +=	-I${.CURDIR}/../include -I${.CURDIR}/../lib -I${.CURDIR}
 CPPFLAGS +=	-I${.CURDIR}/../template
-LDADD +=	-lz -levent -lutil -lm
+LDADD +=	-lz -levent -lutil -lm -lcrypto
 YFLAGS =
-DPADD =		${LIBEVENT} ${LIBUTIL} ${LIBM}
+DPADD =		${LIBEVENT} ${LIBUTIL} ${LIBM} ${LIBCRYPTO}
 #CFLAGS +=	-DGOT_NO_OBJ_CACHE
 
 .if ${GOT_RELEASE} != "Yes"

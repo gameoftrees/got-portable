@@ -128,6 +128,7 @@ enum gotwebd_proc_type {
 	GOTWEBD_PROC_PARENT,
 	GOTWEBD_PROC_SOCKETS,
 	GOTWEBD_PROC_FCGI,
+	GOTWEBD_PROC_LOGIN,
 	GOTWEBD_PROC_GOTWEB,
 };
 
@@ -138,6 +139,7 @@ enum imsg_type {
 	GOTWEBD_IMSG_CFG_DONE,
 	GOTWEBD_IMSG_CTL_PIPE,
 	GOTWEBD_IMSG_CTL_START,
+	GOTWEBD_IMSG_LOGIN_SECRET,
 	GOTWEBD_IMSG_FCGI_PARSE_PARAMS,
 	GOTWEBD_IMSG_FCGI_PARAMS,
 	GOTWEBD_IMSG_REQ_ABORT,
@@ -404,6 +406,9 @@ struct gotwebd {
 	struct socketlist	sockets;
 	struct addresslist	addresses;
 
+	struct socket	*login_sock;
+	struct event	 login_pause_ev;
+
 	int		 pack_fds[GOTWEB_PACK_NUM_TEMPFILES];
 	int		 priv_fd[PRIV_FDS__MAX];
 
@@ -417,6 +422,8 @@ struct gotwebd {
 	struct imsgev	*iev_parent;
 	struct imsgev	*iev_sockets;
 	struct imsgev	*iev_fcgi;
+	struct imsgev	*iev_login;
+	struct imsgev	*iev_gotsh;
 	struct imsgev	*iev_gotweb;
 
 	uint16_t	 prefork;
@@ -471,6 +478,8 @@ int	 imsg_compose_event(struct imsgev *, uint16_t, uint32_t,
 	    pid_t, int, const void *, size_t);
 int	 main_compose_sockets(struct gotwebd *, uint32_t, int,
 	    const void *, uint16_t);
+int	 main_compose_login(struct gotwebd *, uint32_t, int,
+	    const void *, uint16_t);
 int	 sockets_compose_main(struct gotwebd *, uint32_t,
 	    const void *, uint16_t);
 int	 main_compose_gotweb(struct gotwebd *, uint32_t, int,
@@ -480,8 +489,15 @@ int	 main_compose_gotweb(struct gotwebd *, uint32_t, int,
 void sockets(struct gotwebd *, int);
 void sockets_parse_sockets(struct gotwebd *);
 void sockets_socket_accept(int, short, void *);
+struct socket *sockets_conf_new_socket(int, struct address *);
 int sockets_privinit(struct gotwebd *, struct socket *, uid_t, gid_t);
 void sockets_rlimit(int);
+
+/* login.c */
+char *login_gen_token(uint64_t, const char *, time_t, const char *, size_t);
+int login_check_token(uid_t *, char **, const char *, const char *, size_t);
+int login_privinit(struct gotwebd *, uid_t, gid_t);
+void gotwebd_login(struct gotwebd *, int);
 
 /* gotweb.c */
 void gotweb_index_navs(struct request *, struct gotweb_url *, int *,
