@@ -367,7 +367,15 @@ assign_querystring(struct querystring *qs, char *key, char *value)
 				goto done;
 			}
 			break;
-		}
+		case LOGIN:
+			if (strlcpy(qs->login, value, sizeof(qs->login)) >=
+			    sizeof(qs->login)) {
+				error = got_error_msg(GOT_ERR_NO_SPACE,
+				    "login token too long");
+				goto done;
+			}
+			break;
+ 		}
 
 		/* entry found */
 		break;
@@ -424,6 +432,47 @@ err:
 	free(tok2);
 	free(tok1);
 	return error;
+}
+
+static void
+parse_cookie_hdr(struct gotwebd_fcgi_params *params, char *hdr, size_t len)
+{
+	size_t	 l;
+	char	*end;
+
+	memset(params->auth_cookie, 0, sizeof(params->auth_cookie));
+
+	while (len > 0) {
+		if (hdr[0] == ' ' || hdr[0] == '\t') {
+			hdr++;
+			len--;
+			continue;
+		}
+
+		/* looking at the start of name=val */
+
+		if ((end = memchr(hdr, ' ', len)) == NULL ||
+		    (end = memchr(hdr, '\t', len)) == NULL)
+			end = hdr + len;
+		l = end - hdr;
+
+		if (len > 8 && !strncmp(hdr, "gwdauth=", 8)) {
+			hdr += 8;
+			len -= 8;
+			l -= 8;
+
+			if (l < MAX_AUTH_COOKIE - 1) {
+				memcpy(params->auth_cookie, hdr, l);
+				params->auth_cookie[l] = '\0';
+			}
+
+			return;
+		}
+
+		/* skip to the next one */
+		hdr += l;
+		len -= l;
+	}
 }
 
 int
@@ -507,6 +556,10 @@ fcgi_parse_params(uint8_t *buf, uint16_t n, struct gotwebd_fcgi_params *params)
 		if (name_len == 5 &&
 		    strncmp(buf, "HTTPS", 5) == 0)
 			params->https = 1;
+
+		if (name_len == 11 &&
+		    strncmp(buf, "HTTP_COOKIE", 11) == 0)
+			parse_cookie_hdr(params, val, val_len);
 
 		buf += name_len + val_len;
 		n -= name_len - val_len;

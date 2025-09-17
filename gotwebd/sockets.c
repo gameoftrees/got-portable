@@ -231,10 +231,10 @@ sockets(struct gotwebd *env, int fd)
 
 	if (env->prefork <= 0)
 		fatalx("invalid prefork count: %d", env->prefork);
-	env->iev_gotweb = calloc(env->prefork, sizeof(*env->iev_gotweb));
-	if (env->iev_gotweb == NULL)
+	env->iev_auth = calloc(env->prefork, sizeof(*env->iev_auth));
+	if (env->iev_auth == NULL)
 		fatal("calloc");
-	env->gotweb_pending = env->prefork;
+	env->auth_pending = env->prefork;
 
 	signal(SIGPIPE, SIG_IGN);
 
@@ -329,8 +329,8 @@ sockets_launch(struct gotwebd *env)
 
 	if (env->iev_fcgi == NULL)
 		fatalx("fcgi process not connected");
-	if (env->gotweb_pending != 0)
-		fatal("gotweb process not connected");
+	if (env->auth_pending != 0)
+		fatal("auth process not connected");
 
 	TAILQ_FOREACH(sock, &gotwebd_env->sockets, entry) {
 		if (sock->conf.af_type == AF_UNIX) {
@@ -373,7 +373,7 @@ sockets_launch(struct gotwebd *env)
 #endif
 	event_add(&env->iev_fcgi->ev, NULL);
 	for (i = 0; i < env->prefork; i++)
-		event_add(&env->iev_gotweb[i].ev, NULL);
+		event_add(&env->iev_auth[i].ev, NULL);
 }
 
 static void
@@ -395,7 +395,7 @@ abort_request(struct imsg *imsg)
 }
 
 static void
-server_dispatch_gotweb(int fd, short event, void *arg)
+server_dispatch_auth(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
 	struct imsgbuf		*ibuf;
@@ -444,32 +444,32 @@ server_dispatch_gotweb(int fd, short event, void *arg)
 }
 
 static void
-recv_gotweb_pipe(struct gotwebd *env, struct imsg *imsg)
+recv_auth_pipe(struct gotwebd *env, struct imsg *imsg)
 {
 	struct imsgev *iev;
 	int fd;
 
-	if (env->gotweb_pending <= 0) {
-		log_warn("gotweb pipe already received");
+	if (env->auth_pending <= 0) {
+		log_warn("all auth pipes already received");
 		return;
 	}
 
 	fd = imsg_get_fd(imsg);
 	if (fd == -1)
-		fatalx("invalid gotweb pipe fd");
+		fatalx("invalid auth pipe fd");
 
-	iev = &env->iev_gotweb[env->gotweb_pending - 1];
+	iev = &env->iev_auth[env->auth_pending - 1];
 	if (imsgbuf_init(&iev->ibuf, fd) == -1)
 		fatal("imsgbuf_init");
 	imsgbuf_allow_fdpass(&iev->ibuf);
 	imsgbuf_set_maxsize(&iev->ibuf, sizeof(struct request));
 
-	iev->handler = server_dispatch_gotweb;
+	iev->handler = server_dispatch_auth;
 	iev->data = iev;
-	event_set(&iev->ev, fd, EV_READ, server_dispatch_gotweb, iev);
+	event_set(&iev->ev, fd, EV_READ, server_dispatch_auth, iev);
 	imsg_event_add(iev);
 
-	env->gotweb_pending--;
+	env->auth_pending--;
 }
 
 static struct imsgev *
@@ -492,15 +492,16 @@ select_worker(struct request *c)
 	    c->request_id, least_busy_worker_idx);
 
 	c->worker_idx = least_busy_worker_idx;
-	return &env->iev_gotweb[least_busy_worker_idx];
+	return &env->iev_auth[least_busy_worker_idx];
 }
 
 static int
 process_request(struct request *c)
 {
 	struct gotwebd *env = gotwebd_env;
-	struct querystring *qs = &c->fcgi_params.qs;
-	struct imsgev *iev_gotweb;
+	struct gotwebd_fcgi_params *params = &c->fcgi_params;
+	struct querystring *qs = &params->qs;
+	struct imsgev *iev_auth;
 	int ret, i;
 	struct request ic;
 
@@ -513,6 +514,16 @@ process_request(struct request *c)
 		if (strlcpy(qs->headref, GOT_REF_HEAD, sizeof(qs->headref)) >=
 		    sizeof(qs->headref)) {
 			log_warnx("head reference buffer too small");
+			return -1;
+		}
+	}
+	if (params->server_name[0] == '\0') {
+		struct server *srv = TAILQ_FIRST(&env->servers);
+
+		if (strlcpy(params->server_name, srv->name,
+		    sizeof(params->server_name)) >=
+		    sizeof(params->server_name)) {
+			log_warnx("server name buffer too small");
 			return -1;
 		}
 	}
@@ -532,8 +543,8 @@ process_request(struct request *c)
 		ic.priv_fd[i] = -1;
 	ic.fd = -1;
 
-	iev_gotweb = select_worker(c);
-	ret = imsg_compose_event(iev_gotweb, GOTWEBD_IMSG_REQ_PROCESS,
+	iev_auth = select_worker(c);
+	ret = imsg_compose_event(iev_auth, GOTWEBD_IMSG_REQ_PROCESS,
 	    GOTWEBD_PROC_SOCKETS, -1, c->fd, &ic, sizeof(ic));
 	if (ret == -1) {
 		log_warn("imsg_compose_event");
@@ -611,6 +622,13 @@ recv_parsed_params(struct imsg *imsg)
 		goto fail;
 	}
 
+	if (params.qs.login[0] != '\0' &&
+	    strlcpy(p->qs.login, params.qs.login,
+	    sizeof(p->qs.login)) >= sizeof(p->qs.login)) {
+		log_warnx("login token too long");
+		goto fail;
+	}
+
 	if (params.document_uri[0] != '\0' &&
 	    strlcpy(p->document_uri, params.document_uri,
 	    sizeof(p->document_uri)) >= sizeof(p->document_uri)) {
@@ -622,6 +640,13 @@ recv_parsed_params(struct imsg *imsg)
 	    strlcpy(p->server_name, params.server_name,
 	    sizeof(p->server_name)) >= sizeof(p->server_name)) {
 		log_warnx("server name too long");
+		goto fail;
+	}
+
+	if (params.auth_cookie[0] != '\0' &&
+	    strlcpy(p->auth_cookie, params.auth_cookie,
+	    sizeof(p->auth_cookie)) >= sizeof(p->auth_cookie)) {
+		log_warnx("auth cookie too long");
 		goto fail;
 	}
 
@@ -768,7 +793,7 @@ sockets_dispatch_main(int fd, short event, void *arg)
 			if (env->iev_fcgi == NULL)
 				recv_fcgi_pipe(env, &imsg);
 			else
-				recv_gotweb_pipe(env, &imsg);
+				recv_auth_pipe(env, &imsg);
 			break;
 		case GOTWEBD_IMSG_CTL_START:
 			sockets_launch(env);
@@ -854,8 +879,8 @@ sockets_shutdown(void)
 	free(gotwebd_env->iev_fcgi);
 
 	for (i = 0; i < gotwebd_env->prefork; i++)
-		imsgbuf_clear(&gotwebd_env->iev_gotweb[i].ibuf);
-	free(gotwebd_env->iev_gotweb);
+		imsgbuf_clear(&gotwebd_env->iev_auth[i].ibuf);
+	free(gotwebd_env->iev_auth);
 	free(gotwebd_env->worker_load);
 	free(gotwebd_env);
 

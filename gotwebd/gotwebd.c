@@ -56,6 +56,7 @@ void	 gotwebd_shutdown(void);
 void	 gotwebd_dispatch_server(int, short, void *);
 void	 gotwebd_dispatch_fcgi(int, short, void *);
 void	 gotwebd_dispatch_login(int, short, void *);
+void	 gotwebd_dispatch_auth(int, short, void *);
 void	 gotwebd_dispatch_gotweb(int, short, void *);
 
 struct gotwebd	*gotwebd_env;
@@ -141,6 +142,22 @@ main_compose_gotweb(struct gotwebd *env, uint32_t type, int fd,
 
 	for (i = 0; i < env->prefork; i++) {
 		ret = send_imsg(&env->iev_gotweb[i], type, fd, data, len);
+		if (ret)
+			break;
+	}
+
+	return ret;
+}
+
+int
+main_compose_auth(struct gotwebd *env, uint32_t type, int fd,
+    const void *data, uint16_t len)
+{
+	size_t i;
+	int ret = 0;
+
+	for (i = 0; i < env->prefork; i++) {
+		ret = send_imsg(&env->iev_auth[i], type, fd, data, len);
 		if (ret)
 			break;
 	}
@@ -253,6 +270,56 @@ gotwebd_dispatch_server(int fd, short event, void *arg)
 
 void
 gotwebd_dispatch_fcgi(int fd, short event, void *arg)
+{
+	struct imsgev		*iev = arg;
+	struct imsgbuf		*ibuf;
+	struct imsg		 imsg;
+	struct gotwebd		*env = gotwebd_env;
+	ssize_t			 n;
+	int			 shut = 0;
+
+	ibuf = &iev->ibuf;
+
+	if (event & EV_READ) {
+		if ((n = imsgbuf_read(ibuf)) == -1)
+			fatal("imsgbuf_read error");
+		if (n == 0)	/* Connection closed */
+			shut = 1;
+	}
+	if (event & EV_WRITE) {
+		if (imsgbuf_write(ibuf) == -1)
+			fatal("imsgbuf_write");
+	}
+
+	for (;;) {
+		if ((n = imsg_get(ibuf, &imsg)) == -1)
+			fatal("imsg_get");
+		if (n == 0)	/* No more messages. */
+			break;
+
+		switch (imsg.hdr.type) {
+		case GOTWEBD_IMSG_CFG_DONE:
+			gotwebd_configure_done(env);
+			break;
+		default:
+			fatalx("%s: unknown imsg type %d", __func__,
+			    imsg.hdr.type);
+		}
+
+		imsg_free(&imsg);
+	}
+
+	if (!shut)
+		imsg_event_add(iev);
+	else {
+		/* This pipe is dead.  Remove its event handler */
+		event_del(&iev->ev);
+		event_loopexit(NULL);
+	}
+}
+
+void
+gotwebd_dispatch_auth(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
 	struct imsgbuf		*ibuf;
@@ -422,6 +489,9 @@ spawn_process(struct gotwebd *env, const char *argv0, struct imsgev *iev,
 	} else if (proc_type == GOTWEBD_PROC_FCGI) {
 		argv[argc++] = "-F";
 		argv[argc++] = username;
+	} else if (proc_type == GOTWEBD_PROC_AUTH) {
+		argv[argc++] = "-A";
+		argv[argc++] = username;
 	} else if (proc_type == GOTWEBD_PROC_GOTWEB) {
 		argv[argc++] = "-G";
 		argv[argc++] = username;
@@ -485,8 +555,12 @@ main(int argc, char **argv)
 		fatal("%s: calloc", __func__);
 	config_init(env);
 
-	while ((ch = getopt(argc, argv, "D:dG:f:F:L:nS:vW:")) != -1) {
+	while ((ch = getopt(argc, argv, "A:D:dG:f:F:L:nS:vW:")) != -1) {
 		switch (ch) {
+		case 'A':
+			proc_type = GOTWEBD_PROC_AUTH;
+			gotwebd_username = optarg;
+			break;
 		case 'D':
 			if (cmdline_symset(optarg) < 0)
 				log_warnx("could not parse macro definition %s",
@@ -562,6 +636,7 @@ main(int argc, char **argv)
 	pw = getpwnam(www_username);
 	if (pw == NULL)
 		fatalx("unknown user %s", www_username);
+	env->www_uid = pw->pw_uid;
 	www_gid = pw->pw_gid;
 
 	pw = getpwnam(gotwebd_username);
@@ -622,6 +697,17 @@ main(int argc, char **argv)
 
 		gotwebd_fcgi(env, GOTWEBD_SOCK_FILENO);
 		return 1;
+	case GOTWEBD_PROC_AUTH:
+		setproctitle("auth");
+		log_procinit("auth");
+
+		if (setgroups(1, &pw->pw_gid) == -1 ||
+		    setresgid(pw->pw_gid, pw->pw_gid, pw->pw_gid) == -1 ||
+		    setresuid(pw->pw_uid, pw->pw_uid, pw->pw_uid) == -1)
+			fatal("failed to drop privileges");
+
+		gotwebd_auth(env, GOTWEBD_SOCK_FILENO);
+		return 1;
 	case GOTWEBD_PROC_GOTWEB:
 		setproctitle("gotweb");
 		log_procinit("gotweb");
@@ -654,6 +740,10 @@ main(int argc, char **argv)
 	if (env->iev_fcgi == NULL)
 		fatal("calloc");
 
+	env->iev_auth = calloc(env->prefork, sizeof(*env->iev_auth));
+	if (env->iev_auth == NULL)
+		fatal("calloc");
+
 	env->iev_gotweb = calloc(env->prefork, sizeof(*env->iev_gotweb));
 	if (env->iev_gotweb == NULL)
 		fatal("calloc");
@@ -670,6 +760,9 @@ main(int argc, char **argv)
 	    gotwebd_dispatch_fcgi);
 
 	for (i = 0; i < env->prefork; ++i) {
+		spawn_process(env, argv0, &env->iev_auth[i],
+		    GOTWEBD_PROC_AUTH, gotwebd_username,
+		    gotwebd_dispatch_auth);
 		spawn_process(env, argv0, &env->iev_gotweb[i],
 		    GOTWEBD_PROC_GOTWEB, gotwebd_username,
 		    gotwebd_dispatch_gotweb);
@@ -729,7 +822,7 @@ main(int argc, char **argv)
 static void
 connect_children(struct gotwebd *env)
 {
-	struct imsgev *iev_gotweb;
+	struct imsgev *iev_gotweb, *iev_auth;
 	int pipe[2];
 	int i;
 
@@ -744,11 +837,23 @@ connect_children(struct gotwebd *env)
 
 	for (i = 0; i < env->prefork; i++) {
 		iev_gotweb = &env->iev_gotweb[i];
+		iev_auth = &env->iev_auth[i];
 
 		if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, pipe) == -1)
 			fatal("socketpair");
 
 		if (main_compose_sockets(env, GOTWEBD_IMSG_CTL_PIPE,
+		    pipe[0], NULL, 0))
+			fatal("send_imsg");
+
+		if (send_imsg(iev_auth, GOTWEBD_IMSG_CTL_PIPE,
+		    pipe[1], NULL, 0))
+			fatal("send_imsg");
+
+		if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, pipe) == -1)
+			fatal("socketpair");
+
+		if (send_imsg(iev_auth, GOTWEBD_IMSG_CTL_PIPE,
 		    pipe[0], NULL, 0))
 			fatal("send_imsg");
 
@@ -763,19 +868,69 @@ gotwebd_configure(struct gotwebd *env, uid_t uid, gid_t gid)
 {
 	struct server *srv;
 	struct socket *sock;
-	char login_token_secret[32];
+	struct gotwebd_repo *repo;
+	char secret[32];
+	int i;
 
 	/* gotweb need to reload its config. */
 	env->gotweb_pending = env->prefork;
+	env->auth_pending = env->prefork;
+
+	/* send global access rules */
+	for (i = 0; i < env->prefork; ++i) {
+		config_set_access_rules(&env->iev_auth[i],
+		    &env->access_rules);
+		config_set_access_rules(&env->iev_gotweb[i],
+		    &env->access_rules);
+	}
 
 	/* send our gotweb servers */
 	TAILQ_FOREACH(srv, &env->servers, entry) {
 		if (main_compose_sockets(env, GOTWEBD_IMSG_CFG_SRV,
 		    -1, srv, sizeof(*srv)) == -1)
 			fatal("send_imsg GOTWEBD_IMSG_CFG_SRV");
+		if (main_compose_auth(env, GOTWEBD_IMSG_CFG_SRV,
+		    -1, srv, sizeof(*srv)) == -1)
+			fatal("main_compose_gotweb GOTWEBD_IMSG_CFG_SRV");
 		if (main_compose_gotweb(env, GOTWEBD_IMSG_CFG_SRV,
 		    -1, srv, sizeof(*srv)) == -1)
 			fatal("main_compose_gotweb GOTWEBD_IMSG_CFG_SRV");
+		if (main_compose_login(env, GOTWEBD_IMSG_CFG_SRV,
+		    -1, srv, sizeof(*srv)) == -1)
+			fatal("main_compose_gotweb GOTWEBD_IMSG_CFG_SRV");
+
+		/* send per-server access rules */
+		for (i = 0; i < env->prefork; ++i) {
+			config_set_access_rules(&env->iev_auth[i],
+			    &srv->access_rules);
+			config_set_access_rules(&env->iev_gotweb[i],
+			    &srv->access_rules);
+		}
+
+		/* send repositories and per-repository access rules */
+		TAILQ_FOREACH(repo, &srv->repos, entry) {
+			for (i = 0; i < env->prefork; i++) {
+				config_set_repository(&env->iev_auth[i],
+				    repo);
+				config_set_repository(&env->iev_gotweb[i],
+				    repo);
+
+				config_set_access_rules(&env->iev_auth[i],
+				    &repo->access_rules);
+				config_set_access_rules(&env->iev_gotweb[i],
+				    &repo->access_rules);
+			}
+		}
+
+		for (i = 0; i < env->prefork; i++) {
+			if (imsgbuf_flush(&env->iev_auth[i].ibuf) == -1)
+				fatal("imsgbuf_flush");
+			imsg_event_add(&env->iev_auth[i]);
+
+			if (imsgbuf_flush(&env->iev_gotweb[i].ibuf) == -1)
+				fatal("imsgbuf_flush");
+			imsg_event_add(&env->iev_gotweb[i]);
+		}
 	}
 
 	/* send our sockets */
@@ -791,20 +946,43 @@ gotwebd_configure(struct gotwebd *env, uid_t uid, gid_t gid)
 	/* Connect servers and gotwebs. */
 	connect_children(env);
 
-	arc4random_buf(login_token_secret, sizeof(login_token_secret));
+	if (main_compose_auth(env, GOTWEBD_IMSG_AUTH_CONF, -1,
+	    &env->auth_config, sizeof(env->auth_config)) == -1)
+		fatal("send_imsg GOTWEB_IMSG_AUTH_CONF");
+	if (main_compose_gotweb(env, GOTWEBD_IMSG_AUTH_CONF, -1,
+	    &env->auth_config, sizeof(env->auth_config)) == -1)
+		fatal("main_compose_gotweb GOTWEB_IMSG_AUTH_CONF");
+
+	if (main_compose_auth(env, GOTWEBD_IMSG_WWW_UID, -1,
+	    &env->www_uid, sizeof(env->www_uid)) == -1)
+		fatal("main_compose_auth GOTWEB_IMSG_WWW_UID");
+	if (main_compose_gotweb(env, GOTWEBD_IMSG_WWW_UID, -1,
+	    &env->www_uid, sizeof(env->www_uid)) == -1)
+		fatal("main_compose_gotweb GOTWEB_IMSG_WWW_UID");
+
+	arc4random_buf(secret, sizeof(secret));
 
 	if (main_compose_login(env, GOTWEBD_IMSG_LOGIN_SECRET, -1,
-	    login_token_secret, sizeof(login_token_secret)) == -1)
-		fatal("main_compose_gotweb GOTWEB_IMSG_LOGIN_SECRET");
+	    secret, sizeof(secret)) == -1)
+		fatal("main_compose_login GOTWEB_IMSG_LOGIN_SECRET");
+	if (main_compose_auth(env, GOTWEBD_IMSG_LOGIN_SECRET, -1,
+	    secret, sizeof(secret)) == -1)
+		fatal("main_compose_auth GOTWEB_IMSG_LOGIN_SECRET");
 
-	explicit_bzero(login_token_secret, sizeof(login_token_secret));
+	arc4random_buf(secret, sizeof(secret));
+
+	if (main_compose_auth(env, GOTWEBD_IMSG_AUTH_SECRET, -1,
+	    secret, sizeof(secret)) == -1)
+		fatal("main_compose_auth GOTWEB_IMSG_AUTH_SECRET");
+
+	explicit_bzero(secret, sizeof(secret));
 
 	if (login_privinit(env, uid, gid) == -1)
 		fatalx("cannot open authentication socket");
 
 	if (main_compose_login(env, GOTWEBD_IMSG_CFG_SOCK, env->login_sock->fd,
 	    NULL, 0) == -1)
-		fatal("main_compose_auth GOTWEBD_IMSG_CFG_SOCK");
+		fatal("main_compose_login GOTWEBD_IMSG_CFG_SOCK");
 
 	if (main_compose_sockets(env, GOTWEBD_IMSG_CFG_DONE, -1,
 	    NULL, 0) == -1)
@@ -825,7 +1003,15 @@ gotwebd_configure_done(struct gotwebd *env)
 		if (env->gotweb_pending == 0 &&
 		    main_compose_gotweb(env, GOTWEBD_IMSG_CTL_START,
 		        -1, NULL, 0) == -1)
-			fatal("main_compose_gotewb GOTWEBD_IMSG_CTL_START");
+			fatal("main_compose_gotweb GOTWEBD_IMSG_CTL_START");
+	}
+
+	if (env->auth_pending > 0) {
+		env->auth_pending--;
+		if (env->auth_pending == 0 &&
+		    main_compose_auth(env, GOTWEBD_IMSG_CTL_START,
+		        -1, NULL, 0) == -1)
+			fatal("main_compose_auth GOTWEBD_IMSG_CTL_START");
 	}
 
 	if (main_compose_login(env, GOTWEBD_IMSG_CTL_START,
@@ -859,11 +1045,17 @@ gotwebd_shutdown(void)
 	free(env->iev_fcgi);
 
 	for (i = 0; i < env->prefork; ++i) {
+		event_del(&env->iev_auth[i].ev);
+		imsgbuf_clear(&env->iev_auth[i].ibuf);
+		close(env->iev_auth[i].ibuf.fd);
+		env->iev_auth[i].ibuf.fd = -1;
+
 		event_del(&env->iev_gotweb[i].ev);
 		imsgbuf_clear(&env->iev_gotweb[i].ibuf);
 		close(env->iev_gotweb[i].ibuf.fd);
 		env->iev_gotweb[i].ibuf.fd = -1;
 	}
+	free(env->iev_auth);
 	free(env->iev_gotweb);
 
 	free(env->login_sock);

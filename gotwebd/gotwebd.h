@@ -131,6 +131,7 @@ enum gotwebd_proc_type {
 	GOTWEBD_PROC_SOCKETS,
 	GOTWEBD_PROC_FCGI,
 	GOTWEBD_PROC_LOGIN,
+	GOTWEBD_PROC_AUTH,
 	GOTWEBD_PROC_GOTWEB,
 };
 
@@ -138,12 +139,17 @@ enum imsg_type {
 	GOTWEBD_IMSG_CFG_SRV,
 	GOTWEBD_IMSG_CFG_SOCK,
 	GOTWEBD_IMSG_CFG_FD,
+	GOTWEBD_IMSG_CFG_ACCESS_RULE,
+	GOTWEBD_IMSG_CFG_REPO,
 	GOTWEBD_IMSG_CFG_DONE,
 	GOTWEBD_IMSG_CTL_PIPE,
 	GOTWEBD_IMSG_CTL_START,
 	GOTWEBD_IMSG_LOGIN_SECRET,
+	GOTWEBD_IMSG_AUTH_SECRET,
+	GOTWEBD_IMSG_AUTH_CONF,
 	GOTWEBD_IMSG_FCGI_PARSE_PARAMS,
 	GOTWEBD_IMSG_FCGI_PARAMS,
+	GOTWEBD_IMSG_WWW_UID,
 	GOTWEBD_IMSG_REQ_ABORT,
 	GOTWEBD_IMSG_REQ_PROCESS,
 };
@@ -358,6 +364,7 @@ enum gotwebd_auth_config {
 };
 
 enum gotwebd_access {
+	GOTWEBD_ACCESS_NO_MATCH = -2,
 	GOTWEBD_ACCESS_DENIED = -1,
 	GOTWEBD_ACCESS_PERMITTED = 1
 };
@@ -477,6 +484,7 @@ struct gotwebd {
 	int		 *worker_load;
 
 	char		 httpd_chroot[PATH_MAX];
+	uid_t		 www_uid;
 };
 
 /*
@@ -529,6 +537,8 @@ int	 main_compose_login(struct gotwebd *, uint32_t, int,
 	    const void *, uint16_t);
 int	 sockets_compose_main(struct gotwebd *, uint32_t,
 	    const void *, uint16_t);
+int	 main_compose_auth(struct gotwebd *, uint32_t, int,
+	    const void *, uint16_t);
 int	 main_compose_gotweb(struct gotwebd *, uint32_t, int,
 	    const void *, uint16_t);
 
@@ -541,12 +551,21 @@ int sockets_privinit(struct gotwebd *, struct socket *, uid_t, gid_t);
 void sockets_rlimit(int);
 
 /* login.c */
-char *login_gen_token(uint64_t, const char *, time_t, const char *, size_t);
-int login_check_token(uid_t *, char **, const char *, const char *, size_t);
+char *login_gen_token(uint64_t, const char *, time_t, const char *, size_t,
+    const char *);
+int login_check_token(uid_t *, char **, const char *, const char *, size_t,
+    const char *);
 int login_privinit(struct gotwebd *, uid_t, gid_t);
 void gotwebd_login(struct gotwebd *, int);
 
+/* auth.c */
+void gotwebd_auth(struct gotwebd *, int);
+
 /* gotweb.c */
+struct server *gotweb_get_server(const char *);
+struct gotwebd_repo * gotweb_get_repository(struct server *, const char *);
+int gotweb_reply(struct request *c, int status, const char *ctype,
+    struct gotweb_url *);
 void gotweb_index_navs(struct request *, struct gotweb_url *, int *,
     struct gotweb_url *, int *);
 int gotweb_render_age(struct template *, time_t);
@@ -578,6 +597,7 @@ int	gotweb_render_summary(struct template *);
 int	gotweb_render_blame(struct template *);
 int	gotweb_render_patch(struct template *);
 int	gotweb_render_rss(struct template *);
+int	gotweb_render_unauthorized(struct template *);
 
 /* parse.y */
 struct gotwebd_repo * gotwebd_new_repo(const char *);
@@ -617,4 +637,9 @@ int config_getsock(struct gotwebd *, struct imsg *);
 int config_setfd(struct gotwebd *);
 int config_getfd(struct gotwebd *, struct imsg *);
 int config_getcfg(struct gotwebd *, struct imsg *);
+void config_set_access_rules(struct imsgev *,
+    struct gotwebd_access_rule_list *);
+void config_get_access_rule(struct gotwebd_access_rule_list *, struct imsg *);
+void config_set_repository(struct imsgev *, struct gotwebd_repo *);
+void config_get_repository(struct gotwebd_repolist *, struct imsg *);
 int config_init(struct gotwebd *);

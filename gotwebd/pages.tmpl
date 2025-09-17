@@ -1370,3 +1370,7 @@ date: {{ datebuf }} {{ " UTC" }} {{ "\n" }}
   {{ mail }} {{" "}} ({{ author }})
 </author>
 {{ end }}
+
+{{ define gotweb_render_unauthorized(struct template *tp) }}
+<p>Wrong or missing authentication code</p>
+{{ end }}
