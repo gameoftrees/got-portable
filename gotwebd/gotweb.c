@@ -1009,11 +1009,9 @@ gotweb_load_got_path(struct repo_dir **rp, const char *dir,
 	repo_dir->path = dir_test;
 	dir_test = NULL;
 
-	repo_dir->name = strdup(repo_dir->path + strlen(srv->repos_path) + 1);
-	if (repo_dir->name == NULL) {
-		error = got_error_from_errno("strdup");
+	error = got_path_basename(&repo_dir->name, repo_dir->path);
+	if (error)
 		goto err;
-	}
 
 	if (srv->respect_exportok &&
 	    faccessat(dirfd(dt), "git-daemon-export-ok", F_OK, 0) == -1) {
