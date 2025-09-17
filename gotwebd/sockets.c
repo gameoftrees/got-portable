@@ -74,9 +74,6 @@ static int	 sockets_create_socket(struct address *);
 static int	 sockets_accept_reserve(int, struct sockaddr *, socklen_t *,
 		    int, volatile int *);
 
-static struct socket *sockets_conf_new_socket(struct gotwebd *,
-		    int, struct address *);
-
 int cgi_inflight = 0;
 
 /* Request hash table needs some spare room to avoid collisions. */
@@ -270,7 +267,7 @@ sockets_parse_sockets(struct gotwebd *env)
 	int sock_id = 1;
 
 	TAILQ_FOREACH(a, &env->addresses, entry) {
-		new_sock = sockets_conf_new_socket(env, sock_id, a);
+		new_sock = sockets_conf_new_socket(sock_id, a);
 		if (new_sock) {
 			sock_id++;
 			TAILQ_INSERT_TAIL(&env->sockets,
@@ -279,8 +276,8 @@ sockets_parse_sockets(struct gotwebd *env)
 	}
 }
 
-static struct socket *
-sockets_conf_new_socket(struct gotwebd *env, int id, struct address *a)
+struct socket *
+sockets_conf_new_socket(int id, struct address *a)
 {
 	struct socket *sock;
 	struct address *acp;
