@@ -68,7 +68,8 @@ static char login_token_secret[32];
 /* checks whether the token's signature matches, i.e. if it looks good. */
 int
 login_check_token(uid_t *euid, char **hostname,
-    const char *token, const char *secret, size_t secret_len)
+    const char *token, const char *secret, size_t secret_len,
+    const char *purpose)
 {
 	time_t	 now;
 	uint64_t issued, expire, uid;
@@ -83,7 +84,7 @@ login_check_token(uid_t *euid, char **hostname,
 	 * a copy of the same secret.
 	 */
 	if (secret_len != sizeof(login_token_secret))
-		fatalx("login token secret length mismatch");
+		fatalx("%s token secret length mismatch", purpose);
 
 	/* xxx check for overflow */
 	len = (strlen(token) / 4) * 3;
@@ -103,13 +104,13 @@ login_check_token(uid_t *euid, char **hostname,
 		len--;
 
 	if (len < 28 + 32) { /* min length assuming empty hostname */
-		log_warnx("login token too short: %d", len);
+		log_warnx("%s token too short: %d", purpose, len);
 		free(data);
 		return -1;
 	}
 
 	if (memcmp(data, "v1", 3) != 0) {
-		log_warnx("unknown login token format version");
+		log_warnx("unknown %s token format version", purpose);
 		free(data);
 		return -1;
 	}
@@ -147,7 +148,7 @@ login_check_token(uid_t *euid, char **hostname,
 
 	now = time(NULL);
 	if (expire < now) {
-		log_warnx("uid %llu: login token has expired\n", uid);
+		log_warnx("uid %llu: %s token has expired\n", uid, purpose);
 		free(data);
 		return -1;
 	}
@@ -180,7 +181,7 @@ login_check_token(uid_t *euid, char **hostname,
 
 char *
 login_gen_token(uint64_t uid, const char *hostname, time_t validity,
-    const char *secret, size_t secret_len)
+    const char *secret, size_t secret_len, const char *purpose)
 {
 	BIO		*bmem, *b64;
 	BUF_MEM		*bufm;
@@ -198,7 +199,7 @@ login_gen_token(uint64_t uid, const char *hostname, time_t validity,
 	 * a copy of the same secret.
 	 */
 	if (secret_len != sizeof(login_token_secret))
-		fatalx("login token secret length mismatch");
+		fatalx("%s token secret length mismatch", purpose);
 
 	now = time(NULL);
 	issued = (uint64_t)now;
@@ -239,7 +240,7 @@ login_gen_token(uint64_t uid, const char *hostname, time_t validity,
 
 	/* Base64 encoder expects a length divisible by 4. */
 	if ((siz % 4) != 0)
-		fatalx("generated token with bad size %zu", siz);
+		fatalx("generated %s token with bad size %zu", purpose, siz);
 
 	if (siz > INT_MAX) {
 		/*
@@ -287,8 +288,10 @@ login_gen_token(uint64_t uid, const char *hostname, time_t validity,
 	free(tok);
 	BIO_free_all(b64);
 
-	if (login_check_token(NULL, NULL, enc, secret, secret_len) == -1)
-		fatalx("generated a token that won't pass validation!");
+	if (login_check_token(NULL, NULL, enc, secret, secret_len,
+	    purpose) == -1)
+		fatalx("generated %s token that won't pass validation",
+		    purpose);
 
 	return enc;
 }
@@ -479,10 +482,22 @@ client_read(struct bufferevent *bev, void *d)
 		cmd += 5;
 		cmd += strspn(cmd, " \t");
 		hostname = cmd;
+		if (hostname[0] == '\0') {
+			struct server *srv;
+
+			/*
+			 * In a multi-server setup we do not want to leak our
+			 * first server's hostname to random people. But if
+			 * we only have a single server, we'll expose it.
+			 */
+			srv = TAILQ_FIRST(&gotwebd_env->servers);
+			if (TAILQ_NEXT(srv, entry) == NULL)
+				hostname = srv->name;
+		}
 
 		code = login_gen_token(client->euid, hostname,
 		    5 * 60 /* 5 minutes */,
-		    login_token_secret, sizeof(login_token_secret));
+		    login_token_secret, sizeof(login_token_secret), "login");
 		if (code == NULL) {
 			log_warn("%s: login_gen_token failed", __func__);
 			client_err(bev, EVBUFFER_READ, client);
@@ -696,6 +711,9 @@ login_dispatch_main(int fd, short event, void *arg)
 			break;
 
 		switch (imsg.hdr.type) {
+		case GOTWEBD_IMSG_CFG_SRV:
+			config_getserver(env, &imsg);
+			break;
 		case GOTWEBD_IMSG_CFG_SOCK:
 			get_login_sock(env, &imsg);
 			break;
@@ -705,7 +723,7 @@ login_dispatch_main(int fd, short event, void *arg)
 		case GOTWEBD_IMSG_LOGIN_SECRET:
 			if (imsg_get_data(&imsg, login_token_secret,
 			    sizeof(login_token_secret)) == -1)
-				fatalx("%s: invalid LOGIN_SECRET msg", __func__);
+				fatalx("invalid LOGIN_SECRET msg");
 			break;
 		default:
 			fatalx("%s: unknown imsg type %d", __func__,

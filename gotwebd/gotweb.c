@@ -66,9 +66,7 @@ static const struct got_error *gotweb_get_clone_url(char **, struct server *,
 
 static void gotweb_free_repo_dir(struct repo_dir *);
 
-struct server *gotweb_get_server(const char *);
-
-static int
+int
 gotweb_reply(struct request *c, int status, const char *ctype,
     struct gotweb_url *location)
 {
@@ -128,7 +126,7 @@ cleanup_request(struct request *c)
 
 	fcgi_cleanup_request(c);
 
-	if (imsg_compose_event(gotwebd_env->iev_sockets, GOTWEBD_IMSG_REQ_ABORT,
+	if (imsg_compose_event(gotwebd_env->iev_auth, GOTWEBD_IMSG_REQ_ABORT,
 	    GOTWEBD_PROC_GOTWEB, -1, -1, &request_id, sizeof(request_id)) == -1)
 		log_warn("imsg_compose_event");
 }
@@ -539,6 +537,28 @@ gotweb_init_transport(struct transport **t)
 	(*t)->fd = -1;
 
 	return error;
+}
+
+struct gotwebd_repo *
+gotweb_get_repository(struct server *server, const char *name)
+{
+	struct gotwebd_repo *repo;
+
+	TAILQ_FOREACH(repo, &server->repos, entry) {
+		if (strncmp(repo->name, name, strlen(repo->name)) != 0)
+			continue;
+	
+		if (strlen(name) == strlen(repo->name))
+			return repo;
+
+		if (strlen(name) != strlen(repo->name) + 4)
+			continue;
+
+		if (strcmp(name + strlen(repo->name), ".git") == 0)
+			return repo;
+	}
+
+	return NULL;
 }
 
 void
@@ -1171,8 +1191,8 @@ gotweb_shutdown(void)
 	imsgbuf_clear(&gotwebd_env->iev_parent->ibuf);
 	free(gotwebd_env->iev_parent);
 
-	imsgbuf_clear(&gotwebd_env->iev_sockets->ibuf);
-	free(gotwebd_env->iev_sockets);
+	imsgbuf_clear(&gotwebd_env->iev_auth->ibuf);
+	free(gotwebd_env->iev_auth);
 
 	while (!TAILQ_EMPTY(&gotwebd_env->servers)) {
 		struct server *srv;
@@ -1225,8 +1245,8 @@ gotweb_launch(struct gotwebd *env)
 	struct server *srv;
 	const struct got_error *error;
 
-	if (env->iev_sockets == NULL)
-		fatal("sockets process not connected");
+	if (env->iev_auth == NULL)
+		fatal("auth process not connected");
 
 #ifndef PROFILE
 	if (pledge("stdio rpath recvfd sendfd proc exec unveil", NULL) == -1)
@@ -1245,7 +1265,7 @@ gotweb_launch(struct gotwebd *env)
 	if (unveil(NULL, NULL) == -1)
 		fatal("unveil");
 
-	event_add(&env->iev_sockets->ev, NULL);
+	event_add(&env->iev_auth->ev, NULL);
 }
 
 static void
@@ -1314,14 +1334,17 @@ gotweb_dispatch_server(int fd, short event, void *arg)
 }
 
 static void
-recv_server_pipe(struct gotwebd *env, struct imsg *imsg)
+recv_auth_pipe(struct gotwebd *env, struct imsg *imsg)
 {
 	struct imsgev *iev;
 	int fd;
 
+	if (env->iev_auth != NULL)
+		fatalx("auth process already connected");
+
 	fd = imsg_get_fd(imsg);
 	if (fd == -1)
-		fatalx("invalid server pipe fd");
+		fatalx("invalid auth pipe fd");
 
 	iev = calloc(1, sizeof(*iev));
 	if (iev == NULL)
@@ -1335,7 +1358,7 @@ recv_server_pipe(struct gotwebd *env, struct imsg *imsg)
 	event_set(&iev->ev, fd, EV_READ, gotweb_dispatch_server, iev);
 	imsg_event_add(iev);
 
-	env->iev_sockets = iev;
+	env->iev_auth = iev;
 }
 
 static void
@@ -1345,6 +1368,8 @@ gotweb_dispatch_main(int fd, short event, void *arg)
 	struct imsgbuf		*ibuf;
 	struct imsg		 imsg;
 	struct gotwebd		*env = gotwebd_env;
+	struct server		*srv;
+	struct gotwebd_repo	*repo;
 	ssize_t			 n;
 	int			 shut = 0;
 
@@ -1368,8 +1393,34 @@ gotweb_dispatch_main(int fd, short event, void *arg)
 			break;
 
 		switch (imsg.hdr.type) {
+		case GOTWEBD_IMSG_CFG_ACCESS_RULE:
+			if (TAILQ_EMPTY(&env->servers)) {
+				/* global access rule */
+				config_get_access_rule(&env->access_rules,
+				    &imsg);
+			} else {
+				srv = TAILQ_LAST(&env->servers, serverlist);
+				if (TAILQ_EMPTY(&srv->repos)) {
+					/* per-server access rule */
+					config_get_access_rule(
+					    &srv->access_rules, &imsg);
+				} else {
+					/* per-repository access rule */
+					repo = TAILQ_LAST(&srv->repos,
+					    gotwebd_repolist);
+					config_get_access_rule(
+					    &repo->access_rules, &imsg);
+				}
+			}
+			break;
 		case GOTWEBD_IMSG_CFG_SRV:
 			config_getserver(env, &imsg);
+			break;
+		case GOTWEBD_IMSG_CFG_REPO:
+			if (TAILQ_EMPTY(&env->servers))
+				fatalx("%s: unexpected CFG_REPO msg", __func__);
+			srv = TAILQ_LAST(&env->servers, serverlist);
+			config_get_repository(&srv->repos, &imsg);
 			break;
 		case GOTWEBD_IMSG_CFG_FD:
 			config_getfd(env, &imsg);
@@ -1381,7 +1432,17 @@ gotweb_dispatch_main(int fd, short event, void *arg)
 			config_getcfg(env, &imsg);
 			break;
 		case GOTWEBD_IMSG_CTL_PIPE:
-			recv_server_pipe(env, &imsg);
+			recv_auth_pipe(env, &imsg);
+			break;
+		case GOTWEBD_IMSG_AUTH_CONF:
+			if (imsg_get_data(&imsg, &env->auth_config,
+			    sizeof(env->auth_config)) == -1)
+				fatalx("%s: invalid AUTH_CONF msg", __func__);
+			break;
+		case GOTWEBD_IMSG_WWW_UID:
+			if (imsg_get_data(&imsg, &env->www_uid,
+			    sizeof(env->www_uid)) == -1)
+				fatalx("%s: invalid WWW_UID msg", __func__);
 			break;
 		case GOTWEBD_IMSG_CTL_START:
 			gotweb_launch(env);

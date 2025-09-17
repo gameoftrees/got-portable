@@ -56,6 +56,7 @@ config_init(struct gotwebd *env)
 	TAILQ_INIT(&env->servers);
 	TAILQ_INIT(&env->sockets);
 	TAILQ_INIT(&env->addresses);
+	STAILQ_INIT(&env->access_rules);
 
 	for (i = 0; i < PRIV_FDS__MAX; i++)
 		env->priv_fd[i] = -1;
@@ -89,6 +90,8 @@ config_getserver(struct gotwebd *env, struct imsg *imsg)
 		fatalx("%s: wrong size", __func__);
 
 	memcpy(srv, p, sizeof(*srv));
+	STAILQ_INIT(&srv->access_rules);
+	TAILQ_INIT(&srv->repos);
 
 	/* log server info */
 	log_debug("%s: server=%s", __func__, srv->name);
@@ -208,4 +211,96 @@ config_getfd(struct gotwebd *env, struct imsg *imsg)
 	}
 
 	return 1;
+}
+
+void
+config_set_access_rules(struct imsgev *iev,
+    struct gotwebd_access_rule_list *rules)
+{
+	struct gotwebd_access_rule *rule;
+
+	STAILQ_FOREACH(rule, rules, entry) {
+		if (imsg_compose_event(iev, GOTWEBD_IMSG_CFG_ACCESS_RULE,
+		    0, -1, -1, rule, sizeof(*rule)) == -1)
+			fatal("imsg_compose_event "
+			    "GOTWEBD_IMSG_CFG_ACCESS_RULE");
+	}
+}
+
+void
+config_get_access_rule(struct gotwebd_access_rule_list *rules,
+    struct imsg *imsg)
+{
+	struct gotwebd_access_rule *rule;
+	size_t len;
+
+	rule = calloc(1, sizeof(*rule));
+	if (rule == NULL)
+		fatal("malloc");
+
+	if (imsg_get_data(imsg, rule, sizeof(*rule)))
+		fatalx("%s: invalid CFG_ACCESS_RULE message", __func__);
+	
+	switch (rule->access) {
+	case GOTWEBD_ACCESS_DENIED:
+	case GOTWEBD_ACCESS_PERMITTED:
+		break;
+	default:
+		fatalx("%s: invalid CFG_ACCESS_RULE message", __func__);
+	}
+
+	len = strnlen(rule->identifier, sizeof(rule->identifier));
+	if (len == 0 || len >= sizeof(rule->identifier))
+		fatalx("%s: invalid CFG_ACCESS_RULE message", __func__);
+
+	STAILQ_INSERT_TAIL(rules, rule, entry);
+}
+
+void
+config_set_repository(struct imsgev *iev, struct gotwebd_repo *repo)
+{
+	if (imsg_compose_event(iev,
+	    GOTWEBD_IMSG_CFG_REPO, 0, -1, -1, repo, sizeof(*repo)) == -1)
+		fatal("imsg_compose_event GOTWEBD_IMSG_CFG_REPO");
+}
+
+void
+config_get_repository(struct gotwebd_repolist *repos, struct imsg *imsg)
+{
+	struct gotwebd_repo *repo;
+	size_t len;
+
+	repo = calloc(1, sizeof(*repo));
+	if (repo == NULL)
+		fatal("malloc");
+
+	if (imsg_get_data(imsg, repo, sizeof(*repo)))
+		fatalx("%s: invalid CFG_REPO message", __func__);
+	
+	switch (repo->auth_config) {
+	case GOTWEBD_AUTH_DISABLED:
+	case GOTWEBD_AUTH_SECURE:
+	case GOTWEBD_AUTH_INSECURE:
+		break;
+	default:
+		fatalx("%s: invalid CFG_REPO message", __func__);
+	}
+
+	len = strnlen(repo->name, sizeof(repo->name));
+	if (len == 0 || len >= sizeof(repo->name))
+		fatalx("%s: invalid CFG_REPO message", __func__);
+
+	if (strchr(repo->name, '/') != NULL) {
+		fatalx("repository names must not contain slashes: %s",
+		    repo->name);
+	}
+
+	if (strchr(repo->name, '\n') != NULL) {
+		fatalx("repository names must not contain linefeeds: %s",
+		    repo->name);
+	}
+
+	STAILQ_INIT(&repo->access_rules);
+
+	TAILQ_INSERT_TAIL(repos, repo, entry);
 }

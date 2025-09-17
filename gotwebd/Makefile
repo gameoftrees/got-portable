@@ -5,7 +5,7 @@
 .include "Makefile.inc"
 
 PROG =		gotwebd
-SRCS =		config.c sockets.c login.c gotwebd.c parse.y \
+SRCS =		config.c sockets.c auth.c login.c gotwebd.c parse.y \
 		fcgi.c gotweb.c got_operations.c tmpl.c pages.c
 SRCS +=		blame.c commit_graph.c delta.c diff.c \
 		diffreg.c error.c object.c object_cache.c \
