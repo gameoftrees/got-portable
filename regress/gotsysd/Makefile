@@ -1,6 +1,6 @@
 .include "../../got-version.mk"
 
-REGRESS_TARGETS=test_gotsysd
+REGRESS_TARGETS=test_gotsysd test_gotwebd
 
 REGRESS_SETUP_ONCE=setup_test_vm
 REGRESS_CLEANUP=stop_test_vm
@@ -220,8 +220,27 @@ $(HTTPD_CONF):
 	@${UNPRIV} 'echo } >> $@'
 
 $(GOTWEBD_CONF):
-	@${UNPRIV} 'echo server "VMIP" { > $@'
+	@${UNPRIV} 'echo prefork 1 > $@'
+	@${UNPRIV} 'echo enable authentication insecure >> $@'
+	@${UNPRIV} 'echo permit ${GOTSYSD_TEST_USER} >> $@'
+	@${UNPRIV} 'echo deny ${GOTSYSD_DEV_USER} >> $@'
+	@${UNPRIV} 'echo server \"VMIP\" { >> $@'
 	@${UNPRIV} 'echo \ \ repos_path \"/git\" >> $@'
+	@${UNPRIV} 'echo \ \ show_repo_age off >> $@'
+	@${UNPRIV} 'echo \ \ show_repo_description off >> $@'
+	@${UNPRIV} 'echo \ \ show_repo_owner off >> $@'
+	@${UNPRIV} 'echo \ \ show_site_owner off >> $@'
+	@${UNPRIV} 'echo \ \ repository \"public\" { >> $@'
+	@${UNPRIV} 'echo \ \ \ \ disable authentication >> $@'
+	@${UNPRIV} 'echo \ \ } >> $@'
+	@${UNPRIV} 'echo \ \ repository \"gotdev\" { >> $@'
+	@${UNPRIV} 'echo \ \ \ \ permit ${GOTSYSD_DEV_USER} >> $@'
+	@${UNPRIV} 'echo \ \ \ \ deny ${GOTSYSD_TEST_USER} >> $@'
+	@${UNPRIV} 'echo \ \ } >> $@'
+	@${UNPRIV} 'echo \ \ repository \"gottest\" { >> $@'
+	@${UNPRIV} 'echo \ \ \ \ permit ${GOTSYSD_TEST_USER} >> $@'
+	@${UNPRIV} 'echo \ \ \ \ deny ${GOTSYSD_DEV_USER} >> $@'
+	@${UNPRIV} 'echo \ \ } >> $@'
 	@${UNPRIV} 'echo } >> $@'
 
 build_got:
@@ -313,5 +332,29 @@ test_gotsysd:
 	GWIP="100.64.$$VMID.2"; \
 	${UNPRIV} "env ${GOTSYSD_TEST_ENV} VMIP=$${VMIP} GWIP=$${GWIP} \
 		sh ./test_gotsysd.sh"
+test_gotwebd: 
+	@set -e; \
+	VMID=`vmctl status ${GOTSYSD_VM_NAME} | tail -n1 | \
+		awk '{print $$1}'`; \
+	VMIP="100.64.$$VMID.3"; \
+	GWIP="100.64.$$VMID.2"; \
+	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
+		'rm -rf /git/gotsys.git /git/foo.git /tmp/gotsys'"; \
+	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
+		got init /git/${GOTSYS_REPO}"; \
+	${UNPRIV} "${GOTSYSD_SCP_CMD} \
+		${GOT_CONF} root@$${VMIP}:/git/${GOTSYS_REPO}/got.conf"; \
+	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} mkdir /tmp/gotsys "; \
+	${UNPRIV} "${GOTSYSD_SCP_CMD} \
+		${GOTSYS_CONF} root@$${VMIP}:/tmp/gotsys/"; \
+	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
+		got import -m init -r /git/${GOTSYS_REPO} \
+		/tmp/gotsys >/dev/null"; \
+	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
+		chown -R _gotd:_gotd /git"; \
+	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
+		gotsys apply -w > /dev/null"; \
+	${UNPRIV} "env ${GOTSYSD_TEST_ENV} VMIP=$${VMIP} GWIP=$${GWIP} \
+		sh ./test_gotwebd.sh"
 
 .include <bsd.regress.mk>
