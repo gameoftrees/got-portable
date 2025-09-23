@@ -452,7 +452,8 @@ spawn_process(struct gotwebd *env, const char *argv0, struct imsgev *iev,
 	int		 p[2];
 	pid_t		 pid;
 
-	if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, p) == -1)
+	if (socketpair(AF_UNIX,
+	    SOCK_STREAM | SOCK_CLOEXEC| SOCK_NONBLOCK, PF_UNSPEC, p) == -1)
 		fatal("socketpair");
 
 	switch (pid = fork()) {
@@ -826,7 +827,8 @@ connect_children(struct gotwebd *env)
 	int pipe[2];
 	int i;
 
-	if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, pipe) == -1)
+	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
+	    PF_UNSPEC, pipe) == -1)
 		fatal("socketpair");
 
 	if (main_compose_sockets(env, GOTWEBD_IMSG_CTL_PIPE, pipe[0], NULL, 0))
@@ -839,7 +841,9 @@ connect_children(struct gotwebd *env)
 		iev_gotweb = &env->iev_gotweb[i];
 		iev_auth = &env->iev_auth[i];
 
-		if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, pipe) == -1)
+		if (socketpair(AF_UNIX,
+		    SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
+		    PF_UNSPEC, pipe) == -1)
 			fatal("socketpair");
 
 		if (main_compose_sockets(env, GOTWEBD_IMSG_CTL_PIPE,
@@ -850,7 +854,9 @@ connect_children(struct gotwebd *env)
 		    pipe[1], NULL, 0))
 			fatal("send_imsg");
 
-		if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, pipe) == -1)
+		if (socketpair(AF_UNIX,
+		    SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
+		    PF_UNSPEC, pipe) == -1)
 			fatal("socketpair");
 
 		if (send_imsg(iev_auth, GOTWEBD_IMSG_CTL_PIPE,
