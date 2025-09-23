@@ -456,7 +456,7 @@ spawn_process(struct gotwebd *env, const char *argv0, struct imsgev *iev,
 	pid_t		 pid;
 
 	if (socketpair(AF_UNIX,
-	    SOCK_STREAM | SOCK_CLOEXEC| SOCK_NONBLOCK, PF_UNSPEC, p) == -1)
+	    SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, PF_UNSPEC, p) == -1)
 		fatal("socketpair");
 
 	switch (pid = fork()) {
