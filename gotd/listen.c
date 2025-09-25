@@ -303,6 +303,10 @@ gotd_accept(int fd, short event, void *arg)
 			return;
 		default:
 			log_warn("accept");
+
+			/* Prevent endless looping on errors. */
+			event_del(&iev->ev);
+			event_loopexit(NULL);
 			return;
 		}
 	}
