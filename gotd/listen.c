@@ -256,12 +256,6 @@ accept_reserve(int fd, struct sockaddr *addr, socklen_t *addrlen,
 }
 
 static void
-gotd_accept_paused(int fd, short event, void *arg)
-{
-	event_add(&gotd_listen.iev.ev, NULL);
-}
-
-static void
 gotd_accept(int fd, short event, void *arg)
 {
 	struct gotd_imsgev *iev = arg;
@@ -475,7 +469,7 @@ start_listening(void)
 	    gotd_accept, iev);
 	if (event_add(&iev->ev, NULL))
 		fatalx("event add");
-	evtimer_set(&gotd_listen.pause_ev, gotd_accept_paused, NULL);
+	evtimer_set(&gotd_listen.pause_ev, gotd_accept, NULL);
 
 	log_debug("listening for client connections");
 }
