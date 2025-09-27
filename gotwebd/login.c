@@ -302,8 +302,12 @@ login_socket_listen(struct gotwebd *env, struct socket *sock,
 {
 	int u_fd = -1;
 	mode_t old_umask, mode;
+	int sock_flags = SOCK_STREAM | SOCK_NONBLOCK;
 
-	u_fd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK| SOCK_CLOEXEC, 0);
+#ifdef SOCK_CLOEXEC
+	sock_flags |= SOCK_CLOEXEC;
+#endif
+	u_fd = socket(AF_UNIX, sock_flags, 0);
 	if (u_fd == -1) {
 		log_warn("%s: socket", __func__);
 		return -1;
@@ -424,8 +428,13 @@ accept_reserve(int fd, struct sockaddr *addr, socklen_t *addrlen,
 		return -1;
 	}
 
-	if ((ret = accept4(fd, addr, addrlen,
-	    SOCK_NONBLOCK | SOCK_CLOEXEC)) > -1) {
+/* TA:  This needs fixing upstream. */
+#ifdef __APPLE__
+	ret = accept(fd, addr, addrlen);
+#else
+	ret = accept4(fd, addr, addrlen, SOCK_NONBLOCK | SOCK_CLOEXEC);
+#endif
+	if (ret > -1) {
 		(*counter)++;
 	}
 

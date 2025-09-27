@@ -83,7 +83,7 @@ man5_MANS = gotwebd.conf.5
 man8_MANS = gotwebd.8
 
 LDADD = -L$(top_builddir)/compat -L$(top_builddir)/template \
-	-lopenbsd-compat -lm
+	-lopenbsd-compat -lm 
 LDADD += $(libbsd_LIBS) \
 	 $(libcrypto_LIBS) \
 	 $(libevent_LIBS) \

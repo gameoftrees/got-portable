@@ -451,9 +451,14 @@ spawn_process(struct gotwebd *env, const char *argv0, struct imsgev *iev,
 	int		 argc = 0;
 	int		 p[2];
 	pid_t		 pid;
+	int		 sock_flags = SOCK_STREAM | SOCK_NONBLOCK;
+
+#ifdef SOCK_CLOEXEC
+	sock_flags |= SOCK_CLOEXEC;
+#endif
 
 	if (socketpair(AF_UNIX,
-	    SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, PF_UNSPEC, p) == -1)
+	    sock_flags, PF_UNSPEC, p) == -1)
 		fatal("socketpair");
 
 	switch (pid = fork()) {
@@ -826,8 +831,13 @@ connect_children(struct gotwebd *env)
 	struct imsgev *iev_gotweb, *iev_auth;
 	int pipe[2];
 	int i;
+	int		 sock_flags = SOCK_STREAM | SOCK_NONBLOCK;
 
-	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
+#ifdef SOCK_CLOEXEC
+	sock_flags |= SOCK_CLOEXEC;
+#endif
+
+	if (socketpair(AF_UNIX, sock_flags,
 	    PF_UNSPEC, pipe) == -1)
 		fatal("socketpair");
 
@@ -842,7 +852,7 @@ connect_children(struct gotwebd *env)
 		iev_auth = &env->iev_auth[i];
 
 		if (socketpair(AF_UNIX,
-		    SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
+		    SOCK_STREAM | sock_flags,
 		    PF_UNSPEC, pipe) == -1)
 			fatal("socketpair");
 
@@ -855,7 +865,7 @@ connect_children(struct gotwebd *env)
 			fatal("send_imsg");
 
 		if (socketpair(AF_UNIX,
-		    SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
+		    SOCK_STREAM | sock_flags,
 		    PF_UNSPEC, pipe) == -1)
 			fatal("socketpair");
 
@@ -981,7 +991,13 @@ gotwebd_configure(struct gotwebd *env, uid_t uid, gid_t gid)
 	    secret, sizeof(secret)) == -1)
 		fatal("main_compose_auth GOTWEB_IMSG_AUTH_SECRET");
 
+#ifdef __APPLE__
+	memset_s(secret, sizeof(*secret), 0, sizeof(*secret));
+#elif defined(__NetBSD__)
+	explicit_memset(secret, sizeof(*secret), 0);
+#else 
 	explicit_bzero(secret, sizeof(secret));
+#endif
 
 	if (login_privinit(env, uid, gid) == -1)
 		fatalx("cannot open authentication socket");
