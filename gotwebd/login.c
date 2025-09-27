@@ -15,14 +15,14 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include "got_compat.h"
+
 #include <sys/queue.h>
 #include <sys/stat.h>
 
 #include <errno.h>
 #include <event.h>
 #include <imsg.h>
-#include <sha1.h>
-#include <sha2.h>
 #include <signal.h>
 #include <siphash.h>
 #include <stdio.h>
