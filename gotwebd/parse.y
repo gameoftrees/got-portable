@@ -120,7 +120,7 @@ typedef struct {
 
 %}
 
-%token	LISTEN LOGIN WWW SITE_NAME SITE_OWNER SITE_LINK LOGO
+%token	LISTEN GOTWEBD_LOGIN WWW SITE_NAME SITE_OWNER SITE_LINK LOGO
 %token	LOGO_URL SHOW_REPO_OWNER SHOW_REPO_AGE SHOW_REPO_DESCRIPTION
 %token	MAX_REPOS_DISPLAY REPOS_PATH MAX_COMMITS_DISPLAY ON ERROR
 %token	SHOW_SITE_OWNER SHOW_REPO_CLONEURL PORT PREFORK RESPECT_EXPORTOK
@@ -311,7 +311,7 @@ main		: PREFORK NUMBER {
 			conf_new_access_rule(&gotwebd->access_rules,
 			    GOTWEBD_ACCESS_DENIED, $2);
 		}
-		| LOGIN SOCKET STRING {
+		| GOTWEBD_LOGIN SOCKET STRING {
 			struct address *h;
 			h = get_unix_addr($3);
 			if (h == NULL) {
@@ -629,7 +629,7 @@ lookup(char *s)
 		{ "enable",			ENABLE },
 		{ "insecure",			INSECURE },
 		{ "listen",			LISTEN },
-		{ "login",			LOGIN },
+		{ "login",			GOTWEBD_LOGIN },
 		{ "logo",			LOGO },
 		{ "logo_url",			LOGO_URL },
 		{ "max_commits_display",	MAX_COMMITS_DISPLAY },
