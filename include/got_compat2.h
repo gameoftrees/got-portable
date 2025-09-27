@@ -412,3 +412,8 @@ int	BSDgetopt(int, char *const *, const char *);
 int mergesort(void *, size_t, size_t, int (*)(const void *, const void *));
 #endif
 #endif
+
+/* got_object.h */
+#define GOT_OBJECT_ID_MAXLEN SHA256_DIGEST_LENGTH
+#define GOT_OBJECT_ID_HEX_MAXLEN SHA256_DIGEST_STRING_LENGTH
+

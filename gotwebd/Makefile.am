@@ -63,10 +63,12 @@ gotwebd_SOURCES = config.c \
 		  $(top_srcdir)/lib/worktree.c \
 		  $(top_srcdir)/lib/worktree_open.c \
 		  $(top_srcdir)/template/tmpl.c \
+		  auth.c \
 		  fcgi.c \
 		  got_operations.c \
 		  gotweb.c \
 		  gotwebd.c \
+		  login.c \
 		  pages.c \
 		  parse.y \
 		  sockets.c
@@ -83,6 +85,7 @@ man8_MANS = gotwebd.8
 LDADD = -L$(top_builddir)/compat -L$(top_builddir)/template \
 	-lopenbsd-compat -lm
 LDADD += $(libbsd_LIBS) \
+	 $(libcrypto_LIBS) \
 	 $(libevent_LIBS) \
 	 $(zlib_LIBS) \
 	 $(libuuid_LIBS) \
@@ -92,8 +95,12 @@ if HOST_FREEBSD
 LDADD += -lmd
 endif
 
-AM_CPPFLAGS += $(libbsd_CFLAGS) $(libevent_CFLAGS) $(zlib_CFLAGS) \
-	       $(libuuid_CFLAGS) $(libmd_CFLAGS)
+AM_CPPFLAGS += $(libbsd_CFLAGS) \
+	       $(libcrypto_CFLAGS) \
+	       $(libevent_CFLAGS) \
+	       $(zlib_CFLAGS) \
+	       $(libuuid_CFLAGS) \
+	       $(libmd_CFLAGS)
 
 #realinstall:
 #	if [ ! -d ${DESTDIR}${PUB_REPOS_DIR}/. ]; then \
