@@ -6,6 +6,13 @@ other than OpenBSD.
 
 All changes are on top of the versioned changes listed in CHANGES.
 
+# got-portable 0.119 (2025-09-29)
+
+* Changes from got-0.119
+
+  This -portable release now tracks the same auth methods in gotwebd, as
+  got.got does.
+
 # got-portable 0.118.1 (2025-09-10)
 
   This a -portable maintenance/bug-fix release:

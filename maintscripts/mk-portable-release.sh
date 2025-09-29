@@ -35,9 +35,6 @@ nproc()
 	[ -z "$(git status --porcelain)" ] || [ "$1" != "--force" ]
 } && die "Working tree is not clean"
 
-git checkout -q "$PORTABLE_BRANCH"
-git pull -q
-
 source util/got-portable-ver.sh >/dev/null || die "Couldn't source file"
 
 echo "Checking status of GOT_RELEASE..."
