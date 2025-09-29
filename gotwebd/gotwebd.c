@@ -445,17 +445,21 @@ gotwebd_sighdlr(int sig, short event, void *arg)
 static void
 spawn_process(struct gotwebd *env, const char *argv0, struct imsgev *iev,
     enum gotwebd_proc_type proc_type, const char *username,
-    void (*handler)(int, short, void *))
+    const char *www_user, void (*handler)(int, short, void *))
 {
 	const char	*argv[10];
 	int		 argc = 0;
 	int		 p[2];
 	pid_t		 pid;
-	int		 sock_flags = SOCK_STREAM | SOCK_NONBLOCK;
+	char		 usernames[_PW_NAME_LEN * 2 + 1 + 1];
+	int		 ret;
 
-#ifdef SOCK_CLOEXEC
-	sock_flags |= SOCK_CLOEXEC;
-#endif
+	ret = snprintf(usernames, sizeof(usernames), "%s:%s",
+	    username, www_user);
+	if (ret == -1)
+		fatal("snprintf");
+	if ((size_t)ret >= sizeof(usernames))
+		fatalx("usernames too long");
 
 	if (socketpair(AF_UNIX,
 	    sock_flags, PF_UNSPEC, p) == -1)
@@ -485,22 +489,22 @@ spawn_process(struct gotwebd *env, const char *argv0, struct imsgev *iev,
 		char *s;
 
 		argv[argc++] = "-S";
-		argv[argc++] = username;
+		argv[argc++] = usernames;
 		if (asprintf(&s, "-S%d", env->prefork) == -1)
 			fatal("asprintf");
 		argv[argc++] = s;
 	} else if (proc_type == GOTWEBD_PROC_LOGIN) {
 		argv[argc++] = "-L";
-		argv[argc++] = username;
+		argv[argc++] = usernames;
 	} else if (proc_type == GOTWEBD_PROC_FCGI) {
 		argv[argc++] = "-F";
-		argv[argc++] = username;
+		argv[argc++] = usernames;
 	} else if (proc_type == GOTWEBD_PROC_AUTH) {
 		argv[argc++] = "-A";
-		argv[argc++] = username;
+		argv[argc++] = usernames;
 	} else if (proc_type == GOTWEBD_PROC_GOTWEB) {
 		argv[argc++] = "-G";
-		argv[argc++] = username;
+		argv[argc++] = usernames;
 	}
 	if (strcmp(env->gotwebd_conffile, GOTWEBD_CONF) != 0) {
 		argv[argc++] = "-f";
@@ -531,6 +535,26 @@ usage(void)
 	fprintf(stderr, "usage: %s [-dnv] [-D macro=value] [-f file]\n",
 	    getprogname());
 	exit(1);
+}
+
+static void
+get_usernames(const char **gotwebd_username, const char **www_username,
+    char *optarg)
+{
+	static char usernames[_PW_NAME_LEN * 2 + 1 + 1];
+	char *colon;
+
+	if (strlcpy(usernames, optarg, sizeof(usernames)) >=
+	    sizeof(usernames))
+		fatalx("usernames too long");
+
+	colon = strchr(usernames, ':');
+	if (colon == NULL)
+		fatalx("bad username option parameter");
+	*colon = '\0';
+
+	*gotwebd_username = &usernames[0];
+	*www_username = colon + 1;
 }
 
 int
@@ -565,7 +589,7 @@ main(int argc, char **argv)
 		switch (ch) {
 		case 'A':
 			proc_type = GOTWEBD_PROC_AUTH;
-			gotwebd_username = optarg;
+			get_usernames(&gotwebd_username, &www_username, optarg);
 			break;
 		case 'D':
 			if (cmdline_symset(optarg) < 0)
@@ -577,18 +601,18 @@ main(int argc, char **argv)
 			break;
 		case 'G':
 			proc_type = GOTWEBD_PROC_GOTWEB;
-			gotwebd_username = optarg;
+			get_usernames(&gotwebd_username, &www_username, optarg);
 			break;
 		case 'f':
 			conffile = optarg;
 			break;
 		case 'F':
 			proc_type = GOTWEBD_PROC_FCGI;
-			gotwebd_username = optarg;
+			get_usernames(&gotwebd_username, &www_username, optarg);
 			break;
 		case 'L':
 			proc_type = GOTWEBD_PROC_LOGIN;
-			gotwebd_username = optarg;
+			get_usernames(&gotwebd_username, &www_username, optarg);
 			break;
 		case 'n':
 			no_action = 1;
@@ -596,9 +620,10 @@ main(int argc, char **argv)
 		case 'S':
 			proc_type = GOTWEBD_PROC_SOCKETS;
 			i = strtonum(optarg, 1, INT_MAX, &errstr);
-			if (errstr)
-				gotwebd_username = optarg;
-			else
+			if (errstr) {
+				get_usernames(&gotwebd_username,
+				    &www_username, optarg);
+			} else
 				env->prefork = i;
 			break;
 		case 'v':
@@ -641,13 +666,13 @@ main(int argc, char **argv)
 
 	pw = getpwnam(www_username);
 	if (pw == NULL)
-		fatalx("unknown user %s", www_username);
+		fatalx("%d unknown user %s", proc_type, www_username);
 	env->www_uid = pw->pw_uid;
 	www_gid = pw->pw_gid;
 
 	pw = getpwnam(gotwebd_username);
 	if (pw == NULL)
-		fatalx("unknown user %s", gotwebd_username);
+		fatalx("%d unknown user %s", proc_type, gotwebd_username);
 	if (getgrouplist(gotwebd_username, pw->pw_gid, gotwebd_groups,
 	    &gotwebd_ngroups) == -1)
 		fatalx("too many groups for user %s", gotwebd_username);
@@ -755,22 +780,22 @@ main(int argc, char **argv)
 		fatal("calloc");
 
 	spawn_process(env, argv0, env->iev_sockets,
-	    GOTWEBD_PROC_SOCKETS, gotwebd_username,
+	    GOTWEBD_PROC_SOCKETS, gotwebd_username, www_username,
 	    gotwebd_dispatch_server);
 
 	spawn_process(env, argv0, env->iev_login, GOTWEBD_PROC_LOGIN,
-	    gotwebd_username, gotwebd_dispatch_login);
+	    gotwebd_username, www_username, gotwebd_dispatch_login);
 
 	spawn_process(env, argv0, env->iev_fcgi,
-	    GOTWEBD_PROC_FCGI, gotwebd_username,
+	    GOTWEBD_PROC_FCGI, gotwebd_username, www_username,
 	    gotwebd_dispatch_fcgi);
 
 	for (i = 0; i < env->prefork; ++i) {
 		spawn_process(env, argv0, &env->iev_auth[i],
-		    GOTWEBD_PROC_AUTH, gotwebd_username,
+		    GOTWEBD_PROC_AUTH, gotwebd_username, www_username,
 		    gotwebd_dispatch_auth);
 		spawn_process(env, argv0, &env->iev_gotweb[i],
-		    GOTWEBD_PROC_GOTWEB, gotwebd_username,
+		    GOTWEBD_PROC_GOTWEB, gotwebd_username, www_username,
 		    gotwebd_dispatch_gotweb);
 	}
 
