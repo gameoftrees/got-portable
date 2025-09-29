@@ -453,6 +453,11 @@ spawn_process(struct gotwebd *env, const char *argv0, struct imsgev *iev,
 	pid_t		 pid;
 	char		 usernames[_PW_NAME_LEN * 2 + 1 + 1];
 	int		 ret;
+	int		 sock_flags = SOCK_STREAM | SOCK_NONBLOCK;
+
+#ifdef SOCK_CLOEXEC
+	sock_flags |= SOCK_CLOEXEC;
+#endif
 
 	ret = snprintf(usernames, sizeof(usernames), "%s:%s",
 	    username, www_user);
