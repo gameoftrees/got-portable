@@ -54,6 +54,28 @@ auth_shutdown(void)
 	free(env->iev_parent);
 	free(env->iev_sockets);
 	free(env->iev_gotweb);
+
+	config_free_access_rules(&gotwebd_env->access_rules);
+
+	while (!TAILQ_EMPTY(&gotwebd_env->servers)) {
+		struct server *srv;
+
+		srv = TAILQ_FIRST(&gotwebd_env->servers);
+		TAILQ_REMOVE(&gotwebd_env->servers, srv, entry);
+
+		config_free_access_rules(&srv->access_rules);
+		config_free_repos(&srv->repos);
+		free(srv);
+	}
+
+	while (!TAILQ_EMPTY(&gotwebd_env->sockets)) {
+		struct socket *sock;
+
+		sock = TAILQ_FIRST(&gotwebd_env->sockets);
+		TAILQ_REMOVE(&gotwebd_env->sockets, sock, entry);
+		free(sock);
+	}
+
 	free(env);
 
 	exit(0);

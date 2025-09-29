@@ -257,6 +257,31 @@ config_get_access_rule(struct gotwebd_access_rule_list *rules,
 }
 
 void
+config_free_access_rules(struct gotwebd_access_rule_list *rules)
+{
+	struct gotwebd_access_rule *rule;
+
+	while (!STAILQ_EMPTY(rules)) {
+		rule = STAILQ_FIRST(rules);
+		STAILQ_REMOVE(rules, rule, gotwebd_access_rule, entry);
+		free(rule);
+	}
+}
+
+void
+config_free_repos(struct gotwebd_repolist *repos)
+{
+	struct gotwebd_repo *repo;
+
+	while (!TAILQ_EMPTY(repos)) {
+		repo = TAILQ_FIRST(repos);
+		TAILQ_REMOVE(repos, repo, entry);
+		config_free_access_rules(&repo->access_rules);
+		free(repo);
+	}
+}
+
+void
 config_set_repository(struct imsgev *iev, struct gotwebd_repo *repo)
 {
 	if (imsg_compose_event(iev,

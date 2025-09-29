@@ -1270,11 +1270,16 @@ gotweb_shutdown(void)
 	imsgbuf_clear(&gotwebd_env->iev_auth->ibuf);
 	free(gotwebd_env->iev_auth);
 
+	config_free_access_rules(&gotwebd_env->access_rules);
+
 	while (!TAILQ_EMPTY(&gotwebd_env->servers)) {
 		struct server *srv;
 
 		srv = TAILQ_FIRST(&gotwebd_env->servers);
 		TAILQ_REMOVE(&gotwebd_env->servers, srv, entry);
+
+		config_free_access_rules(&srv->access_rules);
+		config_free_repos(&srv->repos);
 		free(srv);
 	}
 
@@ -1284,6 +1289,14 @@ gotweb_shutdown(void)
 		sock = TAILQ_FIRST(&gotwebd_env->sockets);
 		TAILQ_REMOVE(&gotwebd_env->sockets, sock, entry);
 		free(sock);
+	}
+
+	while (!TAILQ_EMPTY(&gotwebd_env->addresses)) {
+		struct address *h;
+
+		h = TAILQ_FIRST(&gotwebd_env->addresses);
+		TAILQ_REMOVE(&gotwebd_env->addresses, h, entry);
+		free(h);
 	}
 
 	free(gotwebd_env);

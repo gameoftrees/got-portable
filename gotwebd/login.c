@@ -382,6 +382,26 @@ login_shutdown(void)
 		imsgbuf_clear(&env->iev_gotsh->ibuf);
 		free(env->iev_gotsh);
 	}
+
+	config_free_access_rules(&env->access_rules);
+
+	while (!TAILQ_EMPTY(&gotwebd_env->sockets)) {
+		struct socket *sock;
+
+		sock = TAILQ_FIRST(&gotwebd_env->sockets);
+		TAILQ_REMOVE(&gotwebd_env->sockets, sock, entry);
+		free(sock);
+	}
+	while (!TAILQ_EMPTY(&gotwebd_env->servers)) {
+		struct server *srv;
+
+		srv = TAILQ_FIRST(&gotwebd_env->servers);
+		TAILQ_REMOVE(&gotwebd_env->servers, srv, entry);
+
+		config_free_access_rules(&srv->access_rules);
+		config_free_repos(&srv->repos);
+		free(srv);
+	}
 	free(env);
 
 	exit(0);
