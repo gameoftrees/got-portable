@@ -690,9 +690,9 @@ auth_dispatch_sockets(int fd, short event, void *arg)
 					    c->request_id);
 				}
 				fcgi_create_end_record(c);
-				fcgi_cleanup_request(c);
 				abort_request(request_id);
 			}
+			fcgi_cleanup_request(c);
 			break;
 		default:
 			fatalx("%s: unknown imsg type %d", __func__,
