@@ -158,9 +158,21 @@ main		: LISTEN ON STRING {
 				    "must be an absolute path", $3);
 
 			if (realpath($3, gotsysd->unix_socket_path) == NULL) {
-				yyerror("realpath %s: %s", $3, strerror(errno));
-				free($3);
-				YYERROR;
+				if (errno != ENOENT && errno != EACCES) {
+					yyerror("realpath %s: %s", $3,
+					    strerror(errno));
+					free($3);
+					YYERROR;
+				}
+
+				if (strlcpy(gotsysd->unix_socket_path, $3,
+				    sizeof(gotsysd->unix_socket_path)) >=
+				    sizeof(gotsysd->unix_socket_path)) {
+					yyerror("unix socket path too long: %s",
+					    $3);
+					free($3);
+					YYERROR;
+				}
 			}
 			free($3);
 		}

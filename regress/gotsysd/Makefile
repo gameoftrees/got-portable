@@ -29,6 +29,7 @@ GOTD_CONF=gotd.conf
 GOTD_UID=501	# /usr/ports/infrastructure/db/user.list
 GOTD_USER=_gotd
 GOTSYSD_CONF=gotsysd.conf
+GOTSYSD_UNIX_SOCKET=/var/run/gotsysd.sock
 GOTSYSD_UID=600	# /usr/ports/infrastructure/db/user.list
 GOTSYS_CONF=gotsys.conf
 GOT_CONF=got.conf
@@ -195,6 +196,7 @@ ${GOTD_CONF}:
 ${GOTSYSD_CONF}:
 	@${UNPRIV} "echo permit root > $@"
 	@${UNPRIV} "echo permit _gotd >> $@"
+	@${UNPRIV} "echo listen on \\'${GOTSYSD_UNIX_SOCKET}\\' >> $@"
 
 ${GOTSYS_CONF}: ${GOTSYSD_SSH_PUBKEY}
 	@${UNPRIV} "echo user ${GOTSYSD_TEST_USER} { >> $@"
