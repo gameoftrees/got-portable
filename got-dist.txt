@@ -142,6 +142,7 @@
 /gotwebd
 /gotwebd/Makefile
 /gotwebd/Makefile.inc
+/gotwebd/auth.c
 /gotwebd/config.c
 /gotwebd/fcgi.c
 /gotwebd/files
@@ -166,6 +167,7 @@
 /gotwebd/gotwebd.c
 /gotwebd/gotwebd.conf.5
 /gotwebd/gotwebd.h
+/gotwebd/login.c
 /gotwebd/pages.tmpl
 /gotwebd/parse.y
 /gotwebd/sockets.c
@@ -442,6 +444,7 @@
 /regress/gotsysd/common.sh
 /regress/gotsysd/http-server
 /regress/gotsysd/test_gotsysd.sh
+/regress/gotsysd/test_gotwebd.sh
 /regress/gotwebd
 /regress/gotwebd/Makefile
 /regress/gotwebd/action_blame.html
