@@ -666,13 +666,13 @@ main(int argc, char **argv)
 
 	pw = getpwnam(www_username);
 	if (pw == NULL)
-		fatalx("%d unknown user %s", proc_type, www_username);
+		fatalx("unknown user %s", www_username);
 	env->www_uid = pw->pw_uid;
 	www_gid = pw->pw_gid;
 
 	pw = getpwnam(gotwebd_username);
 	if (pw == NULL)
-		fatalx("%d unknown user %s", proc_type, gotwebd_username);
+		fatalx("unknown user %s", gotwebd_username);
 	if (getgrouplist(gotwebd_username, pw->pw_gid, gotwebd_groups,
 	    &gotwebd_ngroups) == -1)
 		fatalx("too many groups for user %s", gotwebd_username);
