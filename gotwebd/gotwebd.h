@@ -640,6 +640,8 @@ int config_getcfg(struct gotwebd *, struct imsg *);
 void config_set_access_rules(struct imsgev *,
     struct gotwebd_access_rule_list *);
 void config_get_access_rule(struct gotwebd_access_rule_list *, struct imsg *);
+void config_free_access_rules(struct gotwebd_access_rule_list *);
 void config_set_repository(struct imsgev *, struct gotwebd_repo *);
 void config_get_repository(struct gotwebd_repolist *, struct imsg *);
+void config_free_repos(struct gotwebd_repolist *);
 int config_init(struct gotwebd *);
