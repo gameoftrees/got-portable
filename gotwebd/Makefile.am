@@ -77,7 +77,7 @@ gotwebd_DEPENDENCIES = $(top_builddir)/compat/libopenbsd-compat.a
 EXTRA_DIST = $(top_srcdir)/gotwebd/*.h \
 	     $(top_srcdir)/gotwebd/*.tmpl \
 	     $(top_srcdir)/template/tmpl.h \
-	     gotwebd.8 gotwebd.conf.5
+	     gotwebd.8 gotwebd.conf.5 files
 
 man5_MANS = gotwebd.conf.5
 man8_MANS = gotwebd.8
