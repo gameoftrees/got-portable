@@ -65,7 +65,7 @@ Disable authentication, allowing any browser to view any repository
 not hidden via the
 .Ic respect_exportok
 directive.
-Authentication can also be configured on a per-server or per-repository basis.
+Authentication is disabled by default.
 .It Ic enable authentication Oo Ic insecure Oc
 Enable authentication, requiring browsers to present a login token cookie
 before read-only repository access is granted.
@@ -388,7 +388,6 @@ server "localhost" {
 	site_name	"my public repos"
 	site_owner	"Flan Hacker"
 	site_link	"Flan' Projects"
-	disable authentication
 }
 .Ed
 .Pp
@@ -403,7 +402,6 @@ listen on ::1 port 9000
 server "localhost" {
 	site_name	"my public repos"
 	repos_path	"/var/git"
-	disable authentication
 }
 .Ed
 .Pp
@@ -412,20 +410,18 @@ authentication:
 .Bd -literal -offset indent
 # 3 scopes: global, per-server, per-repository
 
-disable authentication  # override the default which is 'enable'
+enable authentication  # override the default which is 'disable'
 
 # Allow user "admin" to read anything unless overridden with a
 # "deny" rule later.
 permit "admin"
 
 server "public.example.com" {
-	# inherit global default, i.e. authentication is disabled
+	disable authentication	# override global setting
 	repos_path "/var/www/got/public"
 }
 
 server "secure.example.com" {
-	enable authentication	# override global default
-
 	permit flan_squee	# grant access to flan_squee
 	permit :developers	# grant access to developers group
 

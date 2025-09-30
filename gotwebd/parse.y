@@ -1060,14 +1060,18 @@ parse_config(const char *filename, struct gotwebd *env)
 		gotwebd->login_sock = sockets_conf_new_socket(-1, h);
 	}
 
-	/* Enable authentication if not explicitly configured. */
+	/*
+	 * Disable authentication if not explicitly configured.
+	 * Authentication requires access rules to be configured, and we want
+	 * gotwebd to work out of the box if no configuration file exists.
+	 */
 	switch (env->auth_config) {
 	case GOTWEBD_AUTH_SECURE:
 	case GOTWEBD_AUTH_INSECURE:
 	case GOTWEBD_AUTH_DISABLED:
 		break;
 	default:
-		env->auth_config = GOTWEBD_AUTH_SECURE;
+		env->auth_config = GOTWEBD_AUTH_DISABLED;
 		break;
 	}
 
