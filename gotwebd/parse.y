@@ -126,7 +126,7 @@ typedef struct {
 %token	SHOW_SITE_OWNER SHOW_REPO_CLONEURL PORT PREFORK RESPECT_EXPORTOK
 %token	SERVER CHROOT CUSTOM_CSS SOCKET
 %token	SUMMARY_COMMITS_DISPLAY SUMMARY_TAGS_DISPLAY USER AUTHENTICATION
-%token	ENABLE DISABLE INSECURE REPOSITORY PERMIT DENY
+%token	ENABLE DISABLE INSECURE REPOSITORY REPOSITORIES PERMIT DENY HIDE
 
 %token	<v.string>	STRING
 %token	<v.number>	NUMBER
@@ -446,6 +446,9 @@ serveropts1	: REPOS_PATH STRING {
 		| RESPECT_EXPORTOK boolean {
 			new_srv->respect_exportok = $2;
 		}
+		| HIDE REPOSITORIES boolean {
+			new_srv->hide_repositories = $3;
+		}
 		| MAX_REPOS_DISPLAY NUMBER {
 			if ($2 < 0) {
 				yyerror("max_repos_display is too small: %lld",
@@ -578,6 +581,9 @@ repoopts1	: DISABLE AUTHENTICATION {
 			conf_new_access_rule(&new_repo->access_rules,
 			    GOTWEBD_ACCESS_DENIED, $2);
 		}
+		| HIDE REPOSITORY boolean {
+			new_repo->hidden = $3;
+		}
 		;
 
 nl		: '\n' optnl
@@ -627,6 +633,7 @@ lookup(char *s)
 		{ "deny",			DENY },
 		{ "disable",			DISABLE },
 		{ "enable",			ENABLE },
+		{ "hide",			HIDE },
 		{ "insecure",			INSECURE },
 		{ "listen",			LISTEN },
 		{ "login",			GOTWEBD_LOGIN },
@@ -639,6 +646,7 @@ lookup(char *s)
 		{ "port",			PORT },
 		{ "prefork",			PREFORK },
 		{ "repos_path",			REPOS_PATH },
+		{ "repositories",		REPOSITORIES },
 		{ "repository",			REPOSITORY },
 		{ "respect_exportok",		RESPECT_EXPORTOK },
 		{ "server",			SERVER },
@@ -1075,13 +1083,15 @@ parse_config(const char *filename, struct gotwebd *env)
 		break;
 	}
 
-	/* Inherit implicit authentication config from parent scope. */
+	/* Inherit implicit authentication/hidden config from parent scope. */
 	TAILQ_FOREACH(srv, &env->servers, entry) {
 		if (srv->auth_config == 0)
 			srv->auth_config = env->auth_config;
 		TAILQ_FOREACH(repo, &srv->repos, entry) {
 			if (repo->auth_config == 0)
 				repo->auth_config = srv->auth_config;
+			if (repo->hidden == -1)
+				repo->hidden = srv->hide_repositories;
 		}
 	}
 
@@ -1137,6 +1147,7 @@ conf_new_server(const char *name)
 	srv->show_repo_description = D_SHOWDESC;
 	srv->show_repo_cloneurl = D_SHOWURL;
 	srv->respect_exportok = D_RESPECTEXPORTOK;
+	srv->hide_repositories = D_HIDE_REPOSITORIES;
 
 	srv->max_repos_display = D_MAXREPODISP;
 	srv->max_commits_display = D_MAXCOMMITDISP;
@@ -1384,6 +1395,7 @@ conf_new_repo(struct server *server, const char *name)
 	if (repo == NULL)
 		fatal("gotwebd_new_repo");
 
+	repo->hidden = -1;
 	TAILQ_INSERT_TAIL(&server->repos, repo, entry);
 
 	return repo;

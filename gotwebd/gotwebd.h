@@ -81,6 +81,7 @@
 #define D_SHOWDESC		 1
 #define D_SHOWURL		 1
 #define D_RESPECTEXPORTOK	 0
+#define D_HIDE_REPOSITORIES	 0
 #define D_MAXREPODISP		 25
 #define D_MAXSLCOMMDISP		 10
 #define D_MAXCOMMITDISP		 25
@@ -384,6 +385,8 @@ struct gotwebd_repo {
 
 	enum gotwebd_auth_config	auth_config;
 	struct gotwebd_access_rule_list access_rules;
+
+	int				hidden;
 };
 TAILQ_HEAD(gotwebd_repolist, gotwebd_repo);
 
@@ -411,6 +414,7 @@ struct server {
 	int		 show_repo_description;
 	int		 show_repo_cloneurl;
 	int		 respect_exportok;
+	int		 hide_repositories;
 
 	enum gotwebd_auth_config auth_config;
 	struct gotwebd_access_rule_list access_rules;

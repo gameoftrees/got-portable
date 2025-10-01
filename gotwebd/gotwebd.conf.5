@@ -63,8 +63,11 @@ effectively disables chroot.
 .It Ic disable authentication
 Disable authentication, allowing any browser to view any repository
 not hidden via the
+.Ic hide repositories ,
+.Ic hide repository ,
+or
 .Ic respect_exportok
-directive.
+directives.
 Authentication is disabled by default.
 .It Ic enable authentication Oo Ic insecure Oc
 Enable authentication, requiring browsers to present a login token cookie
@@ -197,8 +200,11 @@ will attempt to fetch it.
 .It Ic disable authentication
 Disable authentication for this server, allowing any browser to view any
 repository not hidden via the
+.Ic hide repositories ,
+.Ic hide repository ,
+or
 .Ic respect_exportok
-directive.
+directives.
 Authentication can also configured on a per-repository basis.
 .Pp
 If not specified, the global configuration context determines
@@ -210,6 +216,29 @@ Authentication can also configured on a per-repository basis.
 .Pp
 If not specified, the global configuration context determines
 whether authentication is enabled.
+.It Ic hide repositories Ar on | off
+Controls whether repositories are hidden by default.
+Hidden repositories cannot be browsed via
+.Xr gotwebd 8 .
+.Pp
+By default,
+.Ic hide repositories
+is set to
+.Ar off
+and all repositories found in the
+.Ic repos_path
+will be displayed.
+.Pp
+If
+.Ic hide repositories
+is set to
+.Ar on
+then a repository will only be displayed if its repository-specific
+.Ic hide repository
+parameter is set to
+.Ar off .
+Repositories will be hidden regardless of whether authentication is
+enabled and has failed or succeeded.
 .It Ic logo_url Ar url
 Set a hyperlink for the logo.
 Defaults to
@@ -302,6 +331,16 @@ before read-only repository access is granted.
 .Pp
 If not specified, the server context or global context determines
 whether authentication is enabled.
+.It Ic hide repository Ar on | off
+Controls whether the repository is hidden.
+Hidden repositories cannot be browsed via
+.Xr gotwebd 8 .
+.Pp
+If not set, the server context's
+.Ic hide repositories
+parameter determines whether
+.Xr gotwebd 8
+will display the repository.
 .El
 .It Ic respect_exportok Ar on | off
 Set whether to display the repository only if it contains the magic

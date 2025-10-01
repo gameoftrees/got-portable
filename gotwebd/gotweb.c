@@ -1022,6 +1022,7 @@ gotweb_load_got_path(struct repo_dir **rp, const char *dir,
 	struct gotwebd_repo *repo;
 	enum gotwebd_auth_config auth_config = 0;
 	enum gotwebd_access access = GOTWEBD_ACCESS_DENIED;
+	int repo_is_hidden = 0;
 
 	*rp = calloc(1, sizeof(**rp));
 	if (*rp == NULL)
@@ -1067,6 +1068,7 @@ gotweb_load_got_path(struct repo_dir **rp, const char *dir,
 
 	repo = gotweb_get_repository(srv, repo_dir->name);
 	if (repo) {
+		repo_is_hidden = repo->hidden;
 		auth_config = repo->auth_config;
 		switch (auth_config) {
 		case GOTWEBD_AUTH_DISABLED:
@@ -1084,6 +1086,7 @@ gotweb_load_got_path(struct repo_dir **rp, const char *dir,
 			break;
 		}
 	} else {
+		repo_is_hidden = srv->hide_repositories;
 		auth_config = srv->auth_config;
 		switch (auth_config) {
 		case GOTWEBD_AUTH_DISABLED:
@@ -1105,6 +1108,11 @@ gotweb_load_got_path(struct repo_dir **rp, const char *dir,
 		fatalx("invalid access check result %d", access);
 
 	if (access != GOTWEBD_ACCESS_PERMITTED) {
+		error = got_error_path(repo_dir->name, GOT_ERR_NOT_GIT_REPO);
+		goto err;
+	}
+
+	if (repo_is_hidden) {
 		error = got_error_path(repo_dir->name, GOT_ERR_NOT_GIT_REPO);
 		goto err;
 	}
