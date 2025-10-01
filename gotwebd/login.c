@@ -516,7 +516,7 @@ client_read(struct bufferevent *bev, void *d)
 		}
 
 		code = login_gen_token(client->euid, hostname,
-		    5 * 60 /* 5 minutes */,
+		    GOTWEBD_LOGIN_TIMEOUT,
 		    login_token_secret, sizeof(login_token_secret), "login");
 		if (code == NULL) {
 			log_warn("%s: login_gen_token failed", __func__);
