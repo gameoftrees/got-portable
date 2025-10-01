@@ -3,7 +3,7 @@ bin_PROGRAMS = gotsh
 include $(top_builddir)/Makefile.common
 
 AM_CPPFLAGS += -I$(top_builddir)/gotd
-AM_CPPFLAGS += -I$(top_builddir)/gotwebd
+AM_CPPFLAGS += -I$(top_srcdir)/gotwebd
 
 gotsh_SOURCES = gotsh.c \
 	$(top_srcdir)/gotd/imsg.c \
