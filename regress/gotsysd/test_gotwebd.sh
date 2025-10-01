@@ -75,7 +75,7 @@ EOF
 	local commit_id=`git_show_head $testroot/${GOTSYS_REPO}`
 	local commit_time=`git_show_author_time $testroot/${GOTSYS_REPO} $commit_id`
 	local d=$(env LC_ALL=C date -u -r "$commit_time" \
-		+"%a %b %e %H:%M:%S %Y UTC")
+		+"%a %b %e %H:%M:%S %Y UTC" | sed -e 's/  / /')
 	local tree_id=$(got cat -r $testroot/${GOTSYS_REPO} $commit_id | \
 		grep 'tree ' | cut -d ' ' -f2)
 
