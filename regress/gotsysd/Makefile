@@ -228,20 +228,31 @@ $(GOTWEBD_CONF):
 	@${UNPRIV} 'echo deny ${GOTSYSD_DEV_USER} >> $@'
 	@${UNPRIV} 'echo server \"VMIP\" { >> $@'
 	@${UNPRIV} 'echo \ \ repos_path \"/git\" >> $@'
+	@${UNPRIV} 'echo \ \ hide repositories on >> $@'
 	@${UNPRIV} 'echo \ \ show_repo_age off >> $@'
 	@${UNPRIV} 'echo \ \ show_repo_description off >> $@'
 	@${UNPRIV} 'echo \ \ show_repo_owner off >> $@'
 	@${UNPRIV} 'echo \ \ show_site_owner off >> $@'
 	@${UNPRIV} 'echo \ \ repository \"public\" { >> $@'
 	@${UNPRIV} 'echo \ \ \ \ disable authentication >> $@'
+	@${UNPRIV} 'echo \ \ \ \ hide repository off >> $@'
 	@${UNPRIV} 'echo \ \ } >> $@'
 	@${UNPRIV} 'echo \ \ repository \"gotdev\" { >> $@'
 	@${UNPRIV} 'echo \ \ \ \ permit ${GOTSYSD_DEV_USER} >> $@'
 	@${UNPRIV} 'echo \ \ \ \ deny ${GOTSYSD_TEST_USER} >> $@'
+	@${UNPRIV} 'echo \ \ \ \ hide repository off >> $@'
 	@${UNPRIV} 'echo \ \ } >> $@'
 	@${UNPRIV} 'echo \ \ repository \"gottest\" { >> $@'
 	@${UNPRIV} 'echo \ \ \ \ permit ${GOTSYSD_TEST_USER} >> $@'
 	@${UNPRIV} 'echo \ \ \ \ deny ${GOTSYSD_DEV_USER} >> $@'
+	@${UNPRIV} 'echo \ \ \ \ hide repository off >> $@'
+	@${UNPRIV} 'echo \ \ } >> $@'
+	@${UNPRIV} 'echo \ \ repository \"hidden\" { >> $@'
+	@${UNPRIV} 'echo \ \ \ \ permit ${GOTSYSD_TEST_USER} >> $@'
+	@${UNPRIV} 'echo \ \ \ \ deny ${GOTSYSD_DEV_USER} >> $@'
+	@${UNPRIV} 'echo \ \ } >> $@'
+	@${UNPRIV} 'echo \ \ repository \"gotsys\" { >> $@'
+	@${UNPRIV} 'echo \ \ \ \ hide repository off >> $@'
 	@${UNPRIV} 'echo \ \ } >> $@'
 	@${UNPRIV} 'echo } >> $@'
 
@@ -341,9 +352,11 @@ test_gotwebd:
 	VMIP="100.64.$$VMID.3"; \
 	GWIP="100.64.$$VMID.2"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
-		'rm -rf /git/gotsys.git /git/foo.git /tmp/gotsys'"; \
+		'rm -rf /git/${GOTSYS_REPO} /git/{foo,hidden}.git /tmp/gotsys'"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
 		got init /git/${GOTSYS_REPO}"; \
+	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
+		got init /git/hidden.git"; \
 	${UNPRIV} "${GOTSYSD_SCP_CMD} \
 		${GOT_CONF} root@$${VMIP}:/git/${GOTSYS_REPO}/got.conf"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} mkdir /tmp/gotsys "; \
