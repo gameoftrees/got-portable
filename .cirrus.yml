@@ -18,6 +18,13 @@ got_alpine_linux_task:
     - apk add libevent-dev git build-base bsd-compat-headers bison automake make autoconf libbsd-dev util-linux-dev libressl-dev zlib-dev ncurses-dev
     - .github/ci/build.sh
 
+got_alpine_linux_out_of_tree_task:
+  container:
+    image: alpine:latest
+  script:
+    - apk add libevent-dev git build-base bsd-compat-headers bison automake make autoconf libbsd-dev util-linux-dev libressl-dev zlib-dev ncurses-dev
+    - ./autogen.sh && mkdir build && (cd build && ../configure && make)
+
 got_freebsd_task:
   freebsd_instance:
     image_family: freebsd-14-2
