@@ -672,6 +672,10 @@ main(int argc, char **argv)
 		fatalx("unknown user %s", www_username);
 	env->www_uid = pw->pw_uid;
 	www_gid = pw->pw_gid;
+	if (pw->pw_uid == 0 || pw->pw_gid == 0) {
+		warnx("warning: detected www user \"root\" in gotwebd.conf; "
+		    "running a web server with UID/GID 0 is dangerous");
+	}
 
 	pw = getpwnam(gotwebd_username);
 	if (pw == NULL)
