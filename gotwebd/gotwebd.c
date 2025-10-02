@@ -676,13 +676,18 @@ main(int argc, char **argv)
 	pw = getpwnam(gotwebd_username);
 	if (pw == NULL)
 		fatalx("unknown user %s", gotwebd_username);
+	if (pw->pw_uid == 0 || pw->pw_gid == 0) {
+		fatalx("refusing to start up with user \"root\" set "
+		    "in gotwebd.conf; running gotwebd with UID/GID 0 "
+		    "is dangerous");
+	}
 	if (getgrouplist(gotwebd_username, pw->pw_gid, gotwebd_groups,
 	    &gotwebd_ngroups) == -1)
 		fatalx("too many groups for user %s", gotwebd_username);
 
 	/* check for root privileges */
 	if (geteuid())
-		fatalx("need root privileges");
+		fatalx("need root privileges to start up");
 
 	log_init(env->gotwebd_debug, LOG_DAEMON);
 	log_setverbose(env->gotwebd_verbose);
