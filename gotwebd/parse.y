@@ -123,7 +123,7 @@ typedef struct {
 %token	LOGO_URL SHOW_REPO_OWNER SHOW_REPO_AGE SHOW_REPO_DESCRIPTION
 %token	MAX_REPOS_DISPLAY REPOS_PATH MAX_COMMITS_DISPLAY ON ERROR
 %token	SHOW_SITE_OWNER SHOW_REPO_CLONEURL PORT PREFORK RESPECT_EXPORTOK
-%token	SERVER CHROOT CUSTOM_CSS SOCKET
+%token	SERVER CHROOT CUSTOM_CSS SOCKET HINT
 %token	SUMMARY_COMMITS_DISPLAY SUMMARY_TAGS_DISPLAY USER AUTHENTICATION
 %token	ENABLE DISABLE INSECURE REPOSITORY REPOSITORIES PERMIT DENY HIDE
 
@@ -323,6 +323,18 @@ main		: PREFORK NUMBER {
 			gotwebd->login_sock = sockets_conf_new_socket(-1, h);
 			free($3);
 		}
+		| GOTWEBD_LOGIN HINT USER STRING {
+			n = strlcpy(gotwebd->login_hint_user, $4,
+			    sizeof(gotwebd->login_hint_user));
+			if (n >= sizeof(gotwebd->login_hint_user)) {
+				yyerror("login hint user name too long, "
+				    "exceeds %zd bytes",
+				    sizeof(gotwebd->login_hint_user) - 1);
+				free($4);
+				YYERROR;
+			}
+			free($4);
+		}
 		;
 
 server		: SERVER STRING {
@@ -447,6 +459,18 @@ serveropts1	: REPOS_PATH STRING {
 		}
 		| HIDE REPOSITORIES boolean {
 			new_srv->hide_repositories = $3;
+		}
+		| GOTWEBD_LOGIN HINT USER STRING {
+			n = strlcpy(new_srv->login_hint_user, $4,
+			    sizeof(new_srv->login_hint_user));
+			if (n >= sizeof(new_srv->login_hint_user)) {
+				yyerror("login hint user name too long, "
+				    "exceeds %zd bytes",
+				    sizeof(new_srv->login_hint_user) - 1);
+				free($4);
+				YYERROR;
+			}
+			free($4);
 		}
 		| MAX_REPOS_DISPLAY NUMBER {
 			if ($2 < 0) {
@@ -633,6 +657,7 @@ lookup(char *s)
 		{ "disable",			DISABLE },
 		{ "enable",			ENABLE },
 		{ "hide",			HIDE },
+		{ "hint",			HINT },
 		{ "insecure",			INSECURE },
 		{ "listen",			LISTEN },
 		{ "login",			GOTWEBD_LOGIN },
@@ -1092,6 +1117,17 @@ parse_config(const char *filename, struct gotwebd *env)
 			if (repo->hidden == -1)
 				repo->hidden = srv->hide_repositories;
 		}
+
+		if (srv->login_hint_user[0] == '\0') {
+			if (strlcpy(srv->login_hint_user, env->login_hint_user,
+			    sizeof(srv->login_hint_user)) >=
+			    sizeof(srv->login_hint_user)) {
+				yyerror("login hint user name too long, "
+				    "exceeds %zd bytes",
+				    sizeof(srv->login_hint_user) - 1);
+			}
+		}
+	
 	}
 
 	return (0);

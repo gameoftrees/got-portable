@@ -114,6 +114,20 @@ While the specified
 .Ar path
 must be absolute, it should usually point inside the web server's chroot
 directory such that the web server can access the socket.
+.It Ic login hint user Ar name
+Sets the user name displayed in login hints which are shown on the error
+page if authentication has failed.
+This can be used to advertise the name of an anonymous user account which
+has been given read access to one or more repositories via the
+.Ic permit
+directive.
+.Pp
+If not set then no login hint will be displayed and users will somehow
+need to learn about using the
+.Xr gotsh 1
+weblogin command via other means.
+.Pp
+This setting can also be configured on a per-server basis.
 .It Ic login socket Ar path
 Set the
 .Ar path
@@ -239,6 +253,10 @@ parameter is set to
 .Ar off .
 Repositories will be hidden regardless of whether authentication is
 enabled and has failed or succeeded.
+.It Ic login hint user Ar name
+Sets the user name to use in login hints displayed when authentication fails.
+If not set then the login hint setting in the global configuration context
+will be used.
 .It Ic logo_url Ar url
 Set a hyperlink for the logo.
 Defaults to
@@ -466,12 +484,16 @@ server "secure.example.com" {
 
 	repos_path		"/var/git"
 
+	# Tell vistors who see a "login failed" error page that
+	# they can log in as the "anonymous" user via ssh.
+	login hint user "anonymous"
+
 	repository "got" {  # /var/git/got and /var/git/got.git
 		# Grant access to users who have authenticated as
 		# the anonymous user to gotsh(1), which anyone with
 		# an SSH client sbould be able to do.
 		# Dumb web crawlers will remain locked out.
-		permit anonymous
+		permit "anonymous"
 	}
 
 	repository "public" {
