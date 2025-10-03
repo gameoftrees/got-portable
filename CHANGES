@@ -1,3 +1,13 @@
+* got 0.120; 2025-10-03
+- disable gotwebd authentication if it is not enabled in /etc/gotwebd.conf
+- ensure that GOTWEBD_LOGIN_TIMEOUT is used consistently at build time
+- prevent date-specific gotsysd regress failures due to asctime_r whitespace
+- make gotwebd refuse to start up if the _gotwebd user is root
+- make gotwebd warn if the webserver's user is set to root in /etc/gotwebd.conf
+- add /etc/gotwebd.conf parameters for hiding repositories
+- reject bad hostnames provided to the gotsh weblogin command
+- allow gotwebd to optionally display a login hint when authentication fails
+
 * got 0.119; 2025-09-29
 - clean up gotwebd requests before freeing sockets; avoids deref of NULL sock
 - fix wrong process names in gotwebd error messages
