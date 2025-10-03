@@ -322,6 +322,7 @@ main		: PREFORK NUMBER {
 			if (gotwebd->login_sock != NULL)
 				free(gotwebd->login_sock);
 			gotwebd->login_sock = sockets_conf_new_socket(-1, h);
+			free(h);
 			free($3);
 		}
 		| GOTWEBD_LOGIN HINT USER STRING {
@@ -1091,6 +1092,7 @@ parse_config(const char *filename, struct gotwebd *env)
 			return (-1);
 		}
 		gotwebd->login_sock = sockets_conf_new_socket(-1, h);
+		free(h);
 	}
 
 	/*
