@@ -412,6 +412,26 @@ err:
 	}
 }
 
+static const struct got_error *
+login_error_hint(struct request *c)
+{
+	struct server *srv;
+	char msg[512];
+	int ret;
+
+	srv = gotweb_get_server(c->fcgi_params.server_name);
+	if (srv == NULL || srv->login_hint_user[0] == '\0')
+		return got_error(GOT_ERR_LOGIN_FAILED);
+
+	ret = snprintf(msg, sizeof(msg),
+	    "Log in by running: ssh %s@%s \"weblogin %s\"",
+	    srv->login_hint_user, srv->name, srv->name);
+	if (ret == -1 || (size_t)ret >= sizeof(msg))
+		return got_error(GOT_ERR_LOGIN_FAILED);
+
+	return got_error_msg(GOT_ERR_LOGIN_FAILED, msg);
+}
+
 static void
 process_request(struct request *c)
 {
@@ -452,7 +472,7 @@ process_request(struct request *c)
 	if (login_check_token(&uid, &hostname, c->fcgi_params.auth_cookie,
 	    auth_token_secret, sizeof(auth_token_secret),
 	    "authentication") == -1) {
-		error = got_error(GOT_ERR_LOGIN_FAILED);
+		error = login_error_hint(c);
 		goto done;
 	}
 
@@ -461,7 +481,7 @@ process_request(struct request *c)
 	 * occurred. This user is not allowed in authentication cookies.
 	 */
 	if (uid == env->www_uid) {
-		error = got_error(GOT_ERR_LOGIN_FAILED);
+		error = login_error_hint(c);
 		goto done;
 	}
 

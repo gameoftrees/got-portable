@@ -229,6 +229,7 @@ $(GOTWEBD_CONF):
 	@${UNPRIV} 'echo server \"VMIP\" { >> $@'
 	@${UNPRIV} 'echo \ \ repos_path \"/git\" >> $@'
 	@${UNPRIV} 'echo \ \ hide repositories on >> $@'
+	@${UNPRIV} 'echo \ \ login hint user anonymous >> $@'
 	@${UNPRIV} 'echo \ \ show_repo_age off >> $@'
 	@${UNPRIV} 'echo \ \ show_repo_description off >> $@'
 	@${UNPRIV} 'echo \ \ show_repo_owner off >> $@'

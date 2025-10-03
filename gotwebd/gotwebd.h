@@ -402,6 +402,7 @@ struct server {
 	char		 logo[GOTWEBD_MAXTEXT];
 	char		 logo_url[GOTWEBD_MAXTEXT];
 	char		 custom_css[PATH_MAX];
+	char		 login_hint_user[MAX_IDENTIFIER_SIZE];
 
 	size_t		 max_repos_display;
 	size_t		 max_commits_display;
@@ -489,6 +490,8 @@ struct gotwebd {
 
 	char		 httpd_chroot[PATH_MAX];
 	uid_t		 www_uid;
+
+	char		 login_hint_user[MAX_IDENTIFIER_SIZE];
 };
 
 /*
