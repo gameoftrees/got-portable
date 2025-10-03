@@ -513,6 +513,21 @@ client_read(struct bufferevent *bev, void *d)
 			srv = TAILQ_FIRST(&gotwebd_env->servers);
 			if (TAILQ_NEXT(srv, entry) == NULL)
 				hostname = srv->name;
+		} else {
+			struct server *srv;
+
+			/* Match hostname against available servers. */
+			TAILQ_FOREACH(srv, &gotwebd_env->servers, entry) {
+				if (strcmp(srv->name, hostname) == 0)
+					break;
+			}
+
+			if (srv == NULL) {
+				log_warnx("%s: bad hostname for weblogin: %s",
+				    __func__, hostname);
+				client_err(bev, EVBUFFER_READ, client);
+				return;
+			}
 		}
 
 		code = login_gen_token(client->euid, hostname,
