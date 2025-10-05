@@ -110,7 +110,7 @@ got_path_skip_common_ancestor(char **child, const char *parent_abspath,
 	if (*child == NULL)
 		return got_error_from_errno("malloc");
 	if (strlcpy(*child, abspath + len_parent, bufsize) >= bufsize) {
-		err = got_error_from_errno("strlcpy");
+		err = got_error(GOT_ERR_NO_SPACE);
 		free(*child);
 		*child = NULL;
 		return err;
