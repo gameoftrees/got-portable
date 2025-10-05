@@ -217,6 +217,48 @@ recv_request(struct imsg *imsg)
 	return c;
 }
 
+void
+gotweb_log_request(struct request *c)
+{
+	struct gotwebd_fcgi_params *p = &c->fcgi_params;
+	struct querystring *qs = &p->qs;
+	char *server_name = NULL;
+	char *document_uri = NULL;
+	const char *action_name = NULL;
+
+	if (gotwebd_env->gotwebd_verbose == 0)
+		return;
+
+	if (p->server_name[0] &&
+	    stravis(&server_name, p->server_name, VIS_SAFE) == -1) {
+		log_warn("stravis");
+		server_name = NULL;
+	}
+
+	if (p->document_uri[0] &&
+	    stravis(&document_uri, p->document_uri, VIS_SAFE) == -1) {
+		log_warn("stravis");
+		document_uri = NULL;
+	}
+
+	action_name = gotweb_action_name(qs->action);
+	log_info("processing request: server='%s' action='%s' "
+	    "commit='%s', file='%s', folder='%s', headref='%s' "
+	    "index_page=%d path='%s' document_uri='%s'",
+	    server_name ? server_name : "",
+	    action_name ? action_name : "",
+	    qs->commit,
+	    qs->file,
+	    qs->folder,
+	    qs->headref,
+	    qs->index_page,
+	    qs->path,
+	    document_uri ? document_uri : "");
+
+	free(server_name);
+	free(document_uri);
+}
+
 int
 gotweb_process_request(struct request *c)
 {
@@ -234,41 +276,7 @@ gotweb_process_request(struct request *c)
 	qs = &c->fcgi_params.qs;
 	c->t->qs = qs;
 
-	/* Log the request. */
-	if (gotwebd_env->gotwebd_verbose > 0) {
-		struct gotwebd_fcgi_params *p = &c->fcgi_params;
-		char *server_name = NULL;
-		char *document_uri = NULL;
-		const char *action_name = NULL;
-
-		if (p->server_name[0] &&
-		    stravis(&server_name, p->server_name, VIS_SAFE) == -1) {
-			log_warn("stravis");
-			server_name = NULL;
-		}
-
-		if (p->document_uri[0] &&
-		    stravis(&document_uri, p->document_uri, VIS_SAFE) == -1) {
-			log_warn("stravis");
-			document_uri = NULL;
-		}
-
-		action_name = gotweb_action_name(qs->action);
-		log_info("processing request: server='%s' action='%s' "
-		    "commit='%s', file='%s', folder='%s', headref='%s' "
-		    "index_page=%d path='%s' document_uri='%s'",
-		    server_name ? server_name : "",
-		    action_name ? action_name : "",
-		    qs->commit,
-		    qs->file,
-		    qs->folder,
-		    qs->headref,
-		    qs->index_page,
-		    qs->path,
-		    document_uri ? document_uri : "");
-		free(server_name);
-		free(document_uri);
-	}
+	gotweb_log_request(c);
 
 	/*
 	 * certain actions require a commit id in the querystring. this stops
