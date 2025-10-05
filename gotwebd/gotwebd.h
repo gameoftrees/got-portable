@@ -582,6 +582,7 @@ int gotweb_render_url(struct request *, struct gotweb_url *);
 int gotweb_render_absolute_url(struct request *, struct gotweb_url *);
 void gotweb_free_repo_commit(struct repo_commit *);
 void gotweb_free_repo_tag(struct repo_tag *);
+void gotweb_log_request(struct request *);
 int gotweb_process_request(struct request *);
 void gotweb_free_transport(struct transport *);
 void gotweb(struct gotwebd *, int);
