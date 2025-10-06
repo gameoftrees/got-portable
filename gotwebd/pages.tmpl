@@ -20,6 +20,7 @@
 
 #include <sys/types.h>
 #include <sys/queue.h>
+#include <sys/tree.h>
 #include <sys/stat.h>
 
 #include <ctype.h>
@@ -33,6 +34,7 @@
 #include "got_error.h"
 #include "got_object.h"
 #include "got_reference.h"
+#include "got_path.h"
 
 #include "gotwebd.h"
 #include "log.h"
@@ -167,8 +169,11 @@ nextsep(char *s, char **t)
 	struct server		*srv = c->srv;
 	const struct querystring *qs = c->t->qs;
 	struct gotweb_url	 u_path;
-	const char		*prfx = c->fcgi_params.document_uri;
+	char			 prefix[MAX_DOCUMENT_URI];
 	const char		*css = srv->custom_css;
+
+	strlcpy(prefix, srv->gotweb_url_path, sizeof(prefix));
+	got_path_strip_trailing_slashes(prefix);
 
 	memset(&u_path, 0, sizeof(u_path));
 	u_path.index_page = -1;
@@ -182,18 +187,18 @@ nextsep(char *s, char **t)
     <meta name="viewport" content="initial-scale=1.0" />
     <meta name="msapplication-TileColor" content="#da532c" />
     <meta name="theme-color" content="#ffffff"/>
-    <link rel="apple-touch-icon" sizes="180x180" href="{{ prfx }}apple-touch-icon.png" />
-    <link rel="icon" type="image/png" sizes="32x32" href="{{ prfx }}favicon-32x32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="{{ prfx }}favicon-16x16.png" />
-    <link rel="manifest" href="{{ prfx }}site.webmanifest"/>
-    <link rel="mask-icon" href="{{ prfx }}safari-pinned-tab.svg" />
-    <link rel="stylesheet" type="text/css" href="{{ prfx }}{{ css }}" />
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ prefix }}/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ prefix }}/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ prefix }}/favicon-16x16.png" />
+    <link rel="manifest" href="{{ prefix }}/site.webmanifest"/>
+    <link rel="mask-icon" href="{{ prefix }}/safari-pinned-tab.svg" />
+    <link rel="stylesheet" type="text/css" href="{{ prefix }}/{{ css }}" />
   </head>
   <body>
     <header id="header">
       <div id="got_link">
         <a href="{{ srv->logo_url }}" target="_blank">
-          <img src="{{ prfx }}{{ srv->logo }}" />
+          <img src="{{ prefix }}/{{ srv->logo }}" />
         </a>
       </div>
     </header>

@@ -65,6 +65,7 @@
 #define GOTWEB_GIT_DIR		 ".git"
 
 #define D_HTTPD_CHROOT		 "/var/www"
+#define D_HTDOCS_PATH		 "/htdocs/gotwebd"
 #define D_UNIX_SOCKET		 "/run/gotweb.sock"
 #define D_FCGI_PORT		 "9000"
 #define D_GOTPATH		 "/got/public"
@@ -394,6 +395,8 @@ struct server {
 	TAILQ_ENTRY(server)	 entry;
 
 	char		 name[GOTWEBD_MAXTEXT];
+	char		 htdocs_path[PATH_MAX];
+	char		 gotweb_url_path[MAX_DOCUMENT_URI];
 
 	char		 repos_path[PATH_MAX];
 	char		 site_name[GOTWEBD_MAXNAME];
@@ -489,6 +492,8 @@ struct gotwebd {
 	int		 *worker_load;
 
 	char		 httpd_chroot[PATH_MAX];
+	char		 htdocs_path[PATH_MAX];
+	char		 gotweb_url_path[MAX_DOCUMENT_URI];
 	uid_t		 www_uid;
 
 	char		 login_hint_user[MAX_IDENTIFIER_SIZE];
@@ -583,6 +588,7 @@ int gotweb_render_absolute_url(struct request *, struct gotweb_url *);
 void gotweb_free_repo_commit(struct repo_commit *);
 void gotweb_free_repo_tag(struct repo_tag *);
 void gotweb_log_request(struct request *);
+const struct got_error *gotweb_serve_htdocs(struct request *);
 int gotweb_process_request(struct request *);
 void gotweb_free_transport(struct transport *);
 void gotweb(struct gotwebd *, int);

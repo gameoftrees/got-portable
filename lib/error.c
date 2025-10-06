@@ -258,6 +258,7 @@ static const struct got_error got_errors[] = {
 	{ GOT_ERR_ON_SERVER_SIDE, "see server-side logs for error details" },
 	{ GOT_ERR_LOGIN_FAILED, "login failed" },
 	{ GOT_ERR_UNKNOWN_COMMAND, "command not found" },
+	{ GOT_ERR_NOT_FOUND, "not found" },
 };
 
 static struct got_custom_error {

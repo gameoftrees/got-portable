@@ -139,44 +139,79 @@ Directory for temporary files created by
 .El
 .Sh EXAMPLES
 Example configuration for
-.Xr httpd.conf 5 :
+.Xr httpd.conf 5
+which forwards all requests to
+.Nm :
 .Bd -literal -offset indent
 types { include "/usr/share/misc/mime.types" }
 
 server "example.com" {
 	listen on * port 80
-	root "/htdocs/gotwebd"
-	location "/" {
-		fastcgi socket "/run/gotweb.sock"
-	}
+	fastcgi socket "/run/gotweb.sock"
 }
 .Ed
 .Pp
-Hosting multiple
+The following
+.Xr httpd.conf 5
+example makes multiple
 .Nm gotwebd
-instances on the same HTTP server under different path prefixes, with
-the first reached via the default
-.Ux Ns -domain socket, the second configured to listen on localhost
-port 9000:
+instances reachable via the same HTTP server under different URL path prefixes,
+with the first reached via the default
+.Ux Ns -domain socket ,
+and the second configured to listen on localhost port 9000:
 .Bd -literal -offset indent
 server "example.com" {
 	listen on * port 80
 
-	location "/gotwebd-unix/" {
+	location "/gotwebd-unix/*" {
 		fastcgi socket "/run/gotweb.sock"
 	}
-	location "/gotwebd-unix/*" {
-		root "/htdocs/gotwebd"
-		request strip 1
-	}
 
-	location "/gotwebd-tcp/" {
+	location "/gotwebd-tcp/*" {
 		fastcgi socket tcp localhost 9000
 	}
-	location "/gotwebd-tcp/*" {
-		root "/htdocs/gotwebd"
-		request strip 1
+
+	# Redirect requests which lack a trailing slash:
+
+	location "/gotwebd-unix" {
+		block return 302 \\
+			"$REQUEST_SCHEME://$HTTP_HOST$REQUEST_URI/"
 	}
+
+	location "/gotwebd-tcp" {
+		block return 302 \\
+			"$REQUEST_SCHEME://$HTTP_HOST$REQUEST_URI/"
+	}
+}
+.Ed
+.Pp
+When requests do not arrive at the root URL path
+.Dq / ,
+the URL path prefix also needs to be set in the
+.Xr gotwebd.conf 5
+file corresponding to each instance of
+.Nm .
+Following on from the previous example:
+.Pp
+.Xr gotwebd.conf 5
+for the
+.Ux Ns -domain socket
+instance of
+.Nm :
+.Bd -literal -offset indent
+listen on socket "/var/www/run/gotweb.sock"
+server "example.com" {
+	gotweb url_path "/gotwebd-unix"
+}
+.Ed
+.Pp
+.Xr gotwebd.conf 5
+for the TCP instance of
+.Nm :
+.Bd -literal -offset indent
+listen on localhost port 9000
+server "example.com" {
+	gotweb url_path "/gotwebd-tcp"
 }
 .Ed
 .Sh SEE ALSO

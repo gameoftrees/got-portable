@@ -123,7 +123,7 @@ typedef struct {
 %token	LOGO_URL SHOW_REPO_OWNER SHOW_REPO_AGE SHOW_REPO_DESCRIPTION
 %token	MAX_REPOS_DISPLAY REPOS_PATH MAX_COMMITS_DISPLAY ON ERROR
 %token	SHOW_SITE_OWNER SHOW_REPO_CLONEURL PORT PREFORK RESPECT_EXPORTOK
-%token	SERVER CHROOT CUSTOM_CSS SOCKET HINT
+%token	SERVER CHROOT CUSTOM_CSS SOCKET HINT HTDOCS GOTWEB URL_PATH
 %token	SUMMARY_COMMITS_DISPLAY SUMMARY_TAGS_DISPLAY USER AUTHENTICATION
 %token	ENABLE DISABLE INSECURE REPOSITORY REPOSITORIES PERMIT DENY HIDE
 
@@ -336,6 +336,50 @@ main		: PREFORK NUMBER {
 			}
 			free($4);
 		}
+		| HTDOCS STRING {
+			if (*$2 == '\0') {
+				yyerror("htdocs path can't be an empty"
+				    " string");
+				free($2);
+				YYERROR;
+			}
+
+			n = strlcpy(gotwebd->htdocs_path, $2,
+			    sizeof(gotwebd->htdocs_path));
+			if (n >= sizeof(gotwebd->htdocs_path)) {
+				yyerror("htdocs path too long: %s", $2);
+				free($2);
+				YYERROR;
+			}
+			free($2);
+		}
+		| GOTWEB URL_PATH STRING {
+			if (*$3 == '\0') {
+				yyerror("gotweb url_path can't be an empty"
+				    " string");
+				free($3);
+				YYERROR;
+			}
+
+			n = strlcpy(gotwebd->gotweb_url_path, $3,
+			    sizeof(gotwebd->gotweb_url_path));
+			if (n >= sizeof(gotwebd->gotweb_url_path)) {
+				yyerror("gotweb url_path too long, exceeds "
+				    "%zd bytes: %s",
+				    sizeof(gotwebd->gotweb_url_path), $3);
+				free($3);
+				YYERROR;
+			}
+
+			if (gotwebd->gotweb_url_path[0] != '/') {
+				yyerror("gotweb url path must be an absolute "
+				    "path: bad path %s", $3);
+				free($3);
+				YYERROR;
+			}
+
+			free($3);
+		}
 		;
 
 server		: SERVER STRING {
@@ -540,6 +584,48 @@ serveropts1	: REPOS_PATH STRING {
 			conf_new_access_rule(&new_srv->access_rules,
 			    GOTWEBD_ACCESS_DENIED, $2);
 		}
+		| HTDOCS STRING {
+			if (*$2 == '\0') {
+				yyerror("htdocs path can't be an empty"
+				    " string");
+				free($2);
+				YYERROR;
+			}
+
+			n = strlcpy(new_srv->htdocs_path, $2,
+			    sizeof(new_srv->htdocs_path));
+			if (n >= sizeof(new_srv->htdocs_path)) {
+				yyerror("htdocs path too long: %s", $2);
+				free($2);
+				YYERROR;
+			}
+			free($2);
+		}
+		| GOTWEB URL_PATH STRING {
+			if (*$3 == '\0') {
+				yyerror("gotweb url_path can't be an empty"
+				    " string");
+				free($3);
+				YYERROR;
+			}
+
+			n = strlcpy(new_srv->gotweb_url_path, $3,
+			    sizeof(new_srv->gotweb_url_path));
+			if (n >= sizeof(new_srv->gotweb_url_path)) {
+				yyerror("htdocs path too long: %s", $3);
+				free($3);
+				YYERROR;
+			}
+
+			if (gotwebd->gotweb_url_path[0] != '/') {
+				yyerror("gotweb url path must be an absolute "
+				    "path: bad path %s", $3);
+				free($3);
+				YYERROR;
+			}
+
+			free($3);
+		}
 		| repository
 		;
 
@@ -657,8 +743,10 @@ lookup(char *s)
 		{ "deny",			DENY },
 		{ "disable",			DISABLE },
 		{ "enable",			ENABLE },
+		{ "gotweb",			GOTWEB },
 		{ "hide",			HIDE },
 		{ "hint",			HINT },
+		{ "htdocs",			HTDOCS },
 		{ "insecure",			INSECURE },
 		{ "listen",			LISTEN },
 		{ "login",			GOTWEBD_LOGIN },
@@ -686,6 +774,7 @@ lookup(char *s)
 		{ "socket",			SOCKET },
 		{ "summary_commits_display",	SUMMARY_COMMITS_DISPLAY },
 		{ "summary_tags_display",	SUMMARY_TAGS_DISPLAY },
+		{ "url_path",			URL_PATH },
 		{ "user",			USER },
 		{ "www",			WWW },
 	};
@@ -1109,7 +1198,7 @@ parse_config(const char *filename, struct gotwebd *env)
 		break;
 	}
 
-	/* Inherit implicit authentication/hidden config from parent scope. */
+	/* Inherit implicit configuration from parent scope. */
 	TAILQ_FOREACH(srv, &env->servers, entry) {
 		if (srv->auth_config == 0)
 			srv->auth_config = env->auth_config;
@@ -1129,7 +1218,17 @@ parse_config(const char *filename, struct gotwebd *env)
 				    sizeof(srv->login_hint_user) - 1);
 			}
 		}
-	
+
+		if (srv->gotweb_url_path[0] == '\0') {
+			if (strlcpy(srv->gotweb_url_path,
+			    env->gotweb_url_path,
+			    sizeof(srv->gotweb_url_path)) >=
+			    sizeof(srv->gotweb_url_path)) {
+				yyerror("gotweb url_path too long, "
+				    "exceeds %zd bytes",
+				    sizeof(srv->gotweb_url_path) - 1);
+			}
+		}
 	}
 
 	return (0);
@@ -1155,6 +1254,10 @@ conf_new_server(const char *name)
 	    sizeof(srv->repos_path));
 	if (n >= sizeof(srv->repos_path))
 		fatalx("%s: strlcat", __func__);
+	n = strlcpy(srv->htdocs_path, D_HTDOCS_PATH,
+	    sizeof(srv->htdocs_path));
+	if (n >= sizeof(srv->htdocs_path))
+		fatalx("%s: strlcpy", __func__);
 	n = strlcpy(srv->site_name, D_SITENAME,
 	    sizeof(srv->site_name));
 	if (n >= sizeof(srv->site_name))

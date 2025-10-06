@@ -76,6 +76,7 @@ gotwebd_test_conf:
 	@echo '    show_repo_owner off' >> ${GOTWEBD_TEST_CONF}
 	@echo '}' >> ${GOTWEBD_TEST_CONF}
 	@echo 'disable authentication' >> ${GOTWEBD_TEST_CONF}
+	@echo 'gotweb url_path "/gotwebd_test_harness"' >> $(GOTWEBD_TEST_CONF)
 
 gotwebd_test_conf_paginate: gotwebd_test_conf
 	@printf '5i\n    max_commits_display 3\n.\nwq\n' | \
