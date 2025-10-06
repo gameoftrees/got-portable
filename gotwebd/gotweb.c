@@ -259,11 +259,117 @@ gotweb_log_request(struct request *c)
 	free(document_uri);
 }
 
+const struct got_error *
+gotweb_serve_htdocs(struct request *c)
+{
+	const struct got_error *error = NULL;
+	struct server *srv = c->srv;;
+	struct gotwebd_fcgi_params *p = &c->fcgi_params;
+	char *document_uri = p->document_uri;
+	char *request_path = NULL;
+	char *child_path = NULL;
+	char *ondisk_path = NULL;
+	int fd = -1;
+	const char *mime_type;
+	char *ext;
+
+	while (document_uri[0] == '/')
+		document_uri++;
+	if (asprintf(&request_path, "/%s", document_uri) == -1)
+		return got_error_from_errno("asprintf");
+
+	if (!got_path_is_child(request_path,
+	    srv->gotweb_url_path, strlen(srv->gotweb_url_path))) {
+		error = got_error(GOT_ERR_NOT_FOUND);
+		goto done;
+	}
+
+	error = got_path_skip_common_ancestor(&child_path,
+	    srv->gotweb_url_path, request_path);
+	if (error) {
+		if (error->code == GOT_ERR_BAD_PATH)
+			error = got_error(GOT_ERR_NOT_FOUND);
+		goto done;
+	}
+
+	if (asprintf(&ondisk_path, "%s/%s/%s", gotwebd_env->httpd_chroot,
+	    srv->htdocs_path, child_path) == -1) {
+		error = got_error_from_errno("asprintf");
+		goto done;
+	}
+
+	fd = open(ondisk_path, O_RDONLY);
+	if (fd == -1) {
+		if (errno == ENOENT || errno == ENOTDIR)
+			error = got_error(GOT_ERR_NOT_FOUND);
+		else
+			error = got_error_from_errno_fmt("open: %s");
+		goto done;
+	}
+
+	/*
+	 * TODO: Port generic mime-type handling from httpd.
+	 *
+	 * This hack works only because we know what files our static
+	 * assets contain. But we should account for other files which
+	 * might be dropped into our htdocs directory.
+	 */
+	ext = strrchr(ondisk_path, '.');
+	if (ext) {
+		if (strcmp(ext, ".css") == 0)
+			mime_type = "text/css";
+		if (strcmp(ext, ".png") == 0)
+			mime_type = "image/png";
+		if (strcmp(ext, ".svg") == 0)
+			mime_type = "image/svg+xml";
+		if (strcmp(ext, ".txt") == 0)
+			mime_type = "text/plain";
+		if (strcmp(ext, ".xml") == 0)
+			mime_type = "text/xml";
+	}
+
+	if (gotweb_reply(c, 200, mime_type, NULL) == -1) {
+		error = got_error(GOT_ERR_IO);
+		goto done;
+	}
+
+	if (template_flush(c->tp) == -1) {
+		error = got_error(GOT_ERR_IO);
+		goto done;
+	}
+
+	for (;;) {
+		uint8_t buf[BUF];
+		ssize_t r;
+
+		r = read(fd, buf, sizeof(buf));
+		if (r == -1) {
+			error = got_error_from_errno("read");
+			goto done;
+		}
+		if (r == 0)
+			break;
+	
+		if (fcgi_write(c, buf, r) == -1) {
+			error = got_error(GOT_ERR_IO);
+			goto done;
+		}
+	}
+done:
+	if (fd != -1 && close(fd) == -1 && error == NULL)
+		error = got_error_from_errno("close");
+	free(request_path);
+	free(child_path);
+	free(ondisk_path);
+	return error;
+}
+
 int
 gotweb_process_request(struct request *c)
 {
 	const struct got_error *error = NULL;
 	struct server *srv = c->srv;;
+	struct gotwebd_fcgi_params *p = &c->fcgi_params;
 	struct querystring *qs = NULL;
 	struct repo_dir *repo_dir = NULL;
 	struct repo_commit *commit;
@@ -277,6 +383,15 @@ gotweb_process_request(struct request *c)
 	c->t->qs = qs;
 
 	gotweb_log_request(c);
+
+	if (got_path_cmp(srv->gotweb_url_path, p->document_uri,
+	    strlen(srv->gotweb_url_path), strlen(p->document_uri)) != 0) {
+		error = gotweb_serve_htdocs(c);
+		if (error)
+			goto err;
+
+		return 0;
+	}
 
 	/*
 	 * certain actions require a commit id in the querystring. this stops
@@ -509,8 +624,14 @@ gotweb_process_request(struct request *c)
 
 err:
 	c->t->error = error;
-	if (gotweb_reply(c, 400, "text/html", NULL) == -1)
-		return -1;
+	if (error->code == GOT_ERR_NOT_FOUND) {
+		if (gotweb_reply(c, 404, "text/html", NULL) == -1)
+			return -1;
+	} else {
+		if (gotweb_reply(c, 400, "text/html", NULL) == -1)
+			return -1;
+	}
+
 	return gotweb_render_page(c->tp, gotweb_render_error);
 }
 
@@ -1345,6 +1466,30 @@ gotweb_sighdlr(int sig, short event, void *arg)
 }
 
 static void
+unveil_htdocs_path(const char *htdocs_path)
+{
+	struct gotwebd *env = gotwebd_env;
+	char path[PATH_MAX];
+	int ret;
+
+	while (htdocs_path[0] == '/')
+		htdocs_path++;
+
+	ret = snprintf(path, sizeof(path), "%s/%s",
+	    env->httpd_chroot, htdocs_path);
+	if (ret == -1)
+		fatal("snprintf");
+	if ((size_t)ret >= sizeof(path)) {
+		fatalx("htdocs path too long, exceeds %zd bytes: %s",
+		    sizeof(path) - strlen(env->httpd_chroot) - 1,
+		    htdocs_path);
+	}
+
+	if (unveil(path, "r") == -1)
+		fatal("unveil %s", path);
+}
+
+static void
 gotweb_launch(struct gotwebd *env)
 {
 	struct server *srv;
@@ -1358,9 +1503,15 @@ gotweb_launch(struct gotwebd *env)
 		fatal("pledge");
 #endif
 
+	unveil_htdocs_path(env->htdocs_path);
+
 	TAILQ_FOREACH(srv, &gotwebd_env->servers, entry) {
 		if (unveil(srv->repos_path, "r") == -1)
 			fatal("unveil %s", srv->repos_path);
+
+		if (got_path_cmp(env->htdocs_path, srv->htdocs_path, 
+		    strlen(env->htdocs_path), strlen(srv->htdocs_path)) != 0)
+			unveil_htdocs_path(srv->htdocs_path);
 	}
 
 	error = got_privsep_unveil_exec_helpers();

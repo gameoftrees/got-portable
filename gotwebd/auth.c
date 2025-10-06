@@ -17,6 +17,7 @@
  */
 
 #include <sys/queue.h>
+#include <sys/tree.h>
 
 #include <errno.h>
 #include <event.h>
@@ -34,6 +35,7 @@
 #include "got_error.h"
 #include "got_reference.h"
 #include "got_object.h"
+#include "got_path.h"
 
 #include "gotwebd.h"
 #include "log.h"
@@ -449,6 +451,17 @@ process_request(struct request *c)
 		log_warnx("request for unknown server name");
 		error = got_error(GOT_ERR_BAD_QUERYSTRING);
 		goto done;
+	}
+
+	/*
+	 * Static gotwebd assets (images, CSS, ...) are not protected
+	 * by authentication.
+	 */
+	if (got_path_cmp(srv->gotweb_url_path, c->fcgi_params.document_uri,
+	    strlen(srv->gotweb_url_path),
+	    strlen(c->fcgi_params.document_uri)) != 0) {
+		forward_request(c);
+		return;
 	}
 
 	auth_config = srv->auth_config;

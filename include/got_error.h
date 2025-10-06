@@ -199,6 +199,7 @@
 #define GOT_ERR_ON_SERVER_SIDE	191
 #define GOT_ERR_LOGIN_FAILED	192
 #define GOT_ERR_UNKNOWN_COMMAND	193
+#define GOT_ERR_NOT_FOUND	194
 
 struct got_error {
         int code;
