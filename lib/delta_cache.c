@@ -127,6 +127,7 @@ got_delta_cache_free(struct got_delta_cache *cache)
 		for (j = 0; j < head->nchain; j++) {
 			delta = &head->entries[j];
 			free(delta->data);
+			free(delta->fulltext);
 		}
 	}
 	free(cache->buckets);
@@ -173,6 +174,7 @@ delta_cache_resize(struct got_delta_cache *cache, unsigned int nbuckets)
 				head->nchain++;
 			} else {
 				free(delta->data);
+				free(delta->fulltext);
 				cache->totelem--;
 			}
 		}
