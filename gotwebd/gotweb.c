@@ -325,7 +325,7 @@ gotweb_serve_htdocs(struct request *c)
 		if (strcmp(ext, ".txt") == 0)
 			mime_type = "text/plain";
 		if (strcmp(ext, ".webmanifest") == 0)
-			mime_type = "application/json";
+			mime_type = "application/manifest+json";
 		if (strcmp(ext, ".xml") == 0)
 			mime_type = "text/xml";
 	}
