@@ -268,7 +268,7 @@ gotweb_serve_htdocs(struct request *c)
 	char *child_path = NULL;
 	char *ondisk_path = NULL;
 	int fd = -1;
-	const char *mime_type;
+	const char *mime_type = "application/octet-stream";
 	char *ext;
 
 	while (document_uri[0] == '/')
