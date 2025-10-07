@@ -316,12 +316,16 @@ gotweb_serve_htdocs(struct request *c)
 	if (ext) {
 		if (strcmp(ext, ".css") == 0)
 			mime_type = "text/css";
+		if (strcmp(ext, ".ico") == 0)
+			mime_type = "image/x-icon";
 		if (strcmp(ext, ".png") == 0)
 			mime_type = "image/png";
 		if (strcmp(ext, ".svg") == 0)
 			mime_type = "image/svg+xml";
 		if (strcmp(ext, ".txt") == 0)
 			mime_type = "text/plain";
+		if (strcmp(ext, ".webmanifest") == 0)
+			mime_type = "application/json";
 		if (strcmp(ext, ".xml") == 0)
 			mime_type = "text/xml";
 	}
