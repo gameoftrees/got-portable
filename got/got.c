@@ -2244,6 +2244,10 @@ delete_missing_refs(struct got_pathlist_head *their_refs,
 		const char *refname = got_ref_get_name(re->ref);
 		const char *their_refname;
 
+		if (strcmp(refname, GOT_REF_HEAD) == 0 ||
+		    strncmp(refname, "refs/got/", 9) == 0)
+			continue;
+
 		if (remote->mirror_references) {
 			their_refname = refname;
 		} else {
