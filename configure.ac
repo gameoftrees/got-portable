@@ -974,7 +974,7 @@ fi
 echo "
 Configured got-portable with:
 
- Version:      $VERSION
+ Version:	   $VERSION
 
  Prefix:           ${prefix}
  Executables:      ${executables}
