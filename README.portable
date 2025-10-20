@@ -273,17 +273,9 @@ GOT_PORTABLE_VER=0.75
 ```
 
 Here, the *to be released* version of `got-portable` will be `0.75`.
-Typically, this version is incremented directly after a release, such that
-there's no need to change this value.  The only exception would be if there
-were an out-of-band release to `-portable`.  In such cases, that would take
-the form:
 
-```
-0.75.1
-```
-
-Where the suffix of `1`, `2`, etc., can be used to denote any sub-releases
-from the `0.75` version.
+The variable `GOT_RELEASE` needs be changed to `yes` so that the
+GOT_PORTABLE_VER is asserted correctly.
 
 The variable `GOT_RELEASE` needs be changed to `yes` so that the
 GOT_PORTABLE_VER is asserted correctly.
@@ -314,6 +306,22 @@ This can then be pushed out to `gh` and `origin`.
 After that point, the version of `GOT_PORTABLE_VER` in
 `util/got-portable-ver.sh` should be changed to the next version, and
 `GOT_RELEASE` should be setg back to `no`.
+
+MAINTENANCE RELEASES
+====================
+
+The only exception to changing the `GOT_PORTABLE_VER` would be if there were
+an out-of-band release to `-portable`.  In such cases, that would take the
+form:
+
+```
+0.75.1
+```
+
+Where the suffix of `1`, `2`, etc., can be used to denote any sub-releases
+from the `0.75` version.
+
+Henceforth, all other instructions are the same as per `RELEASING A NEW VERSION`.
 
 TODO
 ====

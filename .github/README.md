@@ -19,7 +19,7 @@ DEPENDENCIES
 ============
 
 Note that the names of these libraries are indicative only; the names might
-vary. 
+vary.
 
 Linux:
 
@@ -30,14 +30,15 @@ Linux:
 * `libz` (for Z compression)
 * `pkg-config` (for searching libraries)
 * `bison` (for configuration file grammar)
+* `libevent` (for gotwebd)
 * `libtls` (may be known as `libretls`)
 
 FreeBSD:
 
 * `automake`
 * `pkgconf`
-* `libevent` (for gotwebd)
 * `libretls`
+* `libevent` (for gotwebd)
 
 NetBSD:
 
@@ -64,7 +65,7 @@ Darwin (MacOS):
 * `openssl`
 * `ossp-uuid`
 * `libevent` (for gotwebd)
-* `libtls`
+* `libretls`
 
 TESTS (REGRESS)
 ===============
@@ -74,6 +75,32 @@ To run the test suite:
 ```
  $ make tests
 ```
+
+The tests depend on git and the HTTP::Daemon Perl module.
+
+Got may have to be installed system-wide before the tests will run
+successfully because paths to helper programs, such as got-read-pack,
+are hard-coded in user-facing binaries, such as got and tog.
+
+Operations such as clone and send which use the network will be trying to
+connect to 127.0.0.1 over ssh, as the same user who invoked 'make tests'.
+The command 'ssh 127.0.0.1' must succeed without any interactive prompting.
+The host key may need to be manually accepted once before running tests.
+An SSH key can be installed in ~/.ssh/authorized_keys for authentication.
+
+The OpenBSD version of Got also has tests for gotd and gotwebd.
+These tests cannot be run in -portable yet.
+
+There are environment variables which control some test parameters:
+
+GOT_TEST_PACK=1 will force tests to use pack files instead of loose
+objects. GOT_TEST_PACK=ref-delta will force use of pack files with
+ref-deltas rather than offset-deltas.
+
+GOT_TEST_ALGO=sha256 will run tests with sha256 repositories.
+
+GOT_TEST_ROOT can be set to a path where temporary test data gets stored.
+This defaults to /tmp.
 
 Dependencies
 ============
@@ -249,17 +276,9 @@ GOT_PORTABLE_VER=0.75
 ```
 
 Here, the *to be released* version of `got-portable` will be `0.75`.
-Typically, this version is incremented directly after a release, such that
-there's no need to change this value.  The only exception would be if there
-were an out-of-band release to `-portable`.  In such cases, that would take
-the form:
 
-```
-0.75.1
-```
-
-Where the suffix of `1`, `2`, etc., can be used to denote any sub-releases
-from the `0.75` version.
+The variable `GOT_RELEASE` needs be changed to `yes` so that the
+GOT_PORTABLE_VER is asserted correctly.
 
 The variable `GOT_RELEASE` needs be changed to `yes` so that the
 GOT_PORTABLE_VER is asserted correctly.
@@ -291,14 +310,30 @@ After that point, the version of `GOT_PORTABLE_VER` in
 `util/got-portable-ver.sh` should be changed to the next version, and
 `GOT_RELEASE` should be setg back to `no`.
 
+MAINTENANCE RELEASES
+====================
+
+The only exception to changing the `GOT_PORTABLE_VER` would be if there were
+an out-of-band release to `-portable`.  In such cases, that would take the
+form:
+
+```
+0.75.1
+```
+
+Where the suffix of `1`, `2`, etc., can be used to denote any sub-releases
+from the `0.75` version.
+
+Henceforth, all other instructions are the same as per `RELEASING A NEW VERSION`.
+
 TODO
 ====
 
-This port is incomplete in that only got(1) and tog(1) have been ported.
-gotweb has yet to be ported.
-
-configure.ac should start defining AC_ENABLE arguments to allow for
-finer-grained control of where to search for includes/libraries, etc.
+* configure.ac should start defining AC_ENABLE arguments to allow for
+  finer-grained control of where to search for includes/libraries, etc.
+* review the compat/ code.  Some of those functions are probably picked up in
+  libbsd, so we should drop such implementations from compat/ where there's
+  overlap between libbsd and what's natively available.
 
 CONTACT
 =======
