@@ -162,6 +162,14 @@ Match User anonymous
     PermitTTY no
 .Ed
 .Pp
+And to tell
+.Xr security(8)
+to ignore the empty password, set PASSWDSKIP to the following in
+.Pa /etc/daily.local :
+.Bd -literal -offset indent
+PASSWDSKIP="anonymous:/usr/local/bin/gotsh"
+.Ed
+.Pp
 Obtain a
 .Xr gotwebd 8
 login URL for got.example.com:
