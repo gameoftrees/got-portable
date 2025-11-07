@@ -373,7 +373,7 @@ main		: PREFORK NUMBER {
 			}
 
 			if (gotwebd->gotweb_url_root[0] != '/') {
-				yyerror("gotweb url path must be an absolute "
+				yyerror("gotweb_url_root must be an absolute "
 				    "path: bad path %s", $2);
 				free($2);
 				YYERROR;
@@ -620,8 +620,8 @@ serveropts1	: REPOS_PATH STRING {
 				YYERROR;
 			}
 
-			if (gotwebd->gotweb_url_root[0] != '/') {
-				yyerror("gotweb url path must be an absolute "
+			if (new_srv->gotweb_url_root[0] != '/') {
+				yyerror("gotweb_url_root must be an absolute "
 				    "path: bad path %s", $2);
 				free($2);
 				YYERROR;
