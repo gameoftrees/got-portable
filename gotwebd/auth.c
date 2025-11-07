@@ -463,8 +463,8 @@ process_request(struct request *c)
 	 * Static gotwebd assets (images, CSS, ...) are not protected
 	 * by authentication.
 	 */
-	if (got_path_cmp(srv->gotweb_url_path, c->fcgi_params.document_uri,
-	    strlen(srv->gotweb_url_path),
+	if (got_path_cmp(srv->gotweb_url_root, c->fcgi_params.document_uri,
+	    strlen(srv->gotweb_url_root),
 	    strlen(c->fcgi_params.document_uri)) != 0) {
 		forward_request(c);
 		return;

@@ -396,7 +396,7 @@ struct server {
 
 	char		 name[GOTWEBD_MAXTEXT];
 	char		 htdocs_path[PATH_MAX];
-	char		 gotweb_url_path[MAX_DOCUMENT_URI];
+	char		 gotweb_url_root[MAX_DOCUMENT_URI];
 
 	char		 repos_path[PATH_MAX];
 	char		 site_name[GOTWEBD_MAXNAME];
@@ -493,7 +493,7 @@ struct gotwebd {
 
 	char		 httpd_chroot[PATH_MAX];
 	char		 htdocs_path[PATH_MAX];
-	char		 gotweb_url_path[MAX_DOCUMENT_URI];
+	char		 gotweb_url_root[MAX_DOCUMENT_URI];
 	uid_t		 www_uid;
 
 	char		 login_hint_user[MAX_IDENTIFIER_SIZE];

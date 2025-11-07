@@ -123,7 +123,7 @@ typedef struct {
 %token	LOGO_URL SHOW_REPO_OWNER SHOW_REPO_AGE SHOW_REPO_DESCRIPTION
 %token	MAX_REPOS_DISPLAY REPOS_PATH MAX_COMMITS_DISPLAY ON ERROR
 %token	SHOW_SITE_OWNER SHOW_REPO_CLONEURL PORT PREFORK RESPECT_EXPORTOK
-%token	SERVER CHROOT CUSTOM_CSS SOCKET HINT HTDOCS GOTWEB URL_PATH
+%token	SERVER CHROOT CUSTOM_CSS SOCKET HINT HTDOCS GOTWEB_URL_ROOT
 %token	SUMMARY_COMMITS_DISPLAY SUMMARY_TAGS_DISPLAY USER AUTHENTICATION
 %token	ENABLE DISABLE INSECURE REPOSITORY REPOSITORIES PERMIT DENY HIDE
 
@@ -353,32 +353,32 @@ main		: PREFORK NUMBER {
 			}
 			free($2);
 		}
-		| GOTWEB URL_PATH STRING {
-			if (*$3 == '\0') {
-				yyerror("gotweb url_path can't be an empty"
+		| GOTWEB_URL_ROOT STRING {
+			if (*$2 == '\0') {
+				yyerror("gotweb_url_root can't be an empty"
 				    " string");
-				free($3);
+				free($2);
 				YYERROR;
 			}
 
-			n = strlcpy(gotwebd->gotweb_url_path, $3,
-			    sizeof(gotwebd->gotweb_url_path));
-			if (n >= sizeof(gotwebd->gotweb_url_path)) {
-				yyerror("gotweb url_path too long, exceeds "
+			n = strlcpy(gotwebd->gotweb_url_root, $2,
+			    sizeof(gotwebd->gotweb_url_root));
+			if (n >= sizeof(gotwebd->gotweb_url_root)) {
+				yyerror("gotweb_url_root too long, exceeds "
 				    "%zd bytes: %s",
-				    sizeof(gotwebd->gotweb_url_path), $3);
-				free($3);
+				    sizeof(gotwebd->gotweb_url_root), $2);
+				free($2);
 				YYERROR;
 			}
 
-			if (gotwebd->gotweb_url_path[0] != '/') {
+			if (gotwebd->gotweb_url_root[0] != '/') {
 				yyerror("gotweb url path must be an absolute "
-				    "path: bad path %s", $3);
-				free($3);
+				    "path: bad path %s", $2);
+				free($2);
 				YYERROR;
 			}
 
-			free($3);
+			free($2);
 		}
 		;
 
@@ -601,30 +601,32 @@ serveropts1	: REPOS_PATH STRING {
 			}
 			free($2);
 		}
-		| GOTWEB URL_PATH STRING {
-			if (*$3 == '\0') {
-				yyerror("gotweb url_path can't be an empty"
+		| GOTWEB_URL_ROOT STRING {
+			if (*$2 == '\0') {
+				yyerror("gotweb_url_root can't be an empty"
 				    " string");
-				free($3);
+				free($2);
 				YYERROR;
 			}
 
-			n = strlcpy(new_srv->gotweb_url_path, $3,
-			    sizeof(new_srv->gotweb_url_path));
-			if (n >= sizeof(new_srv->gotweb_url_path)) {
-				yyerror("htdocs path too long: %s", $3);
-				free($3);
+			n = strlcpy(new_srv->gotweb_url_root, $2,
+			    sizeof(new_srv->gotweb_url_root));
+			if (n >= sizeof(new_srv->gotweb_url_root)) {
+				yyerror("gotweb_url_root too long, exceeds "
+				    "%zd bytes: %s",
+				    sizeof(new_srv->gotweb_url_root), $2);
+				free($2);
 				YYERROR;
 			}
 
-			if (gotwebd->gotweb_url_path[0] != '/') {
+			if (gotwebd->gotweb_url_root[0] != '/') {
 				yyerror("gotweb url path must be an absolute "
-				    "path: bad path %s", $3);
-				free($3);
+				    "path: bad path %s", $2);
+				free($2);
 				YYERROR;
 			}
 
-			free($3);
+			free($2);
 		}
 		| repository
 		;
@@ -743,7 +745,7 @@ lookup(char *s)
 		{ "deny",			DENY },
 		{ "disable",			DISABLE },
 		{ "enable",			ENABLE },
-		{ "gotweb",			GOTWEB },
+		{ "gotweb_url_root",		GOTWEB_URL_ROOT },
 		{ "hide",			HIDE },
 		{ "hint",			HINT },
 		{ "htdocs",			HTDOCS },
@@ -774,7 +776,6 @@ lookup(char *s)
 		{ "socket",			SOCKET },
 		{ "summary_commits_display",	SUMMARY_COMMITS_DISPLAY },
 		{ "summary_tags_display",	SUMMARY_TAGS_DISPLAY },
-		{ "url_path",			URL_PATH },
 		{ "user",			USER },
 		{ "www",			WWW },
 	};
@@ -1219,14 +1220,14 @@ parse_config(const char *filename, struct gotwebd *env)
 			}
 		}
 
-		if (srv->gotweb_url_path[0] == '\0') {
-			if (strlcpy(srv->gotweb_url_path,
-			    env->gotweb_url_path,
-			    sizeof(srv->gotweb_url_path)) >=
-			    sizeof(srv->gotweb_url_path)) {
-				yyerror("gotweb url_path too long, "
+		if (srv->gotweb_url_root[0] == '\0') {
+			if (strlcpy(srv->gotweb_url_root,
+			    env->gotweb_url_root,
+			    sizeof(srv->gotweb_url_root)) >=
+			    sizeof(srv->gotweb_url_root)) {
+				yyerror("gotweb_url_root too long, "
 				    "exceeds %zd bytes",
-				    sizeof(srv->gotweb_url_path) - 1);
+				    sizeof(srv->gotweb_url_root) - 1);
 			}
 		}
 	}

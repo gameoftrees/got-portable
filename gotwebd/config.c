@@ -51,7 +51,7 @@ config_init(struct gotwebd *env)
 
 	strlcpy(env->httpd_chroot, D_HTTPD_CHROOT, sizeof(env->httpd_chroot));
 	strlcpy(env->htdocs_path, D_HTDOCS_PATH, sizeof(env->htdocs_path));
-	strlcpy(env->gotweb_url_path, "/", sizeof(env->gotweb_url_path));
+	strlcpy(env->gotweb_url_root, "/", sizeof(env->gotweb_url_root));
 
 	env->prefork = GOTWEBD_NUMPROC;
 	TAILQ_INIT(&env->servers);
