@@ -84,7 +84,7 @@ depends on how request routing is configured in
 .Xr httpd 8 .
 .Pp
 This setting can also be configured on a per-server basis.
-.It Ic gotweb Ic url_path Ar path
+.It Ic gotweb_url_root Ar path
 Sets the URL path under which
 .Xr httpd 8
 is routing requests to
@@ -92,7 +92,7 @@ is routing requests to
 Defaults to
 .Dq / .
 .Pp
-The URL
+The specified
 .Ar path
 should match the path of the
 .Ic location
@@ -284,7 +284,7 @@ or by
 .Xr httpd 8
 depends on how request routing is configured in
 .Xr httpd 8 .
-.It Ic gotweb Ic url_path Ar path
+.It Ic gotweb_url_root Ar path
 Sets the URL path under which
 .Xr httpd 8
 is routing requests to this
@@ -293,7 +293,7 @@ server.
 Defaults to
 .Dq / .
 .Pp
-The URL
+The specified
 .Ar path
 should match the path of the
 .Ic location
@@ -312,7 +312,7 @@ are served directly from
 .Xr httpd 8 .
 .Pp
 If not set then the global
-.Ic gotweb url_path
+.Ic gotweb_url_root
 setting will be used.
 .It Ic disable authentication
 Disable authentication for this server, allowing any browser to view any

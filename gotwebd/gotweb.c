@@ -279,13 +279,13 @@ gotweb_serve_htdocs(struct request *c)
 		return got_error_from_errno("asprintf");
 
 	if (!got_path_is_child(request_path,
-	    srv->gotweb_url_path, strlen(srv->gotweb_url_path))) {
+	    srv->gotweb_url_root, strlen(srv->gotweb_url_root))) {
 		error = got_error(GOT_ERR_NOT_FOUND);
 		goto done;
 	}
 
 	error = got_path_skip_common_ancestor(&child_path,
-	    srv->gotweb_url_path, request_path);
+	    srv->gotweb_url_root, request_path);
 	if (error) {
 		if (error->code == GOT_ERR_BAD_PATH)
 			error = got_error(GOT_ERR_NOT_FOUND);
@@ -388,8 +388,8 @@ gotweb_process_request(struct request *c)
 
 	gotweb_log_request(c);
 
-	if (got_path_cmp(srv->gotweb_url_path, p->document_uri,
-	    strlen(srv->gotweb_url_path), strlen(p->document_uri)) != 0) {
+	if (got_path_cmp(srv->gotweb_url_root, p->document_uri,
+	    strlen(srv->gotweb_url_root), strlen(p->document_uri)) != 0) {
 		error = gotweb_serve_htdocs(c);
 		if (error)
 			goto err;

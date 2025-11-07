@@ -201,7 +201,7 @@ instance of
 .Bd -literal -offset indent
 listen on socket "/var/www/run/gotweb.sock"
 server "example.com" {
-	gotweb url_path "/gotwebd-unix"
+	gotweb_url_root "/gotwebd-unix"
 }
 .Ed
 .Pp
@@ -211,7 +211,7 @@ for the TCP instance of
 .Bd -literal -offset indent
 listen on localhost port 9000
 server "example.com" {
-	gotweb url_path "/gotwebd-tcp"
+	gotweb_url_root "/gotwebd-tcp"
 }
 .Ed
 .Sh SEE ALSO

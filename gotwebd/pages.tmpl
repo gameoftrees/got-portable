@@ -172,7 +172,7 @@ nextsep(char *s, char **t)
 	char			 prefix[MAX_DOCUMENT_URI];
 	const char		*css = srv->custom_css;
 
-	strlcpy(prefix, srv->gotweb_url_path, sizeof(prefix));
+	strlcpy(prefix, srv->gotweb_url_root, sizeof(prefix));
 	got_path_strip_trailing_slashes(prefix);
 
 	memset(&u_path, 0, sizeof(u_path));
