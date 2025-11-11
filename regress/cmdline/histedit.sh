@@ -3053,6 +3053,104 @@ test_histedit_added_file() {
 	test_done "$testroot" "$ret"
 }
 
+test_histedit_fold_delete_subdir_cwd() {
+	local testroot=`test_init histedit_fold_delete_subdir_cwd`
+	local commit0=`git_show_head $testroot/repo`
+
+	got checkout $testroot/repo $testroot/wt > /dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got checkout failed unexpectedly"
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	mkdir $testroot/wt/new
+	echo new file > $testroot/wt/new/file
+	(cd $testroot/wt && got add new/file > /dev/null)
+
+	(cd $testroot/wt && got commit -m 'add new/file' \
+		> $testroot/stdout 2> $testroot/stderr)
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got commit failed unexpectedly" >&2
+		test_done "$testroot" "1"
+		return 1
+	fi
+	local commit1=`git_show_head $testroot/repo`
+
+	mkdir $testroot/wt/new/dir
+	echo new file > $testroot/wt/new/dir/foo
+	(cd $testroot/wt && got add new/dir/foo > /dev/null)
+
+	(cd $testroot/wt && got commit -m 'add new/dir/foo' \
+		> $testroot/stdout 2> $testroot/stderr)
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got commit failed unexpectedly" >&2
+		test_done "$testroot" "1"
+		return 1
+	fi
+	local commit2=`git_show_head $testroot/repo`
+
+	mkdir $testroot/wt/new/dir2
+	echo new file > $testroot/wt/new/dir2/foo
+	(cd $testroot/wt && got add new/dir2/foo > /dev/null)
+	(cd $testroot/wt && got rm new/dir/foo > /dev/null)
+
+	(cd $testroot/wt && got commit -m 'add new/dir2/foo; rm new/dir/foo' \
+		> $testroot/stdout 2> $testroot/stderr)
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got commit failed unexpectedly" >&2
+		test_done "$testroot" "1"
+		return 1
+	fi
+	local commit3=`git_show_head $testroot/repo`
+
+	cat > $testroot/editor.sh <<EOF
+#!/bin/sh
+true
+EOF
+	chmod +x $testroot/editor.sh
+
+	(cd $testroot/wt/new/dir && got update -q -c $commit1 > /dev/null && \
+	  env EDITOR="$testroot/editor.sh" VISUAL="$testroot/editor.sh" \
+	  got histedit -f > $testroot/stdout 2> $testroot/stderr)
+	local commit4=`git_show_head $testroot/repo`
+
+	echo -n > $testroot/stderr.expected
+	cmp -s $testroot/stderr.expected $testroot/stderr
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stderr.expected $testroot/stderr
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	local short_commit2=`trim_obj_id 12 $commit2`
+	local short_commit3=`trim_obj_id 12 $commit3`
+	local short_commit4=`trim_obj_id 12 $commit4`
+
+	cat >> $testroot/stdout.expected <<EOF
+A  new/dir/foo
+$short_commit2 ->  fold commit: add new/dir/foo
+D  new/dir/foo
+A  new/dir2/foo
+$short_commit3 -> $short_commit4: add new/dir/foo
+Switching work tree to refs/heads/master
+EOF
+
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	test_done "$testroot" "$ret"
+}
 test_parseargs "$@"
 run_test test_histedit_no_op
 run_test test_histedit_swap
@@ -3084,3 +3182,4 @@ run_test test_histedit_conflict_revert
 run_test test_histedit_no_eof_newline
 run_test test_histedit_preserve_bad_link
 run_test test_histedit_added_file
+run_test test_histedit_fold_delete_subdir_cwd

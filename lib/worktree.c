@@ -3205,13 +3205,26 @@ merge_file_cb(void *arg, struct got_blob_object *blob1,
 			FILE *blob1_f;
 			off_t blob1_size;
 			/*
-			 * Delete the file only if its content already
-			 * exists in the repository.
+			 * Delete the file only if its content already exists
+			 * in the repository, or if the file does not exist
+			 * on disk. No content will be lost in either case.
 			 */
 			err = got_object_blob_file_create(&id, &blob1_f,
 			    &blob1_size, path1, repo);
-			if (err)
+			if (err) {
+				if (err->code == GOT_ERR_ERRNO &&
+				    (errno == ENOENT || errno == ENOTDIR)) {
+					/* The file does not exist on disk. */
+					err = (*a->progress_cb)(a->progress_arg,
+					    GOT_STATUS_DELETE, path1);
+					if (err)
+						goto done;
+					if (ie)
+						got_fileindex_entry_remove(
+						    a->fileindex, ie);
+				}
 				goto done;
+			}
 			if (fclose(blob1_f) == EOF) {
 				err = got_error_from_errno("fclose");
 				goto done;
