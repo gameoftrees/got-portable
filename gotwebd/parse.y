@@ -1124,7 +1124,6 @@ parse_config(const char *filename, struct gotwebd *env)
 		/* we don't require a config file */
 		yyparse();
 		errors = file->errors;
-		closefile(file);
 	}
 
 	/* Free macros and check which have not been used. */
@@ -1166,8 +1165,11 @@ parse_config(const char *filename, struct gotwebd *env)
 			add_addr(h);
 	}
 
-	if (errors)
+	if (errors) {
+		if (file)
+			closefile(file);
 		return (-1);
+	}
 
 	/* setup our listening sockets */
 	sockets_parse_sockets(env);
@@ -1179,6 +1181,8 @@ parse_config(const char *filename, struct gotwebd *env)
 		if (h == NULL) {
 			fprintf(stderr, "cannot listen on %s",
 			    GOTWEBD_LOGIN_SOCKET);
+			if (file)
+				closefile(file);
 			return (-1);
 		}
 		gotwebd->login_sock = sockets_conf_new_socket(-1, h);
@@ -1233,6 +1237,8 @@ parse_config(const char *filename, struct gotwebd *env)
 		}
 	}
 
+	if (file)
+		closefile(file);
 	return (0);
 }
 
