@@ -60,11 +60,15 @@ static struct file {
 	TAILQ_ENTRY(file)	 entry;
 	FILE			*stream;
 	char			*name;
+	size_t			 ungetpos;
+	size_t			 ungetsize;
+	unsigned char		*ungetbuf;
+	int			 eof_reached;
 	int			 lineno;
 	int			 errors;
-} *file;
-struct file	*newfile(const char *, int);
-static void	 closefile(struct file *);
+} *file, *topfile;
+struct file	*pushfile(const char *, int);
+static int	 popfile(void);
 int		 check_file_secrecy(int, const char *);
 int		 yyparse(void);
 int		 yylex(void);
@@ -73,8 +77,9 @@ int		 yyerror(const char *, ...)
     __attribute__((__nonnull__ (1)));
 int		 kw_cmp(const void *, const void *);
 int		 lookup(char *);
+int		 igetc(void);
 int		 lgetc(int);
-int		 lungetc(int);
+void		 lungetc(int);
 int		 findeol(void);
 
 TAILQ_HEAD(symhead, sym)	 symhead = TAILQ_HEAD_INITIALIZER(symhead);
@@ -790,69 +795,90 @@ lookup(char *s)
 		return (STRING);
 }
 
-#define MAXPUSHBACK	128
+#define START_EXPAND	1
+#define DONE_EXPAND	2
 
-unsigned char *parsebuf;
-int parseindex;
-unsigned char pushback_buffer[MAXPUSHBACK];
-int pushback_index = 0;
+static int	expanding;
+
+int
+igetc(void)
+{
+	int	c;
+
+	while (1) {
+		if (file->ungetpos > 0)
+			c = file->ungetbuf[--file->ungetpos];
+		else
+			c = getc(file->stream);
+
+		if (c == START_EXPAND)
+			expanding = 1;
+		else if (c == DONE_EXPAND)
+			expanding = 0;
+		else
+			break;
+	}
+	return c;
+}
 
 int
 lgetc(int quotec)
 {
 	int c, next;
 
-	if (parsebuf) {
-		/* Read character from the parsebuffer instead of input. */
-		if (parseindex >= 0) {
-			c = parsebuf[parseindex++];
-			if (c != '\0')
-				return (c);
-			parsebuf = NULL;
-		} else
-			parseindex++;
-	}
-
-	if (pushback_index)
-		return (pushback_buffer[--pushback_index]);
-
 	if (quotec) {
-		c = getc(file->stream);
-		if (c == EOF)
+		if ((c = igetc()) == EOF) {
 			yyerror("reached end of file while parsing "
 			    "quoted string");
-		return (c);
+			if (file == topfile || popfile() == EOF)
+				return EOF;
+			return quotec;
+		}
+		return c;
 	}
 
-	c = getc(file->stream);
-	while (c == '\\') {
-		next = getc(file->stream);
+	while ((c = igetc()) == '\\') {
+		next = igetc();
 		if (next != '\n') {
 			c = next;
 			break;
 		}
 		yylval.lineno = file->lineno;
 		file->lineno++;
-		c = getc(file->stream);
 	}
 
+	if (c == EOF) {
+		/*
+		 * Fake EOL when hit EOF for the first time. This gets line
+		 * count right if last line in included file is syntactically
+		 * invalid and has no newline.
+		 */
+		if (file->eof_reached == 0) {
+			file->eof_reached = 1;
+			return '\n';
+		}
+		while (c == EOF) {
+			if (file == topfile || popfile() == EOF)
+				return EOF;
+			c = igetc();
+		}
+	}
 	return (c);
 }
 
-int
+void
 lungetc(int c)
 {
 	if (c == EOF)
-		return (EOF);
-	if (parsebuf) {
-		parseindex--;
-		if (parseindex >= 0)
-			return (c);
+		return;
+	if (file->ungetpos >= file->ungetsize) {
+		void *p = reallocarray(file->ungetbuf, file->ungetsize, 2);
+		if (p == NULL)
+			fatal("reallocarray");
+		file->ungetbuf = p;
+		file->ungetsize *= 2;
 	}
-	if (pushback_index < MAXPUSHBACK-1)
-		return (pushback_buffer[pushback_index++] = c);
-	else
-		return (EOF);
+	file->ungetbuf[file->ungetpos++] = c;
 }
 
 int
@@ -860,14 +886,9 @@ findeol(void)
 {
 	int c;
 
-	parsebuf = NULL;
-
 	/* Skip to either EOF or the first real EOL. */
 	while (1) {
-		if (pushback_index)
-			c = pushback_buffer[--pushback_index];
-		else
-			c = lgetc(0);
+		c = lgetc(0);
 		if (c == '\n') {
 			file->lineno++;
 			break;
@@ -886,7 +907,7 @@ yylex(void)
 	int quotec, next, c;
 	int token;
 
-top:
+ top:
 	p = buf;
 	c = lgetc(0);
 	while (c == ' ' || c == '\t')
@@ -898,7 +919,7 @@ top:
 		while (c != '\n' && c != EOF)
 			c = lgetc(0); /* nothing */
 	}
-	if (c == '$' && parsebuf == NULL) {
+	if (c == '$' && !expanding) {
 		while (1) {
 			c = lgetc(0);
 			if (c == EOF)
@@ -921,8 +942,13 @@ top:
 			yyerror("macro '%s' not defined", buf);
 			return (findeol());
 		}
-		parsebuf = val;
-		parseindex = 0;
+		p = val + strlen(val) - 1;
+		lungetc(DONE_EXPAND);
+		while (p >= val) {
+			lungetc((unsigned char)*p);
+			p--;
+		}
+		lungetc(START_EXPAND);
 		goto top;
 	}
 
@@ -1059,7 +1085,7 @@ check_file_secrecy(int fd, const char *fname)
 }
 
 struct file *
-newfile(const char *name, int secret)
+pushfile(const char *name, int secret)
 {
 	struct file *nfile;
 
@@ -1077,6 +1103,8 @@ newfile(const char *name, int secret)
 	nfile->stream = fopen(nfile->name, "r");
 	if (nfile->stream == NULL) {
 		/* no warning, we don't require a conf file */
+		if (topfile != NULL)
+			log_warn("can't open %s", nfile->name);
 		free(nfile->name);
 		free(nfile);
 		return (NULL);
@@ -1088,15 +1116,34 @@ newfile(const char *name, int secret)
 		return (NULL);
 	}
 	nfile->lineno = 1;
+	nfile->ungetsize = 16;
+	nfile->ungetbuf = calloc(1, nfile->ungetsize);
+	if (nfile->ungetbuf == NULL) {
+		log_warn("calloc");
+		fclose(nfile->stream);
+		free(nfile->name);
+		free(nfile);
+		return (NULL);
+	}
+	TAILQ_INSERT_TAIL(&files, nfile, entry);
 	return (nfile);
 }
 
-static void
-closefile(struct file *xfile)
+static int
+popfile(void)
 {
-	fclose(xfile->stream);
-	free(xfile->name);
-	free(xfile);
+	struct file	*prev;
+
+	if ((prev = TAILQ_PREV(file, files, entry)) != NULL)
+		prev->errors += file->errors;
+
+	TAILQ_REMOVE(&files, file, entry);
+	fclose(file->stream);
+	free(file->name);
+	free(file->ungetbuf);
+	free(file);
+	file = prev;
+	return file ? 0 : EOF;
 }
 
 static void
@@ -1118,11 +1165,14 @@ parse_config(const char *filename, struct gotwebd *env)
 
 	gotwebd = env;
 
-	file = newfile(filename, 0);
+	file = pushfile(filename, 0);
 	if (file != NULL) {
 		/* we don't require a config file */
+		topfile = file;
 		yyparse();
 		errors = file->errors;
+		while (popfile() != EOF)
+			;
 	}
 
 	/* Free macros and check which have not been used. */
@@ -1165,8 +1215,6 @@ parse_config(const char *filename, struct gotwebd *env)
 	}
 
 	if (errors) {
-		if (file)
-			closefile(file);
 		return (-1);
 	}
 
@@ -1180,8 +1228,6 @@ parse_config(const char *filename, struct gotwebd *env)
 		if (h == NULL) {
 			fprintf(stderr, "cannot listen on %s",
 			    GOTWEBD_LOGIN_SOCKET);
-			if (file)
-				closefile(file);
 			return (-1);
 		}
 		gotwebd->login_sock = sockets_conf_new_socket(-1, h);
@@ -1236,8 +1282,6 @@ parse_config(const char *filename, struct gotwebd *env)
 		}
 	}
 
-	if (file)
-		closefile(file);
 	return (0);
 }
 
