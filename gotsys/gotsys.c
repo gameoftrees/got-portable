@@ -165,7 +165,7 @@ usage_apply(int status)
 {
 	FILE *fp = (status == 0) ? stdout : stderr;
 	fprintf(fp, "usage: %s apply [-f socket] [-r repository] "
-	    "[-c commit] [-w] [filename]", getprogname());
+	    "[-c commit] [-w] [filename]\n", getprogname());
 	exit(status);
 }
 
