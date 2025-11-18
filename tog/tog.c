@@ -81,15 +81,15 @@
 struct tog_cmd {
 	const char *name;
 	const struct got_error *(*cmd_main)(int, char *[]);
-	void (*cmd_usage)(void);
+	void (*cmd_usage)(int);
 };
 
 __dead static void	usage(int, int);
-__dead static void	usage_log(void);
-__dead static void	usage_diff(void);
-__dead static void	usage_blame(void);
-__dead static void	usage_tree(void);
-__dead static void	usage_ref(void);
+__dead static void	usage_log(int);
+__dead static void	usage_diff(int);
+__dead static void	usage_blame(int);
+__dead static void	usage_tree(int);
+__dead static void	usage_ref(int);
 
 static const struct got_error*	cmd_log(int, char *[]);
 static const struct got_error*	cmd_diff(int, char *[]);
@@ -2244,13 +2244,14 @@ done:
 }
 
 __dead static void
-usage_log(void)
+usage_log(int status)
 {
+	FILE *fp = (status == 0) ? stdout : stderr;
 	endwin();
-	fprintf(stderr,
+	fprintf(fp,
 	    "usage: %s log [-b] [-c commit] [-r repository-path] [path]\n",
 	    getprogname());
-	exit(1);
+	exit(status);
 }
 
 /* Create newly allocated wide-character string equivalent to a byte string. */
@@ -5290,7 +5291,7 @@ cmd_log(int argc, char *argv[])
 				    optarg);
 			break;
 		default:
-			usage_log();
+			usage_log(1);
 			/* NOTREACHED */
 		}
 	}
@@ -5299,7 +5300,7 @@ cmd_log(int argc, char *argv[])
 	argv += optind;
 
 	if (argc > 1)
-		usage_log();
+		usage_log(1);
 
 	error = got_repo_pack_fds_open(&pack_fds);
 	if (error != NULL)
@@ -5426,13 +5427,14 @@ done:
 }
 
 __dead static void
-usage_diff(void)
+usage_diff(int status)
 {
+	FILE *fp = (status == 0) ? stdout : stderr;
 	endwin();
-	fprintf(stderr, "usage: %s diff [-asw] [-C number] [-c commit] "
+	fprintf(fp, "usage: %s diff [-asw] [-C number] [-c commit] "
 	    "[-r repository-path] [object1 object2 | path ...]\n",
 	    getprogname());
-	exit(1);
+	exit(status);
 }
 
 static int
@@ -7503,7 +7505,7 @@ cmd_diff(int argc, char *argv[])
 			ignore_whitespace = 1;
 			break;
 		default:
-			usage_diff();
+			usage_diff(1);
 			/* NOTREACHED */
 		}
 	}
@@ -7793,13 +7795,14 @@ done:
 }
 
 __dead static void
-usage_blame(void)
+usage_blame(int status)
 {
+	FILE *fp = (status == 0) ? stdout : stderr;
 	endwin();
-	fprintf(stderr,
+	fprintf(fp,
 	    "usage: %s blame [-c commit] [-r repository-path] path\n",
 	    getprogname());
-	exit(1);
+	exit(status);
 }
 
 struct tog_blame_line {
@@ -8814,7 +8817,7 @@ cmd_blame(int argc, char *argv[])
 				    optarg);
 			break;
 		default:
-			usage_blame();
+			usage_blame(1);
 			/* NOTREACHED */
 		}
 	}
@@ -8823,7 +8826,7 @@ cmd_blame(int argc, char *argv[])
 	argv += optind;
 
 	if (argc != 1)
-		usage_blame();
+		usage_blame(1);
 
 	error = got_repo_pack_fds_open(&pack_fds);
 	if (error != NULL)
@@ -9773,13 +9776,14 @@ input_tree_view(struct tog_view **new_view, struct tog_view *view, int ch)
 }
 
 __dead static void
-usage_tree(void)
+usage_tree(int status)
 {
+	FILE *fp = (status == 0) ? stdout : stderr;
 	endwin();
-	fprintf(stderr,
+	fprintf(fp,
 	    "usage: %s tree [-c commit] [-r repository-path] [path]\n",
 	    getprogname());
-	exit(1);
+	exit(status);
 }
 
 static const struct got_error *
@@ -9811,7 +9815,7 @@ cmd_tree(int argc, char *argv[])
 				    optarg);
 			break;
 		default:
-			usage_tree();
+			usage_tree(1);
 			/* NOTREACHED */
 		}
 	}
@@ -9820,7 +9824,7 @@ cmd_tree(int argc, char *argv[])
 	argv += optind;
 
 	if (argc > 1)
-		usage_tree();
+		usage_tree(1);
 
 	error = got_repo_pack_fds_open(&pack_fds);
 	if (error != NULL)
@@ -10678,12 +10682,13 @@ input_ref_view(struct tog_view **new_view, struct tog_view *view, int ch)
 }
 
 __dead static void
-usage_ref(void)
+usage_ref(int status)
 {
+	FILE *fp = (status == 0) ? stdout : stderr;
 	endwin();
-	fprintf(stderr, "usage: %s ref [-r repository-path]\n",
+	fprintf(fp, "usage: %s ref [-r repository-path]\n",
 	    getprogname());
-	exit(1);
+	exit(status);
 }
 
 static const struct got_error *
@@ -10706,7 +10711,7 @@ cmd_ref(int argc, char *argv[])
 				    optarg);
 			break;
 		default:
-			usage_ref();
+			usage_ref(1);
 			/* NOTREACHED */
 		}
 	}
@@ -10715,7 +10720,7 @@ cmd_ref(int argc, char *argv[])
 	argv += optind;
 
 	if (argc > 1)
-		usage_ref();
+		usage_ref(1);
 
 	error = got_repo_pack_fds_open(&pack_fds);
 	if (error != NULL)
@@ -11767,7 +11772,7 @@ main(int argc, char *argv[])
 		error = tog_log_with_path(argc, argv);
 	} else {
 		if (hflag)
-			cmd->cmd_usage();
+			cmd->cmd_usage(0);
 		else
 			error = cmd->cmd_main(argc, cmd_argv ? cmd_argv : argv);
 	}

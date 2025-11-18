@@ -76,19 +76,19 @@ check_cancelled(void *arg)
 struct gotadmin_cmd {
 	const char	*cmd_name;
 	const struct got_error *(*cmd_main)(int, char *[]);
-	void		(*cmd_usage)(void);
+	void		(*cmd_usage)(int);
 	const char	*cmd_alias;
 };
 
 __dead static void	usage(int, int);
-__dead static void	usage_init(void);
-__dead static void	usage_info(void);
-__dead static void	usage_pack(void);
-__dead static void	usage_indexpack(void);
-__dead static void	usage_listpack(void);
-__dead static void	usage_cleanup(void);
-__dead static void	usage_dump(void);
-__dead static void	usage_load(void);
+__dead static void	usage_init(int);
+__dead static void	usage_info(int);
+__dead static void	usage_pack(int);
+__dead static void	usage_indexpack(int);
+__dead static void	usage_listpack(int);
+__dead static void	usage_cleanup(int);
+__dead static void	usage_dump(int);
+__dead static void	usage_load(int);
 
 static const struct got_error*		cmd_init(int, char *[]);
 static const struct got_error*		cmd_info(int, char *[]);
@@ -177,7 +177,7 @@ main(int argc, char *argv[])
 			continue;
 
 		if (hflag)
-			cmd->cmd_usage();
+			cmd->cmd_usage(0);
 
 		error = cmd->cmd_main(argc, argv);
 		if (error && error->code != GOT_ERR_CANCELLED &&
@@ -236,11 +236,12 @@ apply_unveil(const char *repo_path, int repo_read_only)
 }
 
 __dead static void
-usage_info(void)
+usage_info(int status)
 {
-	fprintf(stderr, "usage: %s info [-r repository-path]\n",
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s info [-r repository-path]\n",
 	    getprogname());
-	exit(1);
+	exit(status);
 }
 
 static const struct got_error *
@@ -277,12 +278,13 @@ done:
 }
 
 __dead static void
-usage_init(void)
+usage_init(int status)
 {
-	fprintf(stderr, "usage: %s init [-A hashing-algorithm] [-b branch]"
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s init [-A hashing-algorithm] [-b branch]"
 	    " repository-path\n",
 	    getprogname());
-	exit(1);
+	exit(status);
 }
 
 static const struct got_error *
@@ -314,7 +316,7 @@ cmd_init(int argc, char *argv[])
 			head_name = optarg;
 			break;
 		default:
-			usage_init();
+			usage_init(1);
 			/* NOTREACHED */
 		}
 	}
@@ -323,7 +325,7 @@ cmd_init(int argc, char *argv[])
 	argv += optind;
 
 	if (argc != 1)
-		usage_init();
+		usage_init(1);
 
 	repo_path = strdup(argv[0]);
 	if (repo_path == NULL)
@@ -374,7 +376,7 @@ cmd_info(int argc, char *argv[])
 			got_path_strip_trailing_slashes(repo_path);
 			break;
 		default:
-			usage_info();
+			usage_info(1);
 			/* NOTREACHED */
 		}
 	}
@@ -472,11 +474,12 @@ done:
 }
 
 __dead static void
-usage_pack(void)
+usage_pack(int status)
 {
-	fprintf(stderr, "usage: %s pack [-aDq] [-r repository-path] "
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s pack [-aDq] [-r repository-path] "
 	    "[-x reference] [reference ...]\n", getprogname());
-	exit(1);
+	exit(status);
 }
 
 struct got_pack_progress_arg {
@@ -766,7 +769,7 @@ cmd_pack(int argc, char *argv[])
 				return error;
 			break;
 		default:
-			usage_pack();
+			usage_pack(1);
 			/* NOTREACHED */
 		}
 	}
@@ -871,11 +874,12 @@ done:
 }
 
 __dead static void
-usage_indexpack(void)
+usage_indexpack(int status)
 {
-	fprintf(stderr, "usage: %s indexpack packfile-path\n",
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s indexpack packfile-path\n",
 	    getprogname());
-	exit(1);
+	exit(status);
 }
 
 static const struct got_error *
@@ -894,7 +898,7 @@ cmd_indexpack(int argc, char *argv[])
 	while ((ch = getopt(argc, argv, "")) != -1) {
 		switch (ch) {
 		default:
-			usage_indexpack();
+			usage_indexpack(1);
 			/* NOTREACHED */
 		}
 	}
@@ -903,7 +907,7 @@ cmd_indexpack(int argc, char *argv[])
 	argv += optind;
 
 	if (argc != 1)
-		usage_indexpack();
+		usage_indexpack(1);
 
 	packfile_path = realpath(argv[0], NULL);
 	if (packfile_path == NULL)
@@ -962,11 +966,12 @@ done:
 }
 
 __dead static void
-usage_listpack(void)
+usage_listpack(int status)
 {
-	fprintf(stderr, "usage: %s listpack [-hs] packfile-path\n",
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s listpack [-hs] packfile-path\n",
 	    getprogname());
-	exit(1);
+	exit(status);
 }
 
 struct gotadmin_list_pack_cb_args {
@@ -1086,7 +1091,7 @@ cmd_listpack(int argc, char *argv[])
 			show_stats = 1;
 			break;
 		default:
-			usage_listpack();
+			usage_listpack(1);
 			/* NOTREACHED */
 		}
 	}
@@ -1095,7 +1100,7 @@ cmd_listpack(int argc, char *argv[])
 	argv += optind;
 
 	if (argc != 1)
-		usage_listpack();
+		usage_listpack(1);
 	packfile_path = realpath(argv[0], NULL);
 	if (packfile_path == NULL)
 		return got_error_from_errno2("realpath", argv[0]);
@@ -1154,11 +1159,12 @@ done:
 }
 
 __dead static void
-usage_cleanup(void)
+usage_cleanup(int status)
 {
-	fprintf(stderr, "usage: %s cleanup [-anpq] [-r repository-path]\n",
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s cleanup [-anpq] [-r repository-path]\n",
 	    getprogname());
-	exit(1);
+	exit(status);
 }
 
 struct got_cleanup_progress_arg {
@@ -1310,7 +1316,7 @@ cmd_cleanup(int argc, char *argv[])
 			got_path_strip_trailing_slashes(repo_path);
 			break;
 		default:
-			usage_cleanup();
+			usage_cleanup(1);
 			/* NOTREACHED */
 		}
 	}
@@ -1421,11 +1427,12 @@ done:
 }
 
 __dead static void
-usage_dump(void)
+usage_dump(int status)
 {
-	fprintf(stderr, "usage: %s dump [-q] [-r repository-path] "
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s dump [-q] [-r repository-path] "
 	    "[-x reference] [reference]...\n", getprogname());
-	exit(1);
+	exit(status);
 }
 
 static const struct got_error *
@@ -1474,7 +1481,7 @@ cmd_dump(int argc, char *argv[])
 				return error;
 			break;
 		default:
-			usage_dump();
+			usage_dump(1);
 			/* NOTREACHED */
 		}
 	}
@@ -1558,12 +1565,13 @@ cmd_dump(int argc, char *argv[])
 }
 
 __dead static void
-usage_load(void)
+usage_load(int status)
 {
-	fprintf(stderr, "usage: %s load [-nq] [-l bundle-file] "
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s load [-nq] [-l bundle-file] "
 	    "[-r repository-path] [reference ...]\n",
 	    getprogname());
-	exit(1);
+	exit(status);
 }
 
 static const struct got_error *
@@ -1726,7 +1734,7 @@ cmd_load(int argc, char *argv[])
 			got_path_strip_trailing_slashes(repo_path);
 			break;
 		default:
-			usage_load();
+			usage_load(1);
 			/* NOTREACHED */
 		}
 	}

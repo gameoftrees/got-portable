@@ -53,13 +53,13 @@
 struct gotsys_cmd {
 	const char	*cmd_name;
 	const struct got_error *(*cmd_main)(int, char *[]);
-	void		(*cmd_usage)(void);
+	void		(*cmd_usage)(int);
 };
 
 __dead static void	usage(int, int);
 
-__dead static void	usage_apply(void);
-__dead static void	usage_check(void);
+__dead static void	usage_apply(int);
+__dead static void	usage_check(int);
 
 static const struct got_error*		cmd_apply(int, char *[]);
 static const struct got_error*		cmd_check(int, char *[]);
@@ -161,11 +161,12 @@ done:
 
 
 __dead static void
-usage_apply(void)
+usage_apply(int status)
 {
-	fprintf(stderr, "usage: %s apply [-f socket] [-r repository] "
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s apply [-f socket] [-r repository] "
 	    "[-c commit] [-w] [filename]", getprogname());
-	exit(1);
+	exit(status);
 }
 
 static const struct got_error *
@@ -260,7 +261,7 @@ cmd_apply(int argc, char *argv[])
 			wait = 1;
 			break;
 		default:
-			usage_apply();
+			usage_apply(1);
 			/* NOTREACHED */
 			break;
 		}
@@ -270,7 +271,7 @@ cmd_apply(int argc, char *argv[])
 	argv += optind;
 
 	if (argc > 1)
-		usage_apply();
+		usage_apply(1);
 
 	filename = (argc == 1 ? argv[0] : GOTSYSD_SYSCONF_FILENAME);
 
@@ -442,10 +443,11 @@ done:
 }
 
 __dead static void
-usage_check(void)
+usage_check(int status)
 {
-	fprintf(stderr, "usage: %s check [-q] [-f file]\n", getprogname());
-	exit(1);
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s check [-q] [-f file]\n", getprogname());
+	exit(status);
 }
 
 static const struct got_error *
@@ -510,7 +512,7 @@ cmd_check(int argc, char *argv[])
 			got_path_strip_trailing_slashes(configfile);
 			break;
 		default:
-			usage_check();
+			usage_check(1);
 			/* NOTREACHED */
 			break;
 		}
@@ -519,7 +521,7 @@ cmd_check(int argc, char *argv[])
 	argv += optind;
 
 	if (argc > 0)
-		usage_check();
+		usage_check(1);
 
 	if (fd != STDIN_FILENO && configfile == NULL) {
 		configfile = strdup(GOTSYSD_SYSCONF_FILENAME);
@@ -658,7 +660,7 @@ main(int argc, char *argv[])
 			continue;
 
 		if (hflag)
-			cmd->cmd_usage();
+			cmd->cmd_usage(0);
 
 		error = cmd->cmd_main(argc, argv);
 		if (error) {

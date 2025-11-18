@@ -56,14 +56,14 @@
 struct gotctl_cmd {
 	const char	*cmd_name;
 	const struct got_error *(*cmd_main)(int, char *[], int);
-	void		(*cmd_usage)(void);
+	void		(*cmd_usage)(int);
 };
 
 __dead static void	usage(int, int);
 
-__dead static void	usage_info(void);
-__dead static void	usage_stop(void);
-__dead static void	usage_reload(void);
+__dead static void	usage_info(int);
+__dead static void	usage_stop(int);
+__dead static void	usage_reload(int);
 
 static const struct got_error*		cmd_info(int, char *[], int);
 static const struct got_error*		cmd_stop(int, char *[], int);
@@ -76,10 +76,11 @@ static const struct gotctl_cmd gotctl_commands[] = {
 };
 
 __dead static void
-usage_info(void)
+usage_info(int status)
 {
-	fprintf(stderr, "usage: %s info\n", getprogname());
-	exit(1);
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s info\n", getprogname());
+	exit(status);
 }
 
 static const struct got_error *
@@ -222,10 +223,11 @@ cmd_info(int argc, char *argv[], int gotd_sock)
 }
 
 __dead static void
-usage_stop(void)
+usage_stop(int status)
 {
-	fprintf(stderr, "usage: %s stop\n", getprogname());
-	exit(1);
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s stop\n", getprogname());
+	exit(status);
 }
 
 static const struct got_error *
@@ -275,11 +277,12 @@ cmd_stop(int argc, char *argv[], int gotd_sock)
 }
 
 __dead static void
-usage_reload(void)
+usage_reload(int status)
 {
-	fprintf(stderr, "usage: %s reload [-c config-file] [-s secrets]\n",
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s reload [-c config-file] [-s secrets]\n",
 	    getprogname());
-	exit(1);
+	exit(status);
 }
 
 static const struct got_error *
@@ -352,7 +355,7 @@ cmd_reload(int argc, char *argv[], int gotd_sock)
 			}
 			break;
 		default:
-			usage_reload();
+			usage_reload(1);
 			/* NOTREACHED */
 		}
 	}
@@ -632,7 +635,7 @@ main(int argc, char *argv[])
 			continue;
 
 		if (hflag)
-			cmd->cmd_usage();
+			cmd->cmd_usage(0);
 #ifdef PROFILE
 		if (unveil("gmon.out", "rwc") != 0)
 			err(1, "unveil", "gmon.out");
