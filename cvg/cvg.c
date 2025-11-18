@@ -93,30 +93,30 @@ catch_sigpipe(int signo)
 struct got_cmd {
 	const char	*cmd_name;
 	const struct got_error *(*cmd_main)(int, char *[]);
-	void		(*cmd_usage)(void);
+	void		(*cmd_usage)(int);
 	const char	*cmd_alias;
 };
 
 __dead static void	usage(int, int);
-__dead static void	usage_import(void);
-__dead static void	usage_clone(void);
-__dead static void	usage_checkout(void);
-__dead static void	usage_update(void);
-__dead static void	usage_log(void);
-__dead static void	usage_diff(void);
-__dead static void	usage_blame(void);
-__dead static void	usage_tree(void);
-__dead static void	usage_status(void);
-__dead static void	usage_tag(void);
-__dead static void	usage_add(void);
-__dead static void	usage_remove(void);
-__dead static void	usage_patch(void);
-__dead static void	usage_revert(void);
-__dead static void	usage_commit(void);
-__dead static void	usage_cherrypick(void);
-__dead static void	usage_backout(void);
-__dead static void	usage_cat(void);
-__dead static void	usage_info(void);
+__dead static void	usage_import(int);
+__dead static void	usage_clone(int);
+__dead static void	usage_checkout(int);
+__dead static void	usage_update(int);
+__dead static void	usage_log(int);
+__dead static void	usage_diff(int);
+__dead static void	usage_blame(int);
+__dead static void	usage_tree(int);
+__dead static void	usage_status(int);
+__dead static void	usage_tag(int);
+__dead static void	usage_add(int);
+__dead static void	usage_remove(int);
+__dead static void	usage_patch(int);
+__dead static void	usage_revert(int);
+__dead static void	usage_commit(int);
+__dead static void	usage_cherrypick(int);
+__dead static void	usage_backout(int);
+__dead static void	usage_cat(int);
+__dead static void	usage_info(int);
 
 static const struct got_error*		cmd_import(int, char *[]);
 static const struct got_error*		cmd_clone(int, char *[]);
@@ -233,7 +233,7 @@ main(int argc, char *argv[])
 			continue;
 
 		if (hflag)
-			cmd->cmd_usage();
+			cmd->cmd_usage(0);
 
 		error = cmd->cmd_main(argc, argv);
 		if (error && error->code != GOT_ERR_CANCELLED &&
@@ -324,11 +324,12 @@ apply_unveil(const char *repo_path, int repo_read_only,
 }
 
 __dead static void
-usage_import(void)
+usage_import(int status)
 {
-	fprintf(stderr, "usage: %s import [-b branch] [-I pattern] [-m message] "
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s import [-b branch] [-I pattern] [-m message] "
 	    "[-r repository-path] directory\n", getprogname());
-	exit(1);
+	exit(status);
 }
 
 static int
@@ -779,7 +780,7 @@ cmd_import(int argc, char *argv[])
 			}
 			break;
 		default:
-			usage_import();
+			usage_import(1);
 			/* NOTREACHED */
 		}
 	}
@@ -788,7 +789,7 @@ cmd_import(int argc, char *argv[])
 	argv += optind;
 
 	if (argc != 1)
-		usage_import();
+		usage_import(1);
 
 	if (repo_path == NULL) {
 		repo_path = getcwd(NULL, 0);
@@ -978,12 +979,13 @@ done:
 }
 
 __dead static void
-usage_clone(void)
+usage_clone(int status)
 {
-	fprintf(stderr, "usage: %s clone [-almqv] [-b branch] "
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s clone [-almqv] [-b branch] "
 	    "[-i identity-file] [-J jumphost] [-R reference] "
 	    "repository-URL [directory]\n", getprogname());
-	exit(1);
+	exit(status);
 }
 
 struct got_fetch_progress_arg {
@@ -1590,7 +1592,7 @@ cmd_clone(int argc, char *argv[])
 				verbosity++;
 			break;
 		default:
-			usage_clone();
+			usage_clone(1);
 			break;
 		}
 	}
@@ -1617,7 +1619,7 @@ cmd_clone(int argc, char *argv[])
 	else if (argc == 2)
 		dirname = argv[1];
 	else
-		usage_clone();
+		usage_clone(1);
 
 	error = got_dial_parse_uri(&proto, &host, &port, &server_path,
 	    &repo_name, uri);
@@ -2018,12 +2020,13 @@ done:
 }
 
 __dead static void
-usage_checkout(void)
+usage_checkout(int status)
 {
-	fprintf(stderr, "usage: %s checkout [-Eq] [-b branch] [-c commit] "
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s checkout [-Eq] [-b branch] [-c commit] "
 	    "[-p path-prefix] repository-path [work-tree-path]\n",
 	    getprogname());
-	exit(1);
+	exit(status);
 }
 
 static void
@@ -2234,7 +2237,7 @@ cmd_checkout(int argc, char *argv[])
 			verbosity = -1;
 			break;
 		default:
-			usage_checkout();
+			usage_checkout(1);
 			/* NOTREACHED */
 		}
 	}
@@ -2289,7 +2292,7 @@ cmd_checkout(int argc, char *argv[])
 			}
 		}
 	} else
-		usage_checkout();
+		usage_checkout(1);
 
 	got_path_strip_trailing_slashes(repo_path);
 	got_path_strip_trailing_slashes(worktree_path);
@@ -2496,12 +2499,13 @@ print_merge_progress_stats(struct got_update_progress_arg *upa)
 }
 
 __dead static void
-usage_update(void)
+usage_update(int status)
 {
-	fprintf(stderr, "usage: %s update [-qtvX] [-c commit] "
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s update [-qtvX] [-c commit] "
 	    "[-i identity-file] [-J jumphost] [-r remote] [path ...]\n",
 	    getprogname());
-	exit(1);
+	exit(status);
 }
 
 static const struct got_error *
@@ -2721,7 +2725,7 @@ cmd_update(int argc, char *argv[])
 			delete_remote = 1;
 			break;
 		default:
-			usage_update();
+			usage_update(1);
 			break;
 		}
 	}
@@ -3932,12 +3936,13 @@ done:
 }
 
 __dead static void
-usage_log(void)
+usage_log(int status)
 {
-	fprintf(stderr, "usage: %s log [-bdPpRs] [-C number] [-c commit] "
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s log [-bdPpRs] [-C number] [-c commit] "
 	    "[-l N] [-r repository-path] [-S search-pattern] [-x commit] "
 	    "[path]\n", getprogname());
-	exit(1);
+	exit(status);
 }
 
 static int
@@ -4036,7 +4041,7 @@ cmd_log(int argc, char *argv[])
 			end_commit = optarg;
 			break;
 		default:
-			usage_log();
+			usage_log(1);
 			/* NOTREACHED */
 		}
 	}
@@ -4083,7 +4088,7 @@ cmd_log(int argc, char *argv[])
 			}
 		}
 	} else if (argc != 0)
-		usage_log();
+		usage_log(1);
 
 	if (repo_path == NULL) {
 		repo_path = worktree ?
@@ -4212,12 +4217,13 @@ done:
 }
 
 __dead static void
-usage_diff(void)
+usage_diff(int status)
 {
-	fprintf(stderr, "usage: %s diff [-adPsw] [-C number] [-c commit] "
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s diff [-adPsw] [-C number] [-c commit] "
 	    "[-r repository-path] [object1 object2 | path ...]\n",
 	    getprogname());
-	exit(1);
+	exit(status);
 }
 
 struct print_diff_arg {
@@ -4552,7 +4558,7 @@ cmd_diff(int argc, char *argv[])
 			ignore_whitespace = 1;
 			break;
 		default:
-			usage_diff();
+			usage_diff(1);
 			/* NOTREACHED */
 		}
 	}
@@ -4946,12 +4952,13 @@ done:
 }
 
 __dead static void
-usage_blame(void)
+usage_blame(int status)
 {
-	fprintf(stderr,
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp,
 	    "usage: %s blame [-c commit] [-r repository-path] path\n",
 	    getprogname());
-	exit(1);
+	exit(status);
 }
 
 struct blame_line {
@@ -5107,7 +5114,7 @@ cmd_blame(int argc, char *argv[])
 			got_path_strip_trailing_slashes(repo_path);
 			break;
 		default:
-			usage_blame();
+			usage_blame(1);
 			/* NOTREACHED */
 		}
 	}
@@ -5118,7 +5125,7 @@ cmd_blame(int argc, char *argv[])
 	if (argc == 1)
 		path = argv[0];
 	else
-		usage_blame();
+		usage_blame(1);
 
 	cwd = getcwd(NULL, 0);
 	if (cwd == NULL) {
@@ -5341,11 +5348,12 @@ done:
 }
 
 __dead static void
-usage_tree(void)
+usage_tree(int status)
 {
-	fprintf(stderr, "usage: %s tree [-iR] [-c commit] [-r repository-path] "
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s tree [-iR] [-c commit] [-r repository-path] "
 	    "[path]\n", getprogname());
-	exit(1);
+	exit(status);
 }
 
 static const struct got_error *
@@ -5496,7 +5504,7 @@ cmd_tree(int argc, char *argv[])
 			got_path_strip_trailing_slashes(repo_path);
 			break;
 		default:
-			usage_tree();
+			usage_tree(1);
 			/* NOTREACHED */
 		}
 	}
@@ -5507,7 +5515,7 @@ cmd_tree(int argc, char *argv[])
 	if (argc == 1)
 		path = argv[0];
 	else if (argc > 1)
-		usage_tree();
+		usage_tree(1);
 	else
 		path = NULL;
 
@@ -5641,11 +5649,12 @@ done:
 }
 
 __dead static void
-usage_status(void)
+usage_status(int status)
 {
-	fprintf(stderr, "usage: %s status [-I] [-S status-codes] "
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s status [-I] [-S status-codes] "
 	    "[-s status-codes] [path ...]\n", getprogname());
-	exit(1);
+	exit(status);
 }
 
 struct got_status_arg {
@@ -5749,7 +5758,7 @@ cmd_status(int argc, char *argv[])
 			st.status_codes = optarg;
 			break;
 		default:
-			usage_status();
+			usage_status(1);
 			/* NOTREACHED */
 		}
 	}
@@ -5809,11 +5818,12 @@ done:
 }
 
 __dead static void
-usage_tag(void)
+usage_tag(int status)
 {
-	fprintf(stderr, "usage: %s tag [-lVv] [-c commit] [-m message] "
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s tag [-lVv] [-c commit] [-m message] "
 	    "[-r repository-path] [-s signer-id] name\n", getprogname());
-	exit(1);
+	exit(status);
 }
 
 #if 0
@@ -6287,7 +6297,7 @@ cmd_tag(int argc, char *argv[])
 				verbosity++;
 			break;
 		default:
-			usage_tag();
+			usage_tag(1);
 			/* NOTREACHED */
 		}
 	}
@@ -6312,9 +6322,9 @@ cmd_tag(int argc, char *argv[])
 				option_conflict('V', 's');
 		}
 		if (argc > 1)
-			usage_tag();
+			usage_tag(1);
 	} else if (argc != 1)
-		usage_tag();
+		usage_tag(1);
 
 	if (argc == 1)
 		tag_name = argv[0];
@@ -6464,10 +6474,11 @@ done:
 }
 
 __dead static void
-usage_add(void)
+usage_add(int status)
 {
-	fprintf(stderr, "usage: %s add [-IR] path ...\n", getprogname());
-	exit(1);
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s add [-IR] path ...\n", getprogname());
+	exit(status);
 }
 
 static const struct got_error *
@@ -6508,7 +6519,7 @@ cmd_add(int argc, char *argv[])
 			can_recurse = 1;
 			break;
 		default:
-			usage_add();
+			usage_add(1);
 			/* NOTREACHED */
 		}
 	}
@@ -6517,7 +6528,7 @@ cmd_add(int argc, char *argv[])
 	argv += optind;
 
 	if (argc < 1)
-		usage_add();
+		usage_add(1);
 
 	cwd = getcwd(NULL, 0);
 	if (cwd == NULL) {
@@ -6601,11 +6612,12 @@ done:
 }
 
 __dead static void
-usage_remove(void)
+usage_remove(int status)
 {
-	fprintf(stderr, "usage: %s remove [-fkR] [-s status-codes] path ...\n",
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s remove [-fkR] [-s status-codes] path ...\n",
 	    getprogname());
-	exit(1);
+	exit(status);
 }
 
 static const struct got_error *
@@ -6673,7 +6685,7 @@ cmd_remove(int argc, char *argv[])
 			status_codes = optarg;
 			break;
 		default:
-			usage_remove();
+			usage_remove(1);
 			/* NOTREACHED */
 		}
 	}
@@ -6682,7 +6694,7 @@ cmd_remove(int argc, char *argv[])
 	argv += optind;
 
 	if (argc < 1)
-		usage_remove();
+		usage_remove(1);
 
 	cwd = getcwd(NULL, 0);
 	if (cwd == NULL) {
@@ -6767,11 +6779,12 @@ done:
 }
 
 __dead static void
-usage_patch(void)
+usage_patch(int status)
 {
-	fprintf(stderr, "usage: %s patch [-nR] [-c commit] [-p strip-count] "
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s patch [-nR] [-c commit] [-p strip-count] "
 	    "[patchfile]\n", getprogname());
-	exit(1);
+	exit(status);
 }
 
 static const struct got_error *
@@ -6925,7 +6938,7 @@ cmd_patch(int argc, char *argv[])
 			reverse = 1;
 			break;
 		default:
-			usage_patch();
+			usage_patch(1);
 			/* NOTREACHED */
 		}
 	}
@@ -6950,7 +6963,7 @@ cmd_patch(int argc, char *argv[])
 			goto done;
 		}
 	} else
-		usage_patch();
+		usage_patch(1);
 
 	if ((cwd = getcwd(NULL, 0)) == NULL) {
 		error = got_error_from_errno("getcwd");
@@ -7014,11 +7027,12 @@ done:
 }
 
 __dead static void
-usage_revert(void)
+usage_revert(int status)
 {
-	fprintf(stderr, "usage: %s revert [-pR] [-F response-script] path ...\n",
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s revert [-pR] [-F response-script] path ...\n",
 	    getprogname());
-	exit(1);
+	exit(status);
 }
 
 static const struct got_error *
@@ -7382,7 +7396,7 @@ cmd_revert(int argc, char *argv[])
 			can_recurse = 1;
 			break;
 		default:
-			usage_revert();
+			usage_revert(1);
 			/* NOTREACHED */
 		}
 	}
@@ -7391,7 +7405,7 @@ cmd_revert(int argc, char *argv[])
 	argv += optind;
 
 	if (argc < 1)
-		usage_revert();
+		usage_revert(1);
 	if (patch_script_path && !pflag)
 		errx(1, "-F option can only be used together with -p option");
 
@@ -7497,12 +7511,13 @@ done:
 }
 
 __dead static void
-usage_commit(void)
+usage_commit(int status)
 {
-	fprintf(stderr, "usage: %s commit [-CNnS] [-A author] "
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s commit [-CNnS] [-A author] "
 	    "[-i identity-file] [-J jumphost] [-F path] [-m message] "
 	    "[path ...]\n", getprogname());
-	exit(1);
+	exit(status);
 }
 
 struct collect_commit_logmsg_arg {
@@ -7878,7 +7893,7 @@ cmd_commit(int argc, char *argv[])
 			allow_bad_symlinks = 1;
 			break;
 		default:
-			usage_commit();
+			usage_commit(1);
 			/* NOTREACHED */
 		}
 	}
@@ -8331,11 +8346,12 @@ done:
 }
 
 __dead static void
-usage_cherrypick(void)
+usage_cherrypick(int status)
 {
-	fprintf(stderr, "usage: %s cherrypick [-lX] [commit-id]\n",
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s cherrypick [-lX] [commit-id]\n",
 	    getprogname());
-	exit(1);
+	exit(status);
 }
 
 static const struct got_error *
@@ -8367,7 +8383,7 @@ cmd_cherrypick(int argc, char *argv[])
 			remove_refs = 1;
 			break;
 		default:
-			usage_cherrypick();
+			usage_cherrypick(1);
 			/* NOTREACHED */
 		}
 	}
@@ -8377,9 +8393,9 @@ cmd_cherrypick(int argc, char *argv[])
 
 	if (list_refs || remove_refs) {
 		if (argc != 0 && argc != 1)
-			usage_cherrypick();
+			usage_cherrypick(1);
 	} else if (argc != 1)
-		usage_cherrypick();
+		usage_cherrypick(1);
 	if (list_refs && remove_refs)
 		option_conflict('l', 'X');
 
@@ -8474,10 +8490,11 @@ done:
 }
 
 __dead static void
-usage_backout(void)
+usage_backout(int status)
 {
-	fprintf(stderr, "usage: %s backout [-lX] [commit-id]\n", getprogname());
-	exit(1);
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s backout [-lX] [commit-id]\n", getprogname());
+	exit(status);
 }
 
 static const struct got_error *
@@ -8509,7 +8526,7 @@ cmd_backout(int argc, char *argv[])
 			remove_refs = 1;
 			break;
 		default:
-			usage_backout();
+			usage_backout(1);
 			/* NOTREACHED */
 		}
 	}
@@ -8519,9 +8536,9 @@ cmd_backout(int argc, char *argv[])
 
 	if (list_refs || remove_refs) {
 		if (argc != 0 && argc != 1)
-			usage_backout();
+			usage_backout(1);
 	} else if (argc != 1)
-		usage_backout();
+		usage_backout(1);
 	if (list_refs && remove_refs)
 		option_conflict('l', 'X');
 
@@ -8619,11 +8636,12 @@ done:
 }
 
 __dead static void
-usage_cat(void)
+usage_cat(int status)
 {
-	fprintf(stderr, "usage: %s cat [-P] [-c commit] [-r repository-path] "
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s cat [-P] [-c commit] [-r repository-path] "
 	    "arg ...\n", getprogname());
-	exit(1);
+	exit(status);
 }
 
 static const struct got_error *
@@ -8832,7 +8850,7 @@ cmd_cat(int argc, char *argv[])
 			got_path_strip_trailing_slashes(repo_path);
 			break;
 		default:
-			usage_cat();
+			usage_cat(1);
 			/* NOTREACHED */
 		}
 	}
@@ -8972,11 +8990,12 @@ done:
 }
 
 __dead static void
-usage_info(void)
+usage_info(int status)
 {
-	fprintf(stderr, "usage: %s info [path ...]\n",
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s info [path ...]\n",
 	    getprogname());
-	exit(1);
+	exit(status);
 }
 
 static const struct got_error *
@@ -9071,7 +9090,7 @@ cmd_info(int argc, char *argv[])
 	while ((ch = getopt(argc, argv, "")) != -1) {
 		switch (ch) {
 		default:
-			usage_info();
+			usage_info(1);
 			/* NOTREACHED */
 		}
 	}

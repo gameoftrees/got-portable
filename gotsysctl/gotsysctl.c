@@ -61,12 +61,12 @@ catch_sigint(int signo)
 struct gotsysctl_cmd {
 	const char	*cmd_name;
 	const struct got_error *(*cmd_main)(int, char *[], int);
-	void		(*cmd_usage)(void);
+	void		(*cmd_usage)(int);
 };
 
 __dead static void	usage(int, int);
 
-__dead static void	usage_info(void);
+__dead static void	usage_info(int);
 
 static const struct got_error*		cmd_info(int, char *[], int);
 
@@ -75,10 +75,11 @@ static const struct gotsysctl_cmd gotsysctl_commands[] = {
 };
 
 __dead static void
-usage_info(void)
+usage_info(int status)
 {
-	fprintf(stderr, "usage: %s info\n", getprogname());
-	exit(1);
+	FILE *fp = (status == 0) ? stdout : stderr;
+	fprintf(fp, "usage: %s info\n", getprogname());
+	exit(status);
 }
 
 static const struct got_error *
@@ -286,7 +287,7 @@ main(int argc, char *argv[])
 			continue;
 
 		if (hflag)
-			cmd->cmd_usage();
+			cmd->cmd_usage(0);
 
 		gotsysd_sock = connect_gotsysd(socket_path);
 		if (gotsysd_sock == -1)
