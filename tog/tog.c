@@ -11766,8 +11766,12 @@ main(int argc, char *argv[])
 	tog_base_commit.marker = GOT_WORKTREE_STATE_UNKNOWN;
 
 	if (cmd == NULL) {
-		if (argc != 1)
-			usage(0, 1);
+		if (argc > 0) {
+			fprintf(stderr, "%s: unknown command '%s'\n",
+			    getprogname(), argv[0]);
+			list_commands(stderr);
+			exit(1);
+		}
 		/* No command specified; try log with a path */
 		error = tog_log_with_path(argc, argv);
 	} else {
