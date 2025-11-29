@@ -11763,7 +11763,7 @@ main(int argc, char *argv[])
 	tog_base_commit.marker = GOT_WORKTREE_STATE_UNKNOWN;
 
 	if (cmd == NULL) {
-		if (argc > 0) {
+		if (argc > 1) {
 			fprintf(stderr, "%s: unknown command '%s'\n",
 			    getprogname(), argv[0]);
 			list_commands(stderr);
