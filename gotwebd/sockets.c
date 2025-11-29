@@ -553,6 +553,7 @@ process_request(struct request *c)
 	}
 
 	c->fd = -1;
+	event_del(&c->ev);
 	c->client_status = CLIENT_REQUEST;
 	env->worker_load[c->worker_idx]++;
 	return 0;
@@ -1175,7 +1176,8 @@ read_fcgi_records(int fd, short events, void *arg)
 		memmove(c->buf, c->buf + record_len, c->buf_len);
 	}
 more:
-	event_add(&c->ev, NULL);
+	if (c->client_status < CLIENT_REQUEST)
+		event_add(&c->ev, NULL);
 	return;
 fail:
 	request_done(c);
