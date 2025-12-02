@@ -4,7 +4,7 @@ bsd.rd
 bsd.rd.fs
 got.conf
 gotd.conf
-gotwebd.conf
+gotwebd*.conf
 gotsys.conf
 gotsysd.conf
 gotsysd_bsd.rd

@@ -168,10 +168,11 @@ nextsep(char *s, char **t)
 	struct server		*srv = c->srv;
 	const struct querystring *qs = c->t->qs;
 	struct gotweb_url	 u_path;
-	char			 prefix[MAX_DOCUMENT_URI];
+	char			 prefix[MAX_DOCUMENT_URI * 2];
 	const char		*css = srv->custom_css;
 
 	strlcpy(prefix, srv->gotweb_url_root, sizeof(prefix));
+	strlcat(prefix, srv->repos_url_path, sizeof(prefix));
 	got_path_strip_trailing_slashes(prefix);
 
 	memset(&u_path, 0, sizeof(u_path));

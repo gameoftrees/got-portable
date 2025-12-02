@@ -21,6 +21,7 @@
 
 #include <arpa/inet.h>
 #include <sys/queue.h>
+#include <sys/tree.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/uio.h>
@@ -40,6 +41,7 @@
 #include "got_error.h"
 #include "got_reference.h"
 #include "got_object.h"
+#include "got_path.h"
 
 #include "got_lib_poll.h"
 

@@ -66,6 +66,7 @@ auth_shutdown(void)
 
 		config_free_access_rules(&srv->access_rules);
 		config_free_repos(&srv->repos);
+		config_free_websites(&srv->websites);
 		free(srv);
 	}
 
@@ -236,7 +237,9 @@ render_error(struct request *c, const struct got_error *error)
 
 	c->t->error = error;
 
-	if (error->code == GOT_ERR_LOGIN_FAILED)
+	if (error->code == GOT_ERR_NOT_FOUND)
+		status = 404;
+	else if (error->code == GOT_ERR_LOGIN_FAILED)
 		status = 401;
 	else
 		status = 400;
@@ -446,10 +449,13 @@ process_request(struct request *c)
 	struct gotwebd *env = gotwebd_env;
 	uid_t uid;
 	struct server *srv;
+	struct website *site;
 	struct gotwebd_repo *repo = NULL;
 	enum gotwebd_auth_config auth_config;
 	char *hostname = NULL;
 	const char *identifier = NULL;
+	char *request_path = NULL;
+	int is_repository_request = 0;
 
 	srv = gotweb_get_server(c->fcgi_params.server_name);
 	if (srv == NULL) {
@@ -458,23 +464,41 @@ process_request(struct request *c)
 		goto done;
 	}
 
+	error = gotweb_route_request(&is_repository_request, &site,
+	    &request_path, c);
+	if (error)
+		goto done;
+
 	/*
 	 * Static gotwebd assets (images, CSS, ...) are not protected
 	 * by authentication.
 	 */
-	if (got_path_cmp(srv->gotweb_url_root, c->fcgi_params.document_uri,
-	    strlen(srv->gotweb_url_root),
-	    strlen(c->fcgi_params.document_uri)) != 0) {
+	if (is_repository_request && !got_path_is_root_dir(request_path)) {
 		forward_request(c);
+		free(request_path);
 		return;
 	}
 
-	auth_config = srv->auth_config;
-	if (c->fcgi_params.qs.path[0] != '\0') {
-		repo = gotweb_get_repository(srv, c->fcgi_params.qs.path);
-		if (repo)
-			auth_config = repo->auth_config;
+	/* Web site content is not protected by authentication either. */
+	if (site) {
+		/* Ignore the querystring while serving web sites. */
+		fcgi_init_querystring(&c->fcgi_params.qs);
+
+		forward_request(c);
+		free(request_path);
+		return;
 	}
+
+	free(request_path);
+	request_path = NULL;
+
+	auth_config = srv->auth_config;
+
+	if (c->fcgi_params.qs.path[0] != '\0')
+		repo = gotweb_get_repository(srv, c->fcgi_params.qs.path);
+
+	if (repo)
+		auth_config = repo->auth_config;
 
 	switch (auth_config) {
 	case GOTWEBD_AUTH_SECURE:
@@ -608,6 +632,7 @@ permitted:
 	}
 done:
 	free(hostname);
+	free(request_path);
 	if (error)
 		render_error(c, error);
 	else
@@ -947,6 +972,14 @@ auth_dispatch_main(int fd, short event, void *arg)
 				fatalx("%s: unexpected CFG_REPO msg", __func__);
 			srv = TAILQ_LAST(&env->servers, serverlist);
 			config_get_repository(&srv->repos, &imsg);
+			break;
+		case GOTWEBD_IMSG_CFG_WEBSITE:
+			if (TAILQ_EMPTY(&env->servers)) {
+				fatalx("%s: unexpected CFG_WEBSITE msg",
+				    __func__);
+			}
+			srv = TAILQ_LAST(&env->servers, serverlist);
+			config_get_website(&srv->websites, &imsg);
 			break;
 		case GOTWEBD_IMSG_CTL_PIPE:
 			if (env->iev_sockets == NULL)

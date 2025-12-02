@@ -19,6 +19,7 @@
 
 #include <sys/types.h>
 #include <sys/queue.h>
+#include <sys/tree.h>
 #include <sys/time.h>
 #include <sys/uio.h>
 #include <sys/socket.h>
@@ -40,6 +41,8 @@
 #include "got_opentemp.h"
 #include "got_reference.h"
 #include "got_object.h"
+#include "got_path.h"
+#include "got_error.h"
 
 #include "gotwebd.h"
 #include "log.h"
@@ -93,6 +96,7 @@ config_getserver(struct gotwebd *env, struct imsg *imsg)
 	memcpy(srv, p, sizeof(*srv));
 	STAILQ_INIT(&srv->access_rules);
 	TAILQ_INIT(&srv->repos);
+	RB_INIT(&srv->websites);
 
 	/* log server info */
 	log_debug("%s: server=%s", __func__, srv->name);
@@ -329,4 +333,65 @@ config_get_repository(struct gotwebd_repolist *repos, struct imsg *imsg)
 	STAILQ_INIT(&repo->access_rules);
 
 	TAILQ_INSERT_TAIL(repos, repo, entry);
+}
+
+void
+config_free_websites(struct got_pathlist_head *websites)
+{
+	got_pathlist_free(websites, GOT_PATHLIST_FREE_DATA);
+}
+
+void
+config_set_website(struct imsgev *iev, struct website *website)
+{
+	if (imsg_compose_event(iev,
+	    GOTWEBD_IMSG_CFG_WEBSITE, 0, -1, -1,
+	    website, sizeof(*website)) == -1)
+		fatal("imsg_compose_event GOTWEBD_IMSG_CFG_WEBSITE");
+}
+
+void
+config_get_website(struct got_pathlist_head *websites, struct imsg *imsg)
+{
+	const struct got_error *error;
+	struct website *site;
+	struct got_pathlist_entry *new;
+	size_t len;
+
+	site = calloc(1, sizeof(*site));
+	if (site == NULL)
+		fatal("malloc");
+
+	if (imsg_get_data(imsg, site, sizeof(*site)))
+		fatalx("%s: invalid CFG_WEBSITE message", __func__);
+	
+	len = strnlen(site->repo_name, sizeof(site->repo_name));
+	if (len == 0 || len >= sizeof(site->repo_name))
+		fatalx("%s: invalid CFG_WEBSITE message", __func__);
+
+	if (strchr(site->repo_name, '/') != NULL) {
+		fatalx("repository names must not contain slashes: %s",
+		    site->repo_name);
+	}
+
+	if (strchr(site->repo_name, '\n') != NULL) {
+		fatalx("repository names must not contain linefeeds: %s",
+		    site->repo_name);
+	}
+
+	if (strchr(site->url_path, '\n') != NULL) {
+		fatalx("URL paths must not contain linefeeds: %s",
+		    site->url_path);
+	}
+
+	if (!got_path_is_absolute(site->url_path)) {
+		fatalx("URL paths must be absolute paths: %s",
+		    site->url_path);
+	}
+
+	error = got_pathlist_insert(&new, websites, site->url_path, site);
+	if (error)
+		fatalx("%s: %s", __func__, error->msg);
+	if (new == NULL)
+		fatalx("%s: duplicate web site '%s'", __func__, site->url_path);
 }
