@@ -16,6 +16,7 @@
  */
 
 #include <sys/queue.h>
+#include <sys/tree.h>
 #include <sys/stat.h>
 
 #include <errno.h>
@@ -38,6 +39,7 @@
 #include "got_error.h"
 #include "got_reference.h"
 #include "got_object.h"
+#include "got_path.h"
 
 #include "gotwebd.h"
 #include "log.h"

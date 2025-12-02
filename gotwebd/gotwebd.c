@@ -17,6 +17,7 @@
 
 #include <sys/param.h>
 #include <sys/queue.h>
+#include <sys/tree.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 
@@ -44,6 +45,7 @@
 #include "got_opentemp.h"
 #include "got_reference.h"
 #include "got_object.h"
+#include "got_path.h"
 
 #include "gotwebd.h"
 #include "log.h"
@@ -917,6 +919,7 @@ gotwebd_configure(struct gotwebd *env, uid_t uid, gid_t gid)
 	struct server *srv;
 	struct socket *sock;
 	struct gotwebd_repo *repo;
+	struct got_pathlist_entry *pe;
 	char secret[32];
 	int i;
 
@@ -953,6 +956,16 @@ gotwebd_configure(struct gotwebd *env, uid_t uid, gid_t gid)
 			    &srv->access_rules);
 			config_set_access_rules(&env->iev_gotweb[i],
 			    &srv->access_rules);
+		}
+
+		/* send web sites */
+		RB_FOREACH(pe, got_pathlist_head, &srv->websites) {
+			struct website *site = pe->data;
+
+			for (i = 0; i < env->prefork; i++) {
+				config_set_website(&env->iev_auth[i], site);
+				config_set_website(&env->iev_gotweb[i], site);
+			}
 		}
 
 		/* send repositories and per-repository access rules */

@@ -61,6 +61,7 @@
 #define MAX_SERVER_NAME		 255
 #define MAX_AUTH_COOKIE		 255
 #define MAX_IDENTIFIER_SIZE	 32
+#define MAX_BRANCH_NAME		 255
 
 #define GOTWEB_GIT_DIR		 ".git"
 
@@ -143,6 +144,7 @@ enum imsg_type {
 	GOTWEBD_IMSG_CFG_FD,
 	GOTWEBD_IMSG_CFG_ACCESS_RULE,
 	GOTWEBD_IMSG_CFG_REPO,
+	GOTWEBD_IMSG_CFG_WEBSITE,
 	GOTWEBD_IMSG_CFG_DONE,
 	GOTWEBD_IMSG_CTL_PIPE,
 	GOTWEBD_IMSG_CTL_START,
@@ -391,6 +393,14 @@ struct gotwebd_repo {
 };
 TAILQ_HEAD(gotwebd_repolist, gotwebd_repo);
 
+struct website {
+	STAILQ_ENTRY(website) entry;
+	char repo_name[NAME_MAX];
+	char url_path[MAX_DOCUMENT_URI];
+	char branch_name[MAX_BRANCH_NAME];
+	char path[PATH_MAX];
+};
+
 struct server {
 	TAILQ_ENTRY(server)	 entry;
 
@@ -399,6 +409,8 @@ struct server {
 	char		 gotweb_url_root[MAX_DOCUMENT_URI];
 
 	char		 repos_path[PATH_MAX];
+	char		 repos_url_path[MAX_DOCUMENT_URI];
+	char		 full_repos_url_path[MAX_DOCUMENT_URI * 2 + 2];
 	char		 site_name[GOTWEBD_MAXNAME];
 	char		 site_owner[GOTWEBD_MAXNAME];
 	char		 site_link[GOTWEBD_MAXTEXT];
@@ -424,6 +436,7 @@ struct server {
 	struct gotwebd_access_rule_list access_rules;
 
 	struct gotwebd_repolist	 repos;
+	struct got_pathlist_head websites;
 };
 TAILQ_HEAD(serverlist, server);
 
@@ -494,6 +507,7 @@ struct gotwebd {
 	char		 httpd_chroot[PATH_MAX];
 	char		 htdocs_path[PATH_MAX];
 	char		 gotweb_url_root[MAX_DOCUMENT_URI];
+	char		 repos_url_path[MAX_DOCUMENT_URI];
 	uid_t		 www_uid;
 
 	char		 login_hint_user[MAX_IDENTIFIER_SIZE];
@@ -575,6 +589,7 @@ void gotwebd_auth(struct gotwebd *, int);
 
 /* gotweb.c */
 struct server *gotweb_get_server(const char *);
+struct website *gotweb_get_website(struct server *, const char *);
 struct gotwebd_repo * gotweb_get_repository(struct server *, const char *);
 int gotweb_reply(struct request *c, int status, const char *ctype,
     struct gotweb_url *);
@@ -588,7 +603,9 @@ int gotweb_render_absolute_url(struct request *, struct gotweb_url *);
 void gotweb_free_repo_commit(struct repo_commit *);
 void gotweb_free_repo_tag(struct repo_tag *);
 void gotweb_log_request(struct request *);
-const struct got_error *gotweb_serve_htdocs(struct request *);
+const struct got_error *gotweb_serve_htdocs(struct request *, const char *);
+const struct got_error *gotweb_route_request(int *, struct website **,
+    char **, struct request *);
 int gotweb_process_request(struct request *);
 void gotweb_free_transport(struct transport *);
 void gotweb(struct gotwebd *, int);
@@ -658,4 +675,7 @@ void config_free_access_rules(struct gotwebd_access_rule_list *);
 void config_set_repository(struct imsgev *, struct gotwebd_repo *);
 void config_get_repository(struct gotwebd_repolist *, struct imsg *);
 void config_free_repos(struct gotwebd_repolist *);
+void config_free_websites(struct got_pathlist_head *);
+void config_set_website(struct imsgev *, struct website *);
+void config_get_website(struct got_pathlist_head *, struct imsg *);
 int config_init(struct gotwebd *);

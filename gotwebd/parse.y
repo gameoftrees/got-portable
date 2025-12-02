@@ -27,6 +27,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <sys/tree.h>
 
 #include <net/if.h>
 #include <netinet/in.h>
@@ -52,6 +53,8 @@
 
 #include "got_reference.h"
 #include "got_object.h"
+#include "got_path.h"
+#include "got_error.h"
 
 #include "gotwebd.h"
 #include "log.h"
@@ -108,6 +111,9 @@ struct address *get_unix_addr(const char *);
 int		 addr_dup_check(struct addresslist *, struct address *);
 void		 add_addr(struct address *);
 
+static struct website	*new_website;
+static struct website	*conf_new_website(struct server *, const char *);
+
 static struct gotwebd_repo	*new_repo;
 static struct gotwebd_repo	*conf_new_repo(struct server *, const char *);
 static void			 conf_new_access_rule(
@@ -132,6 +138,7 @@ typedef struct {
 %token	SERVER CHROOT CUSTOM_CSS SOCKET HINT HTDOCS GOTWEB_URL_ROOT
 %token	SUMMARY_COMMITS_DISPLAY SUMMARY_TAGS_DISPLAY USER AUTHENTICATION
 %token	ENABLE DISABLE INSECURE REPOSITORY REPOSITORIES PERMIT DENY HIDE
+%token	WEBSITE PATH BRANCH REPOS_URL_PATH
 
 %token	<v.string>	STRING
 %token	<v.number>	NUMBER
@@ -367,6 +374,9 @@ main		: PREFORK NUMBER {
 				YYERROR;
 			}
 
+			if (!got_path_is_root_dir($2))
+				got_path_strip_trailing_slashes($2);
+
 			n = strlcpy(gotwebd->gotweb_url_root, $2,
 			    sizeof(gotwebd->gotweb_url_root));
 			if (n >= sizeof(gotwebd->gotweb_url_root)) {
@@ -379,6 +389,37 @@ main		: PREFORK NUMBER {
 
 			if (gotwebd->gotweb_url_root[0] != '/') {
 				yyerror("gotweb_url_root must be an absolute "
+				    "path: bad path %s", $2);
+				free($2);
+				YYERROR;
+			}
+
+
+			free($2);
+		}
+		| REPOS_URL_PATH STRING {
+			if (*$2 == '\0') {
+				yyerror("repos_url_path can't be an empty"
+				    " string");
+				free($2);
+				YYERROR;
+			}
+
+			if (!got_path_is_root_dir($2))
+				got_path_strip_trailing_slashes($2);
+
+			n = strlcpy(gotwebd->repos_url_path, $2,
+			    sizeof(gotwebd->repos_url_path));
+			if (n >= sizeof(gotwebd->repos_url_path)) {
+				yyerror("repos_url_path too long, exceeds "
+				    "%zd bytes: %s",
+				    sizeof(gotwebd->repos_url_path), $2);
+				free($2);
+				YYERROR;
+			}
+
+			if (gotwebd->repos_url_path[0] != '/') {
+				yyerror("repos_url_path must be an absolute "
 				    "path: bad path %s", $2);
 				free($2);
 				YYERROR;
@@ -615,6 +656,9 @@ serveropts1	: REPOS_PATH STRING {
 				YYERROR;
 			}
 
+			if (!got_path_is_root_dir($2))
+				got_path_strip_trailing_slashes($2);
+
 			n = strlcpy(new_srv->gotweb_url_root, $2,
 			    sizeof(new_srv->gotweb_url_root));
 			if (n >= sizeof(new_srv->gotweb_url_root)) {
@@ -634,11 +678,98 @@ serveropts1	: REPOS_PATH STRING {
 
 			free($2);
 		}
+		| REPOS_URL_PATH STRING {
+			if (*$2 == '\0') {
+				yyerror("repos_url_path can't be an empty"
+				    " string");
+				free($2);
+				YYERROR;
+			}
+
+			if (!got_path_is_root_dir($2))
+				got_path_strip_trailing_slashes($2);
+
+			n = strlcpy(new_srv->repos_url_path, $2,
+			    sizeof(new_srv->repos_url_path));
+			if (n >= sizeof(new_srv->repos_url_path)) {
+				yyerror("repos_url_path too long, exceeds "
+				    "%zd bytes: %s",
+				    sizeof(new_srv->repos_url_path), $2);
+				free($2);
+				YYERROR;
+			}
+
+			if (new_srv->repos_url_path[0] != '/') {
+				yyerror("repos_url_path must be an absolute "
+				    "path: bad path %s", $2);
+				free($2);
+				YYERROR;
+			}
+
+			free($2);
+		}
 		| repository
+		| website
 		;
 
 serveropts2	: serveropts2 serveropts1 nl
 		| serveropts1 optnl
+		;
+
+websiteopts2	: websiteopts2 websiteopts1 nl
+		| websiteopts1 optnl
+
+websiteopts1	: REPOSITORY STRING {
+			n = strlcpy(new_website->repo_name, $2,
+			    sizeof(new_website->repo_name));
+			if (n >= sizeof(new_website->repo_name)) {
+				yyerror("website repository name too long, "
+				    "exceeds %zd bytes",
+				    sizeof(new_website->repo_name) - 1);
+				free($2);
+				YYERROR;
+			}
+			free($2);
+		}
+		| PATH STRING {
+			n = strlcpy(new_website->path, $2,
+			    sizeof(new_website->path));
+			if (n >= sizeof(new_website->path)) {
+				yyerror("website in-repository path too long, "
+				    "exceeds %zd bytes",
+				    sizeof(new_website->path) - 1);
+				free($2);
+				YYERROR;
+			}
+
+			if (new_website->path[0] != '/') {
+				yyerror("a website path must be an absolute "
+				    "path: bad path %s", $2);
+				free($2);
+				YYERROR;
+			}
+
+			free($2);
+		}
+		| BRANCH STRING {
+			n = strlcpy(new_website->branch_name, $2,
+			    sizeof(new_website->branch_name));
+			if (n >= sizeof(new_website->branch_name)) {
+				yyerror("website branch name too long, "
+				    "exceeds %zd bytes",
+				    sizeof(new_website->branch_name) - 1);
+				free($2);
+				YYERROR;
+			}
+			free($2);
+		}
+		;
+
+website		: WEBSITE STRING {
+			new_website = conf_new_website(new_srv, $2);
+			free($2);
+		} '{' optnl websiteopts2 '}' {
+		}
 		;
 
 repository	: REPOSITORY STRING {
@@ -746,6 +877,7 @@ lookup(char *s)
 	/* This has to be sorted always. */
 	static const struct keywords keywords[] = {
 		{ "authentication",		AUTHENTICATION },
+		{ "branch",			BRANCH },
 		{ "chroot",			CHROOT },
 		{ "custom_css",			CUSTOM_CSS },
 		{ "deny",			DENY },
@@ -763,10 +895,12 @@ lookup(char *s)
 		{ "max_commits_display",	MAX_COMMITS_DISPLAY },
 		{ "max_repos_display",		MAX_REPOS_DISPLAY },
 		{ "on",				ON },
+		{ "path",			PATH },
 		{ "permit",			PERMIT },
 		{ "port",			PORT },
 		{ "prefork",			PREFORK },
 		{ "repos_path",			REPOS_PATH },
+		{ "repos_url_path",		REPOS_URL_PATH },
 		{ "repositories",		REPOSITORIES },
 		{ "repository",			REPOSITORY },
 		{ "respect_exportok",		RESPECT_EXPORTOK },
@@ -783,6 +917,7 @@ lookup(char *s)
 		{ "summary_commits_display",	SUMMARY_COMMITS_DISPLAY },
 		{ "summary_tags_display",	SUMMARY_TAGS_DISPLAY },
 		{ "user",			USER },
+		{ "website",			WEBSITE },
 		{ "www",			WWW },
 	};
 	const struct keywords *p;
@@ -1281,6 +1416,64 @@ parse_config(const char *filename, struct gotwebd *env)
 				    sizeof(srv->gotweb_url_root) - 1);
 			}
 		}
+
+		if (srv->repos_url_path[0] == '\0') {
+			if (strlcpy(srv->repos_url_path,
+			    env->repos_url_path,
+			    sizeof(srv->repos_url_path)) >=
+			    sizeof(srv->repos_url_path)) {
+				yyerror("repos_url_path too long, "
+				    "exceeds %zd bytes",
+				    sizeof(srv->repos_url_path) - 1);
+			}
+		}
+	}
+
+	TAILQ_FOREACH(srv, &env->servers, entry) {
+		const char *gotweb_url_root = srv->gotweb_url_root;
+		const char *repos_url_path = srv->repos_url_path;
+		struct got_pathlist_entry *pe;
+		int ret;
+
+		while (gotweb_url_root[0] == '/')
+			gotweb_url_root++;
+
+		while (repos_url_path[0] == '/')
+			repos_url_path++;
+
+		if (gotweb_url_root[0] == '\0' && repos_url_path[0] == '\0') {
+			srv->full_repos_url_path[0] = '/';
+			srv->full_repos_url_path[1] = '\0';
+		} else {
+			ret = snprintf(srv->full_repos_url_path,
+			    sizeof(srv->full_repos_url_path),
+			    "/%s%s%s", gotweb_url_root,
+			    gotweb_url_root[0] ? "/" : "",
+			    repos_url_path);
+			if (ret == -1) {
+				yyerror("snprintf");
+			}
+			if ((size_t)ret >= sizeof(srv->full_repos_url_path)) {
+				yyerror("gotweb_url_root and "
+				"repos_url_path too long, exceed %zd bytes",
+				    sizeof(srv->full_repos_url_path) - 1);
+			}
+		}
+
+		if (!got_path_is_root_dir(srv->full_repos_url_path)) {
+			got_path_strip_trailing_slashes(
+			    srv->full_repos_url_path);
+		}
+
+		RB_FOREACH(pe, got_pathlist_head, &srv->websites) {
+			const char *url_path = pe->path;
+			struct website *site = pe->data;
+
+			if (site->repo_name[0] == '\0') {
+				yyerror("no repository defined for website "
+				    "'%s' on server %s", url_path, srv->name);
+			}
+		}
 	}
 
 	return (0);
@@ -1348,6 +1541,7 @@ conf_new_server(const char *name)
 
 	STAILQ_INIT(&srv->access_rules);
 	TAILQ_INIT(&srv->repos);
+	RB_INIT(&srv->websites);
 
 	TAILQ_INSERT_TAIL(&gotwebd->servers, srv, entry);
 
@@ -1545,6 +1739,56 @@ add_addr(struct address *h)
 	free(h);
 }
 
+static struct website *
+conf_new_website(struct server *server, const char *url_path)
+{
+	const struct got_error *error;
+	struct website *site;
+	struct got_pathlist_entry *new;
+
+	if (url_path[0] == '\0') {
+		fatalx("syntax error: empty URL path found in %s",
+		    file->name);
+	}
+
+	if (strchr(url_path, '\n') != NULL)
+		fatalx("URL path must not contain linefeeds: %s", url_path);
+	
+	site = calloc(1, sizeof(*site));
+	if (site == NULL)
+		fatal("calloc");
+
+	if (!got_path_is_absolute(url_path)) {
+		int ret;
+
+		ret = snprintf(site->url_path, sizeof(site->url_path),
+		    "/%s", url_path);
+		if (ret == -1)
+			fatal("snprintf");
+		if ((size_t)ret >= sizeof(site->url_path)) {
+			fatalx("URL path too long (exceeds %zd bytes): %s",
+			    sizeof(site->url_path) - 1, url_path);
+		}
+	} else {
+		if (strlcpy(site->url_path, url_path,
+		    sizeof(site->url_path)) >=
+		    sizeof(site->url_path)) {
+			fatalx("URL path too long (exceeds %zd bytes): %s",
+			    sizeof(site->url_path) - 1, url_path);
+		}
+	}
+
+	error = got_pathlist_insert(&new, &server->websites,
+	    site->url_path, site);
+	if (error)
+		fatalx("%s: %s", __func__, error->msg);
+	if (new == NULL) {
+		fatalx("duplicate web site '%s' in server '%s'",
+		    url_path, server->name);
+	}
+
+	return site;
+}
 
 struct gotwebd_repo *
 gotwebd_new_repo(const char *name)

@@ -1,4 +1,4 @@
-.\"
+\"
 .\" Copyright (c) 2020 Tracey Emery <tracey@traceyemery.net>
 .\"
 .\" Permission to use, copy, modify, and distribute this software for any
@@ -109,6 +109,27 @@ directory.
 Browsers will not be able to load CSS and image files unless these files
 are served directly from
 .Xr httpd 8 .
+.Pp
+This setting can also be configured on a per-server basis.
+.It Ic repos_url_path Ar path
+Sets the URL path under which Git repositories will be displayed by
+.Xr gotwebd 8 .
+The
+.Ar path
+specified here is relative to
+.Ic gotweb_url_root .
+.Pp
+Defaults to
+.Dq / .
+This default should only be changed if a
+.Ic website
+is configured as the landing page instead of the usual index page shown by
+.Xr gotwebd 8 .
+Otherwise, changing
+.Ic repos_url_path
+will result in
+.Dq not found
+errors when browsers attempt to visit the gotweb root URL path.
 .Pp
 This setting can also be configured on a per-server basis.
 .It Ic disable authentication
@@ -314,6 +335,29 @@ are served directly from
 If not set then the global
 .Ic gotweb_url_root
 setting will be used.
+.It Ic repos_url_path Ar path
+Sets the URL path under which Git repositories will be displayed by
+.Xr gotwebd 8 .
+The
+.Ar path
+specified here is relative to
+.Ic gotweb_url_root .
+.Pp
+Defaults to
+.Dq / .
+This default should only be changed if a
+.Ic website
+is configured as the landing page instead of the usual index page shown by
+.Xr gotwebd 8 .
+Otherwise, changing
+.Ic repos_url_path
+will result in
+.Dq not found
+errors when browsers attempt to visit the gotweb root URL path.
+.Pp
+If not set then the global
+.Ic repos_url_path
+setting will be used.
 .It Ic disable authentication
 Disable authentication for this server, allowing any browser to view any
 repository not hidden via the
@@ -463,6 +507,56 @@ parameter determines whether
 .Xr gotwebd 8
 will display the repository.
 .El
+.It Ic website Ar url-path Brq ...
+Show a web site when the browser visits the given
+.Ar url-path .
+The web site's content is composed of files in a Git repository.
+.Pp
+While the underlying repository is subject to authentication as usual,
+web site content is always public, and cannot be hidden via the
+.Ic hide repository
+or
+.Ic respect_exportok
+directives.
+.Pp
+The available
+.Ic website
+configuration paramters are as follows:
+.Pp
+.Bl -tag -width Ds
+.It Ic repository Ar name
+Serve web site content from the specified Git repository.
+The repository will be looked up within the server's
+.Ar repos_path ,
+where the directory
+.Ar name
+can exist with or without a
+.Dq .git
+suffix.
+.Pp
+The
+.Ic repository
+parameter is mandatory.
+.It Ic branch Ar name
+Look up files to serve as web site content on the specified branch
+in the repository.
+By default, the branch resolved via the repository's HEAD reference is used.
+.Pp
+If the
+.Ar name
+does not begin with
+.Dq refs/heads
+then the
+.Ar name
+is searched in the
+.Dq refs/heads
+reference namespace.
+.It Ic path Ar path
+Look up files to serve as web site content at the specified path
+in the repository.
+Defaults to the root directory, 
+.Dq / .
+.El
 .It Ic respect_exportok Ar on | off
 Set whether to display the repository only if it contains the magic
 .Pa git-daemon-export-ok
@@ -562,6 +656,94 @@ listen on ::1 port 9000
 server "localhost" {
 	site_name	"my public repos"
 	repos_path	"/var/git"
+}
+.Ed
+.Pp
+This example illustrates how
+.Xr gotwebd 8
+can serve static web sites out of Git repositories:
+.Bd -literal -offset indent
+# This server displays just one web site, no Git repositories.
+server "www.example.com" {
+	# Do not display any Git repository data.
+	hide repositories on
+
+	# Serve the www.git repository as a web site when
+	# the browser visits "www.example.com".
+	website "/" {
+		repository "www"  # /var/www/got/public/www.git
+
+		# Any child URL paths the browser wants to
+		# visit will be looked up in www.git, on
+		# the branch which the symbolic HEAD
+		# reference points to.
+	}
+}
+
+# This server displays both web sites and Git repositories.
+server "project.example.com" {
+	repos_path	"/var/git"
+
+	# Display Git repositories when the URL path "/gotweb/" is
+	# is visited by the browser.
+	gotweb url_path "/gotweb"
+
+	website "/" {
+		# Display the "www" repository as a web site when
+		# the browser visits "project.example.com".
+		repository "www"  # /var/git/www or /var/git/www.git
+
+		# Any child URL path the browser wants to visit will
+		# be looked up in www.git, except for "gotweb/" which
+		# maps to repos_path, and "docs/" which is used by
+		# other repositories defined below.
+	}
+
+	repository "www.git" {	# /var/git/www or /var/git/www.git
+		# Otherwise, hide data in this repository. It will
+		# not be shown under the "/gotweb" URL path.
+		hide repository on
+	}
+
+	# Display the src.git repository's "docs/html" directory
+	# as found on the main branch as a web site at the
+	# URL "project.example.com/docs/".
+	website "/docs" {
+		repository "src"
+		path "/docs/html"
+		branch "main"  # same as "refs/heads/main"
+
+		# Any child URL paths the browser wants to visit will
+		# be looked up in src.git, except for "gotweb/"
+		# which maps to repos_path, and "docs/api/" which is
+		# used by another web site defined below.
+	}
+
+	repository "src" {	# /var/git/src or /var/git/src.git
+		# Otherwise, hide data in this repository. It will
+		# not be shown under the "/gotweb" URL path.
+		hide repository on
+	}
+
+	# Display the "main" branch of api-docs.git repository
+	# as a web site at the URL
+	# "project.example.com/docs/api/latest/".
+	website "/docs/api/latest" {
+		repository "api-docs.git"
+		branch "main"
+	}
+
+	# Display the "1.x-stable" branch of the api-docs.git
+	# as a web site at the URL
+	# "project.example.com/docs/api/1.x/".
+	website "/docs/api/1.x" {
+		repository "api-docs.git"
+		branch "1.x-stable"
+	}
+
+	# The api-docs repository will also be shown under "/gotweb"
+	# because the hide repositories and hide repository
+	# setings default to "off".
 }
 .Ed
 .Pp

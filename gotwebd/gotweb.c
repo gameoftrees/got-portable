@@ -56,7 +56,7 @@
 
 static int gotweb_render_index(struct template *);
 static const struct got_error *gotweb_load_got_path(struct repo_dir **,
-    const char *, struct request *);
+    const char *, struct request *, int);
 static const struct got_error *gotweb_load_file(char **, const char *,
     const char *, int);
 static const struct got_error *gotweb_get_repo_description(char **,
@@ -260,40 +260,17 @@ gotweb_log_request(struct request *c)
 }
 
 const struct got_error *
-gotweb_serve_htdocs(struct request *c)
+gotweb_serve_htdocs(struct request *c, const char *request_path)
 {
 	const struct got_error *error = NULL;
 	struct server *srv = c->srv;;
-	struct gotwebd_fcgi_params *p = &c->fcgi_params;
-	char *document_uri = p->document_uri;
-	char *request_path = NULL;
-	char *child_path = NULL;
 	char *ondisk_path = NULL;
 	int fd = -1;
 	const char *mime_type = "application/octet-stream";
 	char *ext;
 
-	while (document_uri[0] == '/')
-		document_uri++;
-	if (asprintf(&request_path, "/%s", document_uri) == -1)
-		return got_error_from_errno("asprintf");
-
-	if (!got_path_is_child(request_path,
-	    srv->gotweb_url_root, strlen(srv->gotweb_url_root))) {
-		error = got_error(GOT_ERR_NOT_FOUND);
-		goto done;
-	}
-
-	error = got_path_skip_common_ancestor(&child_path,
-	    srv->gotweb_url_root, request_path);
-	if (error) {
-		if (error->code == GOT_ERR_BAD_PATH)
-			error = got_error(GOT_ERR_NOT_FOUND);
-		goto done;
-	}
-
 	if (asprintf(&ondisk_path, "%s/%s/%s", gotwebd_env->httpd_chroot,
-	    srv->htdocs_path, child_path) == -1) {
+	    srv->htdocs_path, request_path) == -1) {
 		error = got_error_from_errno("asprintf");
 		goto done;
 	}
@@ -362,9 +339,404 @@ gotweb_serve_htdocs(struct request *c)
 done:
 	if (fd != -1 && close(fd) == -1 && error == NULL)
 		error = got_error_from_errno("close");
-	free(request_path);
-	free(child_path);
 	free(ondisk_path);
+	return error;
+}
+
+static const struct got_error *
+serve_blob(int *response_code, struct request *c, struct got_repository *repo,
+    struct got_object_id *obj_id, const char *basename)
+{
+	const struct got_error *error = NULL;
+	struct got_blob_object *blob = NULL;
+	int binary;
+	const char *mime_type = "application/octet-stream";
+
+	c->t->fd = dup(c->priv_fd[BLOB_FD_1]);
+	if (c->t->fd == -1) {
+		error = got_error_from_errno("dup");
+		goto done;
+	}
+
+	error = got_object_open_as_blob(&blob, repo, obj_id, BUF, c->t->fd);
+	if (error)
+		goto done;
+
+	error = got_object_blob_is_binary(&binary, blob);
+	if (error)
+		goto done;
+
+	if (binary) {
+		if (gotweb_reply_file(c, "application/octet-stream",
+		    basename, NULL) == -1) {
+			error = got_error(GOT_ERR_IO);
+			*response_code = 500;
+			goto done;
+		}
+	} else {
+		char *ext;
+
+		/* TODO: Port generic mime-type handling from httpd. */
+		ext = strrchr(basename, '.');
+		if (ext) {
+			if (strcmp(ext, ".css") == 0)
+				mime_type = "text/css";
+			if (strcmp(ext, ".html") == 0)
+				mime_type = "text/html";
+			if (strcmp(ext, ".ico") == 0)
+				mime_type = "image/x-icon";
+			if (strcmp(ext, ".png") == 0)
+				mime_type = "image/png";
+			if (strcmp(ext, ".svg") == 0)
+				mime_type = "image/svg+xml";
+			if (strcmp(ext, ".txt") == 0)
+				mime_type = "text/plain";
+			if (strcmp(ext, ".webmanifest") == 0)
+				mime_type = "application/manifest+json";
+			if (strcmp(ext, ".xml") == 0)
+				mime_type = "text/xml";
+		}
+
+		if (gotweb_reply(c, 200, mime_type, NULL) == -1) {
+			error = got_error(GOT_ERR_IO);
+			*response_code = 500;
+			goto done;
+		}
+	}
+
+	if (template_flush(c->tp) == -1) {
+		error = got_error(GOT_ERR_IO);
+		*response_code = 500;
+		goto done;
+	}
+
+	for (;;) {
+		const uint8_t *buf;
+		size_t len;
+
+		error = got_object_blob_read_block(&len, blob);
+		if (error)
+			goto done;
+		if (len == 0)
+			break;
+
+		buf = got_object_blob_get_read_buf(blob);
+		if (fcgi_write(c, buf, len) == -1) {
+			error = got_error(GOT_ERR_IO);
+			*response_code = 500;
+			goto done;
+		}
+	}
+
+done:
+	if (blob)
+		got_object_blob_close(blob);
+	return error;
+}
+
+static int
+gotweb_serve_website(struct request *c, struct website *site,
+    struct repo_dir *repo_dir, const char *request_path)
+{
+	const struct got_error *error = NULL;
+	struct transport *t = c->t;
+	struct gotwebd_fcgi_params *p = &c->fcgi_params;
+	struct got_repository *repo = t->repo;
+	char *refname = NULL;
+	struct got_reference *ref = NULL;
+	struct got_object_id *id = NULL, *obj_id = NULL;
+	struct got_commit_object *commit = NULL;
+	struct got_tree_object *tree = NULL;
+	char *basename = NULL;
+	int response_code = 404;
+	char *in_repo_child = NULL, *in_repo_path = NULL;
+	int obj_type;
+
+	if (got_path_is_root_dir(request_path)) {
+		in_repo_child = strdup(request_path);
+		if (in_repo_child == NULL) {
+			error = got_error_from_errno("strdup");
+			goto done;
+		}
+	} else {
+		if (got_path_is_root_dir(site->url_path)) {
+			in_repo_child = strdup(request_path);
+			if (in_repo_child == NULL) {
+				error = got_error_from_errno("strdup");
+				goto done;
+			}
+		} else if (got_path_cmp(site->url_path, request_path,
+		    strlen(site->url_path), strlen(request_path)) == 0) {
+			in_repo_child = strdup("/");
+			if (in_repo_child == NULL) {
+				error = got_error_from_errno("strdup");
+				goto done;
+			}
+		} else {
+			error = got_path_skip_common_ancestor(&in_repo_child,
+			   site->url_path, request_path);
+			if (error)
+				goto done;
+		}
+	}
+
+	if (site->path[0] != '\0') {
+		char *s = in_repo_child;
+
+		while (*s == '/')
+			s++;
+
+		if (asprintf(&in_repo_path, "%s/%s", site->path, s) == -1) {
+			error = got_error_from_errno("asprintf");
+			goto done;
+		}
+
+		got_path_strip_trailing_slashes(in_repo_path);
+	} else {
+		in_repo_path = in_repo_child;
+		in_repo_child = NULL;
+	}
+
+	if (site->branch_name[0] != 0) {
+		const char *branch = site->branch_name;
+
+		if (strncmp("refs/", branch, 5) != 0) {
+			branch += 5;
+			if (asprintf(&refname, "refs/heads/%s", branch) == -1) {
+				error = got_error_from_errno("asprintf");
+				goto done;
+			}
+		} else {
+			refname = strdup(branch);
+			if (refname == NULL) {
+				error = got_error_from_errno("strdup");
+				goto done;
+			}
+		}
+
+	} else {
+		refname = strdup(GOT_REF_HEAD);
+		if (refname == NULL) {
+			error = got_error_from_errno("strdup");
+			goto done;
+		}
+	}
+
+	error = got_ref_open(&ref, repo, refname, 0);
+	if (error)
+		goto done;
+
+	error = got_ref_resolve(&id, repo, ref);
+	if (error)
+		goto done;
+
+	error = got_object_open_as_commit(&commit, repo, id);
+	if (error)
+		goto done;
+
+	error = got_object_id_by_path(&obj_id, repo, commit, in_repo_path);
+	if (error)
+		goto done;
+
+	error = got_object_get_type(&obj_type, repo, obj_id);
+	if (error)
+		goto done;
+
+	switch (obj_type) {
+	case GOT_OBJ_TYPE_BLOB:
+		error = got_path_basename(&basename, in_repo_path);
+		if (error)
+			goto done;
+		error = serve_blob(&response_code, c, repo, obj_id,
+		    basename);
+		if (error)
+			goto done;
+		break;
+	case GOT_OBJ_TYPE_TREE: {
+		struct got_tree_entry *te;
+		int nentries, i;
+		const char *name;
+		mode_t mode;
+
+		error = got_object_open_as_tree(&tree, repo, obj_id);
+		if (error)
+			goto done;
+		nentries = got_object_tree_get_nentries(tree);
+
+		for (i = 0; i < nentries; i++) {
+			struct gotweb_url url = {
+				.index_page = -1,
+				.action = -1,
+			};
+
+			te = got_object_tree_get_entry(tree, i);
+
+			name = got_tree_entry_get_name(te);
+			mode = got_tree_entry_get_mode(te);
+			if (!S_ISREG(mode) ||
+			    strcasecmp(name, "index.html") != 0)
+				continue;
+
+			/* XXX gotweb_reply uses request struct field */
+			got_path_strip_trailing_slashes(p->document_uri);
+			if (strlcat(p->document_uri, "/index.html",
+			    sizeof(p->document_uri)) >=
+			    sizeof(p->document_uri)) {
+				error = got_error(GOT_ERR_NO_SPACE);
+				goto done;
+			}
+
+			if (gotweb_reply(c, 302, NULL, &url) == -1) {
+				error = got_error(GOT_ERR_IO);
+				goto done;
+			}
+			break;
+		}
+		break;
+	}
+	default:
+		error = got_error(GOT_ERR_NOT_FOUND);
+		goto done;
+	}
+done:
+	free(in_repo_child);
+	free(in_repo_path);
+	free(refname);
+	free(basename);
+	free(id);
+	free(obj_id);
+	if (ref)
+		got_ref_close(ref);
+	if (commit)
+		got_object_commit_close(commit);
+	if (tree)
+		got_object_tree_close(tree);
+
+	if (error) {
+		char *safe_path = NULL;
+
+		if (stravis(&safe_path, request_path, VIS_SAFE) == -1) {
+			log_warn("stravis");
+			safe_path = NULL;
+		}
+		log_warnx("%s: %s: %d: %s", __func__,
+		    safe_path ? safe_path : "?", response_code, error->msg);
+		free(safe_path);
+
+		if (response_code == 404)
+			c->t->error = got_error(GOT_ERR_NOT_FOUND);
+		else
+			c->t->error = error;
+
+		if (gotweb_reply(c, response_code, "text/html", NULL) == -1)
+			return -1;
+		return gotweb_render_page(c->tp, gotweb_render_error);
+	}
+
+	return 0;
+}
+
+const struct got_error *
+gotweb_route_request(int *is_repository_request, struct website **site,
+	char **request_path, struct request *c)
+{
+	const struct got_error *error = NULL;
+	struct gotwebd_fcgi_params *p = &c->fcgi_params;
+	struct server *srv = c->srv;;
+	char *child_path = NULL;
+
+	*is_repository_request = 0;
+	*site = NULL;
+	*request_path = NULL;
+
+	if (got_path_cmp(srv->full_repos_url_path, p->document_uri,
+	    strlen(srv->full_repos_url_path),
+	    strlen(p->document_uri)) == 0) {
+		/* 
+		 * Requesting / in repository url path space.
+		 * We will be rendering Git repository data.
+		 */
+		*request_path = strdup("/");
+		if (*request_path == NULL) {
+			error = got_error_from_errno("strdup");
+			goto done;
+		}
+		*is_repository_request = 1;
+	} else if (got_path_is_child(p->document_uri,
+	    srv->full_repos_url_path, strlen(srv->full_repos_url_path))) {
+		/*
+		 * Requesting something within repository url path space.
+		 * We will be returning a static asset for a repository page.
+		 */
+		error = got_path_skip_common_ancestor(&child_path,
+		    srv->full_repos_url_path, p->document_uri);
+		if (error)
+			goto done;
+		*is_repository_request = 1;
+
+		if (asprintf(request_path, "/%s", child_path) == -1) {
+			error = got_error_from_errno("asprintf");
+			goto done;
+		}
+	} else if (got_path_is_child(p->document_uri,
+	    srv->gotweb_url_root, strlen(srv->gotweb_url_root))) {
+		/*
+		 * Requesting something outside repository url path space.
+		 * This will result in a 404 error unless the request is
+		 * matched by a website.
+		 */
+		if (got_path_is_root_dir(p->document_uri)) {
+			*request_path = strdup("/");
+			if (*request_path == NULL) {
+				error = got_error_from_errno("strdup");
+				goto done;
+			}
+		} else {
+			error = got_path_skip_common_ancestor(&child_path,
+			    srv->gotweb_url_root, p->document_uri);
+			if (error)
+				goto done;
+			if (asprintf(request_path, "/%s", child_path) == -1) {
+				error = got_error_from_errno("asprintf");
+				goto done;
+			}
+		}
+	} else {
+		/*
+		 * Requesting something outside gotweb url path space.
+		 * This will result in a 404 error.
+		 */
+		*request_path = strdup(p->document_uri);
+		if (*request_path == NULL) {
+			error = got_error_from_errno("strdup");
+			goto done;
+		}
+	}
+
+	if (!got_path_is_root_dir(*request_path))
+		got_path_strip_trailing_slashes(*request_path);
+
+	*site = gotweb_get_website(srv, *request_path);
+
+	/*
+	 * If the target of the request is ambiguous, the longer path wins.
+	 */
+	if (*is_repository_request && *site) {
+		if (got_path_cmp(srv->repos_url_path, (*site)->url_path,
+		    strlen(srv->repos_url_path),
+		    strlen((*site)->url_path)) <= 0)
+			*is_repository_request = 0;
+		else
+			*site = NULL;
+	}
+done:
+	free(child_path);
+	if (error) {
+		free(*request_path);
+		*request_path = NULL;
+		*site = NULL;
+	}
+
 	return error;
 }
 
@@ -373,7 +745,7 @@ gotweb_process_request(struct request *c)
 {
 	const struct got_error *error = NULL;
 	struct server *srv = c->srv;;
-	struct gotwebd_fcgi_params *p = &c->fcgi_params;
+	struct website *site;
 	struct querystring *qs = NULL;
 	struct repo_dir *repo_dir = NULL;
 	struct repo_commit *commit;
@@ -381,6 +753,8 @@ gotweb_process_request(struct request *c)
 	const uint8_t *buf;
 	size_t len;
 	int r, binary = 0;
+	char *request_path = NULL;
+	int is_repository_request = 0;
 
 	/* querystring */
 	qs = &c->fcgi_params.qs;
@@ -388,14 +762,33 @@ gotweb_process_request(struct request *c)
 
 	gotweb_log_request(c);
 
-	if (got_path_cmp(srv->gotweb_url_root, p->document_uri,
-	    strlen(srv->gotweb_url_root), strlen(p->document_uri)) != 0) {
-		error = gotweb_serve_htdocs(c);
+	error = gotweb_route_request(&is_repository_request, &site,
+	    &request_path, c);
+	if (error)
+		goto err;
+
+	if (is_repository_request && !got_path_is_root_dir(request_path)) {
+		error = gotweb_serve_htdocs(c, request_path);
 		if (error)
 			goto err;
 
+		free(request_path);
 		return 0;
 	}
+
+	if (site) {
+		error = gotweb_load_got_path(&repo_dir, site->repo_name, c, -1);
+		c->t->repo_dir = repo_dir;
+		if (error)
+			goto err;
+
+		r = gotweb_serve_website(c, site, repo_dir, request_path);
+		free(request_path);
+		return r;
+	}
+
+	free(request_path);
+	request_path = NULL;
 
 	/*
 	 * certain actions require a commit id in the querystring. this stops
@@ -418,7 +811,7 @@ gotweb_process_request(struct request *c)
 			goto err;
 		}
 
-		error = gotweb_load_got_path(&repo_dir, qs->path, c);
+		error = gotweb_load_got_path(&repo_dir, qs->path, c, 0);
 		c->t->repo_dir = repo_dir;
 		if (error)
 			goto err;
@@ -627,6 +1020,7 @@ gotweb_process_request(struct request *c)
 	}
 
 err:
+	free(request_path);
 	c->t->error = error;
 	if (error->code == GOT_ERR_NOT_FOUND) {
 		if (gotweb_reply(c, 404, "text/html", NULL) == -1)
@@ -653,6 +1047,36 @@ gotweb_get_server(const char *server_name)
 	/* otherwise, use the first server */
 	return TAILQ_FIRST(&gotwebd_env->servers);
 };
+
+struct website *
+gotweb_get_website(struct server *srv, const char *url_path)
+{
+	struct got_pathlist_entry *pe;
+	size_t url_path_len = strlen(url_path);
+	struct website *site = NULL;
+
+	if (RB_EMPTY(&srv->websites))
+		return NULL;
+
+	/*
+	 * Parent paths are sorted before children so we can match the
+	 * provided URL path against the most specific web site URL path
+	 * by walking the list backwards.
+	 */
+	pe = RB_MAX(got_pathlist_head, &srv->websites);
+	while (pe) {
+		if (got_path_cmp(url_path, pe->path,
+		    url_path_len, pe->path_len) == 0 ||
+		    got_path_is_child(url_path, pe->path, pe->path_len)) {
+			site = pe->data;
+			break;
+		}
+
+		pe = RB_PREV(got_pathlist_head, &srv->websites, pe);
+	}
+
+	return site;
+}
 
 const struct got_error *
 gotweb_init_transport(struct transport **t)
@@ -845,7 +1269,7 @@ gotweb_render_index(struct template *tp)
 		}
 
 		error = gotweb_load_got_path(&repo_dir, sd_dent[d_i]->d_name,
-		    c);
+		    c, 0);
 		if (error) {
 			if (error->code != GOT_ERR_NOT_GIT_REPO)
 				log_warnx("%s: %s: %s", __func__,
@@ -1143,7 +1567,7 @@ auth_check(struct request *c, struct gotwebd_access_rule_list *rules)
 
 static const struct got_error *
 gotweb_load_got_path(struct repo_dir **rp, const char *dir,
-    struct request *c)
+    struct request *c, int requesting_website)
 {
 	const struct got_error *error = NULL;
 	struct gotwebd *env = gotwebd_env;
@@ -1209,6 +1633,10 @@ gotweb_load_got_path(struct repo_dir **rp, const char *dir,
 			break;
 		case GOTWEBD_AUTH_SECURE:
 		case GOTWEBD_AUTH_INSECURE:
+			if (requesting_website) {
+				access = GOTWEBD_ACCESS_PERMITTED;
+				break;
+			}
 			access = auth_check(c, &repo->access_rules);
 			if (access == GOTWEBD_ACCESS_NO_MATCH)
 				access = auth_check(c, &srv->access_rules);
@@ -1227,6 +1655,10 @@ gotweb_load_got_path(struct repo_dir **rp, const char *dir,
 			break;
 		case GOTWEBD_AUTH_SECURE:
 		case GOTWEBD_AUTH_INSECURE:
+			if (requesting_website) {
+				access = GOTWEBD_ACCESS_PERMITTED;
+				break;
+			}
 			access = auth_check(c, &srv->access_rules);
 			if (access == GOTWEBD_ACCESS_NO_MATCH)
 				access = auth_check(c, &env->access_rules);
@@ -1245,15 +1677,19 @@ gotweb_load_got_path(struct repo_dir **rp, const char *dir,
 		goto err;
 	}
 
-	if (repo_is_hidden) {
-		error = got_error_path(repo_dir->name, GOT_ERR_NOT_GIT_REPO);
-		goto err;
-	}
+	if (!requesting_website) {
+		if (repo_is_hidden) {
+			error = got_error_path(repo_dir->name,
+			    GOT_ERR_NOT_GIT_REPO);
+			goto err;
+		}
 
-	if (srv->respect_exportok &&
-	    faccessat(dirfd(dt), "git-daemon-export-ok", F_OK, 0) == -1) {
-		error = got_error_path(repo_dir->name, GOT_ERR_NOT_GIT_REPO);
-		goto err;
+		if (srv->respect_exportok && faccessat(dirfd(dt),
+		    "git-daemon-export-ok", F_OK, 0) == -1) {
+			error = got_error_path(repo_dir->name,
+			    GOT_ERR_NOT_GIT_REPO);
+			goto err;
+		}
 	}
 
 	error = got_repo_open(&t->repo, repo_dir->path, NULL,
@@ -1421,6 +1857,7 @@ gotweb_shutdown(void)
 
 		config_free_access_rules(&srv->access_rules);
 		config_free_repos(&srv->repos);
+		config_free_websites(&srv->websites);
 		free(srv);
 	}
 
@@ -1681,6 +2118,14 @@ gotweb_dispatch_main(int fd, short event, void *arg)
 				fatalx("%s: unexpected CFG_REPO msg", __func__);
 			srv = TAILQ_LAST(&env->servers, serverlist);
 			config_get_repository(&srv->repos, &imsg);
+			break;
+		case GOTWEBD_IMSG_CFG_WEBSITE:
+			if (TAILQ_EMPTY(&env->servers)) {
+				fatalx("%s: unexpected CFG_WEBSITE msg",
+				    __func__);
+			}
+			srv = TAILQ_LAST(&env->servers, serverlist);
+			config_get_website(&srv->websites, &imsg);
 			break;
 		case GOTWEBD_IMSG_CFG_FD:
 			config_getfd(env, &imsg);
