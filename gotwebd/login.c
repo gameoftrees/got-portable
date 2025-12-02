@@ -487,7 +487,7 @@ client_read(struct bufferevent *bev, void *d)
 	struct evbuffer *out = EVBUFFER_OUTPUT(bev);
 	char *line, *cmd, *code;
 	size_t linelen;
-	const char *hostname;
+	const char *hostname, *path = NULL;
 
 	if (client->cmd_done) {
 		log_warnx("%s: client sent data even though login command "
@@ -510,12 +510,12 @@ client_read(struct bufferevent *bev, void *d)
 
 	cmd = line;
 	if (strncmp(cmd, "login", 5) == 0) {
+		struct server *srv = NULL;
+
 		cmd += 5;
 		cmd += strspn(cmd, " \t");
 		hostname = cmd;
 		if (hostname[0] == '\0') {
-			struct server *srv;
-
 			/*
 			 * In a multi-server setup we do not want to leak our
 			 * first server's hostname to random people. But if
@@ -524,9 +524,13 @@ client_read(struct bufferevent *bev, void *d)
 			srv = TAILQ_FIRST(&gotwebd_env->servers);
 			if (TAILQ_NEXT(srv, entry) == NULL)
 				hostname = srv->name;
+			else {
+				log_warnx("%s: no hostname provided for "
+				    "weblogin", __func__);
+				client_err(bev, EVBUFFER_READ, client);
+				return;
+			}
 		} else {
-			struct server *srv;
-
 			/* Match hostname against available servers. */
 			TAILQ_FOREACH(srv, &gotwebd_env->servers, entry) {
 				if (strcmp(srv->name, hostname) == 0)
@@ -550,8 +554,12 @@ client_read(struct bufferevent *bev, void *d)
 			return;
 		}
 
-		if (evbuffer_add_printf(out, "ok https://%s/?login=%s\n",
-		    hostname, code) == -1) {
+		if (srv->gotweb_url_root[0] != '\0' &&
+		    !got_path_is_root_dir(srv->gotweb_url_root))
+			path = srv->gotweb_url_root;
+
+		if (evbuffer_add_printf(out, "ok https://%s%s/?login=%s\n",
+		    hostname, path ? path : "", code) == -1) {
 			log_warnx("%s: evbuffer_add_printf failed", __func__);
 			client_err(bev, EVBUFFER_READ, client);
 			free(code);
