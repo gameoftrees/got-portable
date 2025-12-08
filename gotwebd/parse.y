@@ -382,6 +382,26 @@ main		: PREFORK NUMBER {
 			}
 			free($4);
 		}
+		| GOTWEBD_LOGIN HINT PORT NUMBER {
+			int n;
+
+			if ($4 < 1 || $4 > USHRT_MAX) {
+				fatalx("port number invalid: %lld",
+				    (long long)$4);
+			}
+
+			n = snprintf(gotwebd->login_hint_port,
+			    sizeof(gotwebd->login_hint_port), "%lld",
+			    (long long)$4);
+			if (n < 0) {
+				fatal("snprintf: port number %lld:",
+				    (long long)$4);
+			}
+			if ((size_t)n >= sizeof(gotwebd->login_hint_port)) {
+				fatalx("port number too long: %lld",
+				    (long long)$4);
+			}
+		}
 		| HTDOCS STRING {
 			if (*$2 == '\0') {
 				yyerror("htdocs path can't be an empty"
@@ -596,6 +616,26 @@ serveropts1	: REPOS_PATH STRING {
 				YYERROR;
 			}
 			free($4);
+		}
+		| GOTWEBD_LOGIN HINT PORT NUMBER {
+			int n;
+
+			if ($4 < 1 || $4 > USHRT_MAX) {
+				fatalx("port number invalid: %lld",
+				    (long long)$4);
+			}
+
+			n = snprintf(new_srv->login_hint_port,
+			    sizeof(new_srv->login_hint_port), "%lld",
+			    (long long)$4);
+			if (n < 0) {
+				fatal("snprintf: port number %lld:",
+				    (long long)$4);
+			}
+			if ((size_t)n >= sizeof(new_srv->login_hint_port)) {
+				fatalx("port number too long: %lld",
+				    (long long)$4);
+			}
 		}
 		| MAX_REPOS_DISPLAY NUMBER {
 			if ($2 < 0) {
@@ -1555,6 +1595,16 @@ parse_config(const char *filename, struct gotwebd *env)
 				yyerror("login hint user name too long, "
 				    "exceeds %zd bytes",
 				    sizeof(srv->login_hint_user) - 1);
+			}
+		}
+
+		if (srv->login_hint_port[0] == '\0') {
+			if (strlcpy(srv->login_hint_port, env->login_hint_port,
+			    sizeof(srv->login_hint_port)) >=
+			    sizeof(srv->login_hint_port)) {
+				yyerror("login hint port number too long, "
+				    "exceeds %zd bytes",
+				    sizeof(srv->login_hint_port) - 1);
 			}
 		}
 

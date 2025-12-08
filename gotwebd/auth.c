@@ -435,7 +435,10 @@ login_error_hint(struct request *c)
 		return got_error(GOT_ERR_LOGIN_FAILED);
 
 	ret = snprintf(msg, sizeof(msg),
-	    "Log in by running: ssh %s@%s \"weblogin %s\"",
+	    "Log in by running: ssh %s%s%s%s@%s \"weblogin %s\"",
+	    srv->login_hint_port[0] ? " -p " : "",
+	    srv->login_hint_port[0] ? srv->login_hint_port : "",
+	    srv->login_hint_port[0] ? " " : "",
 	    srv->login_hint_user, srv->name, srv->name);
 	if (ret == -1 || (size_t)ret >= sizeof(msg))
 		return got_error(GOT_ERR_LOGIN_FAILED);

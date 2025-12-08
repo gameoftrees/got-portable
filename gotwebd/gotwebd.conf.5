@@ -186,6 +186,12 @@ While the specified
 .Ar path
 must be absolute, it should usually point inside the web server's chroot
 directory such that the web server can access the socket.
+.It Ic login hint port Ar number
+Sets the SSH port number displayed in login hints which are shown on the error
+page if authentication has failed.
+This can be used to point SSH clients at the correct port number when
+.Xr sshd 8
+is listening on a non-default port.
 .It Ic login hint user Ar name
 Sets the user name displayed in login hints which are shown on the error
 page if authentication has failed.
