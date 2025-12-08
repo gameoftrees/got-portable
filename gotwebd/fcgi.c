@@ -45,6 +45,7 @@
 
 #include "got_lib_poll.h"
 
+#include "media.h"
 #include "gotwebd.h"
 #include "log.h"
 #include "tmpl.h"

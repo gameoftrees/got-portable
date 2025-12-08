@@ -45,6 +45,7 @@
 #include "got_path.h"
 #include "got_error.h"
 
+#include "media.h"
 #include "gotwebd.h"
 #include "log.h"
 
@@ -63,6 +64,8 @@ config_init(struct gotwebd *env)
 	TAILQ_INIT(&env->addresses);
 	STAILQ_INIT(&env->access_rules);
 
+	RB_INIT(&env->mediatypes);
+
 	for (i = 0; i < PRIV_FDS__MAX; i++)
 		env->priv_fd[i] = -1;
 
@@ -79,6 +82,25 @@ config_getcfg(struct gotwebd *env, struct imsg *imsg)
 	if (sockets_compose_main(env, GOTWEBD_IMSG_CFG_DONE, NULL, 0) == -1)
 		fatal("sockets_compose_main GOTWEBD_IMSG_CFG_DONE");
 	return 0;
+}
+
+int
+config_getmediatype(struct gotwebd *env, struct imsg *imsg)
+{
+	struct media_type mt;
+
+	if (imsg_get_data(imsg, &mt, sizeof(mt)) == -1)
+		fatal("%s: failed to receive media type", __func__);
+
+	if (mt.media_name[sizeof(mt.media_name)-1] != '\0' ||
+	    mt.media_type[sizeof(mt.media_type)-1] != '\0' ||
+	    mt.media_subtype[sizeof(mt.media_subtype)-1] != '\0')
+		fatal("%s: received corrupted media type", __func__);
+
+	if (media_add(&env->mediatypes, &mt) == NULL)
+		fatal("%s: failed to insert media type", __func__);
+
+	return (0);
 }
 
 int

@@ -47,6 +47,7 @@
 #include "got_object.h"
 #include "got_path.h"
 
+#include "media.h"
 #include "gotwebd.h"
 #include "log.h"
 
@@ -920,6 +921,7 @@ gotwebd_configure(struct gotwebd *env, uid_t uid, gid_t gid)
 	struct socket *sock;
 	struct gotwebd_repo *repo;
 	struct got_pathlist_entry *pe;
+	struct media_type *mt;
 	char secret[32];
 	int i;
 
@@ -933,6 +935,13 @@ gotwebd_configure(struct gotwebd *env, uid_t uid, gid_t gid)
 		    &env->access_rules);
 		config_set_access_rules(&env->iev_gotweb[i],
 		    &env->access_rules);
+	}
+
+	/* send the mime mapping */
+	RB_FOREACH(mt, mediatypes, &env->mediatypes) {
+		if (main_compose_gotweb(env, GOTWEBD_IMSG_CFG_MEDIA_TYPE,
+		    -1, mt, sizeof(*mt)) == -1)
+			fatal("send_imsg GOTWEBD_IMSG_CFG_MEDIA_TYPE");
 	}
 
 	/* send our gotweb servers */

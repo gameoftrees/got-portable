@@ -6,7 +6,7 @@
 
 PROG =		gotwebd
 SRCS =		config.c sockets.c auth.c login.c gotwebd.c parse.y \
-		fcgi.c gotweb.c got_operations.c tmpl.c pages.c
+		fcgi.c gotweb.c got_operations.c tmpl.c pages.c media.c
 SRCS +=		blame.c commit_graph.c delta.c diff.c \
 		diffreg.c error.c object.c object_cache.c \
 		object_idset.c object_parse.c opentemp.c path.c pack.c \
