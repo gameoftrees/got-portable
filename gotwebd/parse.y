@@ -1478,6 +1478,11 @@ parse_config(const char *filename, struct gotwebd *env)
 				.media_subtype = "css",
 			},
 			{
+				.media_name = "html",
+				.media_type = "text",
+				.media_subtype = "html",
+			},
+			{
 				.media_name = "ico",
 				.media_type = "image",
 				.media_subtype = "x-icon",
