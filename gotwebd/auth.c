@@ -36,6 +36,7 @@
 #include "got_object.h"
 #include "got_path.h"
 
+#include "media.h"
 #include "gotwebd.h"
 #include "log.h"
 #include "tmpl.h"

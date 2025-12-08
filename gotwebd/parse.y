@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016-2019, 2020-2021 Tracey Emery <tracey@traceyemery.net>
+ * Copyright (c) 2014 Reyk Floeter <reyk@openbsd.org>
  * Copyright (c) 2004, 2005 Esben Norby <norby@openbsd.org>
  * Copyright (c) 2004 Ryan McBride <mcbride@openbsd.org>
  * Copyright (c) 2002, 2003, 2004 Henning Brauer <henning@openbsd.org>
@@ -55,6 +56,7 @@
 #include "got_path.h"
 #include "got_error.h"
 
+#include "media.h"
 #include "gotwebd.h"
 #include "log.h"
 
@@ -104,6 +106,7 @@ static struct server		*new_srv;
 static struct server		*conf_new_server(const char *);
 int				 getservice(const char *);
 int				 n;
+struct media_type		 media;
 
 int		 get_addrs(const char *, const char *);
 struct address *get_unix_addr(const char *);
@@ -128,6 +131,20 @@ typedef struct {
 	int lineno;
 } YYSTYPE;
 
+static int
+mediatype_ok(const char *s)
+{
+	size_t i;
+
+	for (i = 0; s[i] != '\0'; ++i) {
+		if (!isalnum((unsigned char)s[i]) &&
+		    s[i] != '-' && s[i] != '+' && s[i] != '.' &&
+		    s[i] != '/')
+			return (-1);
+	}
+	return (0);
+}
+
 %}
 
 %token	LISTEN GOTWEBD_LOGIN WWW SITE_NAME SITE_OWNER SITE_LINK LOGO
@@ -138,6 +155,7 @@ typedef struct {
 %token	SUMMARY_COMMITS_DISPLAY SUMMARY_TAGS_DISPLAY USER AUTHENTICATION
 %token	ENABLE DISABLE INSECURE REPOSITORY REPOSITORIES PERMIT DENY HIDE
 %token	WEBSITE PATH BRANCH REPOS_URL_PATH
+%token	TYPES INCLUDE
 
 %token	<v.string>	STRING
 %token	<v.number>	NUMBER
@@ -152,7 +170,23 @@ grammar		: /* empty */
 		| grammar varset '\n'
 		| grammar main '\n'
 		| grammar server '\n'
+		| grammar types '\n'
 		| grammar error '\n'		{ file->errors++; }
+		;
+
+include		: INCLUDE STRING		{
+			struct file	*nfile;
+
+			if ((nfile = pushfile($2, 0)) == NULL) {
+				yyerror("failed to include file %s", $2);
+				free($2);
+				YYERROR;
+			}
+			free($2);
+
+			file = nfile;
+			lungetc('\n');
+		}
 		;
 
 varset		: STRING '=' STRING	{
@@ -834,7 +868,73 @@ repoopts1	: DISABLE AUTHENTICATION {
 		}
 		;
 
+types		: TYPES	'{' optnl mediaopts_l '}'
+		;
+
+mediaopts_l	: mediaopts_l mediaoptsl nl
+		| mediaoptsl nl
+		;
+
+mediaoptsl	: mediastring medianames_l optsemicolon
+		| include
+		;
+
+mediastring	: STRING '/' STRING	{
+			if (mediatype_ok($1) == -1 || mediatype_ok($3) != -1) {
+				yyerror("malformed media type: %s/%s", $1, $3);
+				free($1);
+				free($3);
+				YYERROR;
+			}
+
+			if (strlcpy(media.media_type, $1,
+			    sizeof(media.media_type)) >=
+			    sizeof(media.media_type) ||
+			    strlcpy(media.media_subtype, $3,
+			    sizeof(media.media_subtype)) >=
+			    sizeof(media.media_subtype)) {
+				yyerror("media type too long");
+				free($1);
+				free($3);
+				YYERROR;
+			}
+			free($1);
+			free($3);
+		}
+		;
+
+medianames_l	: medianames_l medianamesl
+		| medianamesl
+		;
+
+medianamesl	: numberstring				{
+			if (mediatype_ok($1) == -1) {
+				yyerror("malformed media name");
+				free($1);
+				YYERROR;
+			}
+
+			if (strlcpy(media.media_name, $1,
+			    sizeof(media.media_name)) >=
+			    sizeof(media.media_name)) {
+				yyerror("media name too long");
+				free($1);
+				YYERROR;
+			}
+			free($1);
+
+			if (media_add(&gotwebd->mediatypes, &media) == NULL) {
+				yyerror("failed to add media type");
+				YYERROR;
+			}
+		}
+		;
+
 nl		: '\n' optnl
+		;
+
+optsemicolon	: ';'
+		| /* empty */
 		;
 
 optnl		: '\n' optnl		/* zero or more newlines */
@@ -886,6 +986,7 @@ lookup(char *s)
 		{ "hide",			HIDE },
 		{ "hint",			HINT },
 		{ "htdocs",			HTDOCS },
+		{ "include",			INCLUDE },
 		{ "insecure",			INSECURE },
 		{ "listen",			LISTEN },
 		{ "login",			GOTWEBD_LOGIN },
@@ -915,6 +1016,7 @@ lookup(char *s)
 		{ "socket",			SOCKET },
 		{ "summary_commits_display",	SUMMARY_COMMITS_DISPLAY },
 		{ "summary_tags_display",	SUMMARY_TAGS_DISPLAY },
+		{ "types",			TYPES },
 		{ "user",			USER },
 		{ "website",			WEBSITE },
 		{ "www",			WWW },
@@ -1169,7 +1271,7 @@ nodigits:
 	(isalnum(x) || (ispunct(x) && x != '(' && x != ')' && \
 	x != '{' && x != '}' && \
 	x != '!' && x != '=' && x != '#' && \
-	x != ','))
+	x != ',' && x != '/'))
 
 	if (isalnum(c) || c == ':' || c == '_') {
 		do {
@@ -1250,7 +1352,7 @@ pushfile(const char *name, int secret)
 		free(nfile);
 		return (NULL);
 	}
-	nfile->lineno = 1;
+	nfile->lineno = TAILQ_EMPTY(&files) ? 1 : 0;
 	nfile->ungetsize = 16;
 	nfile->ungetbuf = calloc(1, nfile->ungetsize);
 	if (nfile->ungetbuf == NULL) {
@@ -1326,6 +1428,57 @@ parse_config(const char *filename, struct gotwebd *env)
 	/* just add default server if no config specified */
 	if (TAILQ_EMPTY(&gotwebd->servers))
 		add_default_server();
+
+	/* load default mimes */
+	if (RB_EMPTY(&gotwebd->mediatypes)) {
+		struct media_type defaults[] = {
+			{
+				.media_name = "css",
+				.media_type = "text",
+				.media_subtype = "css",
+			},
+			{
+				.media_name = "ico",
+				.media_type = "image",
+				.media_subtype = "x-icon",
+			},
+			{
+				.media_name = "png",
+				.media_type = "image",
+				.media_subtype = "png",
+			},
+			{
+				.media_name = "svg",
+				.media_type = "image",
+				.media_subtype = "svg+xml",
+			},
+			{
+				.media_name = "txt",
+				.media_type = "text",
+				.media_subtype = "plain",
+			},
+			{
+				.media_name = "webmanifest",
+				.media_type = "application",
+				.media_subtype = "manifest+json",
+			},
+			{
+				.media_name = "xml",
+				.media_type = "text",
+				.media_subtype = "xml",
+			},
+		};
+		size_t i;
+
+		for (i = 0; i < nitems(defaults); ++i) {
+			if (media_add(&gotwebd->mediatypes, &defaults[i]) == NULL) {
+				fprintf(stderr, "failed to load default"
+				    " MIME types\n");
+				errors++;
+				break;
+			}
+		}
+	}
 
 	/* add the implicit listen on socket */
 	if (TAILQ_EMPTY(&gotwebd->addresses)) {

@@ -143,6 +143,7 @@ enum imsg_type {
 	GOTWEBD_IMSG_CFG_SOCK,
 	GOTWEBD_IMSG_CFG_FD,
 	GOTWEBD_IMSG_CFG_ACCESS_RULE,
+	GOTWEBD_IMSG_CFG_MEDIA_TYPE,
 	GOTWEBD_IMSG_CFG_REPO,
 	GOTWEBD_IMSG_CFG_WEBSITE,
 	GOTWEBD_IMSG_CFG_DONE,
@@ -481,6 +482,8 @@ struct gotwebd {
 	enum gotwebd_auth_config auth_config;
 	struct gotwebd_access_rule_list access_rules;
 
+	struct mediatypes mediatypes;
+
 	int		 pack_fds[GOTWEB_PACK_NUM_TEMPFILES];
 	int		 priv_fd[PRIV_FDS__MAX];
 
@@ -662,6 +665,7 @@ const struct got_error *got_output_file_blame(struct request *,
 
 /* config.c */
 int config_setserver(struct gotwebd *, struct server *);
+int config_getmediatype(struct gotwebd *, struct imsg *);
 int config_getserver(struct gotwebd *, struct imsg *);
 int config_setsock(struct gotwebd *, struct socket *, uid_t, gid_t);
 int config_getsock(struct gotwebd *, struct imsg *);

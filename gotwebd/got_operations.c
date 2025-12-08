@@ -40,6 +40,7 @@
 #include "got_privsep.h"
 #include "got_opentemp.h"
 
+#include "media.h"
 #include "gotwebd.h"
 #include "log.h"
 

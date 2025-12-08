@@ -48,6 +48,7 @@
 #include "got_blame.h"
 #include "got_privsep.h"
 
+#include "media.h"
 #include "gotwebd.h"
 #include "log.h"
 #include "tmpl.h"
@@ -262,10 +263,10 @@ gotweb_serve_htdocs(struct request *c, const char *request_path)
 {
 	const struct got_error *error = NULL;
 	struct server *srv = c->srv;;
+	struct media_type *m;
 	char *ondisk_path = NULL;
-	int fd = -1;
-	const char *mime_type = "application/octet-stream";
-	char *ext;
+	int n, fd = -1;
+	char mime_type[MEDIA_STRMAX] = "application/octet-stream";
 
 	if (asprintf(&ondisk_path, "%s/%s/%s", gotwebd_env->httpd_chroot,
 	    srv->htdocs_path, request_path) == -1) {
@@ -282,29 +283,14 @@ gotweb_serve_htdocs(struct request *c, const char *request_path)
 		goto done;
 	}
 
-	/*
-	 * TODO: Port generic mime-type handling from httpd.
-	 *
-	 * This hack works only because we know what files our static
-	 * assets contain. But we should account for other files which
-	 * might be dropped into our htdocs directory.
-	 */
-	ext = strrchr(ondisk_path, '.');
-	if (ext) {
-		if (strcmp(ext, ".css") == 0)
-			mime_type = "text/css";
-		if (strcmp(ext, ".ico") == 0)
-			mime_type = "image/x-icon";
-		if (strcmp(ext, ".png") == 0)
-			mime_type = "image/png";
-		if (strcmp(ext, ".svg") == 0)
-			mime_type = "image/svg+xml";
-		if (strcmp(ext, ".txt") == 0)
-			mime_type = "text/plain";
-		if (strcmp(ext, ".webmanifest") == 0)
-			mime_type = "application/manifest+json";
-		if (strcmp(ext, ".xml") == 0)
-			mime_type = "text/xml";
+	m = media_find(&gotwebd_env->mediatypes, ondisk_path);
+	if (m != NULL) {
+		n = snprintf(mime_type, sizeof(mime_type), "%s/%s",
+		    m->media_type, m->media_subtype);
+		if (n < 0 || (size_t)n >= sizeof(mime_type)) {
+			error = got_error(GOT_ERR_RANGE);
+			goto done;
+		}
 	}
 
 	if (gotweb_reply(c, 200, mime_type, NULL) == -1) {
@@ -347,8 +333,9 @@ serve_blob(int *response_code, struct request *c, struct got_repository *repo,
 {
 	const struct got_error *error = NULL;
 	struct got_blob_object *blob = NULL;
-	int binary;
-	const char *mime_type = "application/octet-stream";
+	struct media_type *m;
+	int binary, n;
+	char mime_type[MEDIA_STRMAX] = "application/octet-stream";
 
 	c->t->fd = dup(c->priv_fd[BLOB_FD_1]);
 	if (c->t->fd == -1) {
@@ -365,34 +352,21 @@ serve_blob(int *response_code, struct request *c, struct got_repository *repo,
 		goto done;
 
 	if (binary) {
-		if (gotweb_reply_file(c, "application/octet-stream",
-		    basename, NULL) == -1) {
+		if (gotweb_reply_file(c, mime_type, basename, NULL) == -1) {
 			error = got_error(GOT_ERR_IO);
 			*response_code = 500;
 			goto done;
 		}
 	} else {
-		char *ext;
-
-		/* TODO: Port generic mime-type handling from httpd. */
-		ext = strrchr(basename, '.');
-		if (ext) {
-			if (strcmp(ext, ".css") == 0)
-				mime_type = "text/css";
-			if (strcmp(ext, ".html") == 0)
-				mime_type = "text/html";
-			if (strcmp(ext, ".ico") == 0)
-				mime_type = "image/x-icon";
-			if (strcmp(ext, ".png") == 0)
-				mime_type = "image/png";
-			if (strcmp(ext, ".svg") == 0)
-				mime_type = "image/svg+xml";
-			if (strcmp(ext, ".txt") == 0)
-				mime_type = "text/plain";
-			if (strcmp(ext, ".webmanifest") == 0)
-				mime_type = "application/manifest+json";
-			if (strcmp(ext, ".xml") == 0)
-				mime_type = "text/xml";
+		m = media_find(&gotwebd_env->mediatypes, basename);
+		if (m != NULL) {
+			n = snprintf(mime_type, sizeof(mime_type), "%s/%s",
+			    m->media_type, m->media_subtype);
+			if (n < 0 || (size_t)n >= sizeof(mime_type)) {
+				error = got_error_msg(GOT_ERR_RANGE,
+				    "media type snprintf");
+				goto done;
+			}
 		}
 
 		if (gotweb_reply(c, 200, mime_type, NULL) == -1) {
@@ -1845,6 +1819,8 @@ gotweb_shutdown(void)
 	imsgbuf_clear(&gotwebd_env->iev_auth->ibuf);
 	free(gotwebd_env->iev_auth);
 
+	media_purge(&gotwebd_env->mediatypes);
+
 	config_free_access_rules(&gotwebd_env->access_rules);
 
 	while (!TAILQ_EMPTY(&gotwebd_env->servers)) {
@@ -2107,6 +2083,9 @@ gotweb_dispatch_main(int fd, short event, void *arg)
 					    &repo->access_rules, &imsg);
 				}
 			}
+			break;
+		case GOTWEBD_IMSG_CFG_MEDIA_TYPE:
+			config_getmediatype(env, &imsg);
 			break;
 		case GOTWEBD_IMSG_CFG_SRV:
 			config_getserver(env, &imsg);
