@@ -40,6 +40,7 @@
 #include "got_lib_dial.h"
 #include "got_lib_poll.h"
 
+#include "media.h"
 #include "gotd.h"
 #include "gotwebd.h"
 
