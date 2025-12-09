@@ -627,6 +627,51 @@ Defaults to 10.
 The maximum number of tags to show in the summary page.
 Defaults to 3.
 .El
+.Ss TYPES
+The
+.Ic types
+section configures media types.
+When serving plain files such as style-sheets, images, or other
+web site content,
+.Xr gotwebd 8
+will set the
+.Ar Content-Type
+of the response header based on the file extension of the matching
+media type.
+If not specified,
+.Xr gotwebd 8
+will use built-in media types for
+.Ar text/css ,
+.Ar text/html ,
+.Ar text/plain ,
+.Ar text/xml ,
+.Ar image/gif ,
+.Ar image/png ,
+.Ar image/jpeg ,
+.Ar image/svg+xml ,
+.Ar application/javascript ,
+and
+.Ar application/manifest+json .
+.Pp
+The
+.Ic types
+section must include one or more lines of the following syntax,
+enclosed in curly braces:
+.Bl -tag -width Ds
+.It Ar type/subtype Ar name Op Ar name ...
+Set the media
+.Ar type
+and
+.Ar subtype
+to the specified extension
+.Ar name .
+One or more names can be specified per line.
+Each line may end with an optional semicolon.
+Later lines overwrite earlier lines.
+.It Ic include Ar file
+Include types definitions from an external file, for example
+.Pa /usr/share/misc/mime.types .
+.El
 .Sh FILES
 .Bl -tag -width Ds -compact
 .It Pa /etc/gotwebd.conf
@@ -665,10 +710,31 @@ server "localhost" {
 }
 .Ed
 .Pp
+This example illustrates how to define custom media types:
+.Bd -literal -offset indent
+server "localhost" {
+	repos_path	"/var/git"
+}
+
+types {
+	text/css		css
+	text/html		html htm
+	text/plain		txt
+	image/gif		gif
+	image/jpeg		jpeg jpg
+	image/png		png
+	application/javascript	js
+	application/xml		xml
+}
+.Ed
+.Pp
 This example illustrates how
 .Xr gotwebd 8
 can serve static web sites out of Git repositories:
 .Bd -literal -offset indent
+# Load a set of mime types from an external file.
+types { include "/usr/share/misc/mime.types" }
+
 # This server displays just one web site, no Git repositories.
 server "www.example.com" {
 	# Do not display any Git repository data.
