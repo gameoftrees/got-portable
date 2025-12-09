@@ -921,7 +921,7 @@ mediaoptsl	: mediastring medianames_l optsemicolon
 		;
 
 mediastring	: STRING '/' STRING	{
-			if (mediatype_ok($1) == -1 || mediatype_ok($3) != -1) {
+			if (mediatype_ok($1) == -1 || mediatype_ok($3) == -1) {
 				yyerror("malformed media type: %s/%s", $1, $3);
 				free($1);
 				free($3);
