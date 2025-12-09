@@ -1096,6 +1096,8 @@ gotwebd_shutdown(void)
 	pid_t		 pid;
 	int		 i, status;
 
+	media_purge(&gotwebd_env->mediatypes);
+
 	event_del(&env->iev_login->ev);
 	imsgbuf_clear(&env->iev_login->ibuf);
 	close(env->iev_login->ibuf.fd);
