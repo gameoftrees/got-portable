@@ -1479,6 +1479,11 @@ parse_config(const char *filename, struct gotwebd *env)
 				.media_subtype = "css",
 			},
 			{
+				.media_name = "gif",
+				.media_type = "image",
+				.media_subtype = "gif",
+			},
+			{
 				.media_name = "html",
 				.media_type = "text",
 				.media_subtype = "html",
@@ -1492,6 +1497,21 @@ parse_config(const char *filename, struct gotwebd *env)
 				.media_name = "png",
 				.media_type = "image",
 				.media_subtype = "png",
+			},
+			{
+				.media_name = "jpeg",
+				.media_type = "image",
+				.media_subtype = "jpeg",
+			},
+			{
+				.media_name = "jpg",
+				.media_type = "image",
+				.media_subtype = "jpeg",
+			},
+			{
+				.media_name = "js",
+				.media_type = "application",
+				.media_subtype = "javascript",
 			},
 			{
 				.media_name = "svg",
