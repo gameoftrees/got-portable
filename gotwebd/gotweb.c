@@ -1527,7 +1527,7 @@ auth_check(struct request *c, struct gotwebd_access_rule_list *rules)
 
 	/*
 	 * We cannot access /etc/passwd in this process so we cannot
-	 * verify the client's user ID outselves here.
+	 * verify the client's user ID ourselves here.
 	 * Match rules against the access identifier which has already
 	 * passed authentication in the auth process.
 	 */

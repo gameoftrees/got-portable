@@ -317,7 +317,7 @@ test_modify_protected_branch() {
 	(cd $testroot/wt && got commit -m 'change beta' > /dev/null)
 	got send -q -r $testroot/repo-clone  -b bar
 	# Now merge branch 'bar' into 'main' and send the 'main' branch.
-	# Because the server already has the revelant commit, we will send
+	# Because the server already has the relevant commit, we will send
 	# an empty pack file during our second send operation.
 	# This would cause a bogus 'reference is protected' error.
 	(cd $testroot/wt && got up -q -b main > /dev/null)
