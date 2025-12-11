@@ -97,7 +97,7 @@ weblogin(FILE *out, int sock, const char *hostname)
 	 * or might return an arbitrary error message + \n.
 	 * We don't know how long this line will be, so keep reading
 	 * in chunks until we have read all of it.
-	 * For forward compatibilty, ignore any trailing lines received.
+	 * For forward compatibility, ignore any trailing lines received.
 	 */
 	linelen = getline(&line, &linesize, fp);
 	if (linelen == -1) {
