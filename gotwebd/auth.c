@@ -451,6 +451,7 @@ process_request(struct request *c)
 	struct website *site;
 	struct gotwebd_repo *repo = NULL;
 	enum gotwebd_auth_config auth_config;
+	struct gotwebd_access_rule_list *access_rules = NULL;
 	char *hostname = NULL;
 	const char *identifier = NULL;
 	char *request_path = NULL;
@@ -478,16 +479,6 @@ process_request(struct request *c)
 		return;
 	}
 
-	/* Web site content is not protected by authentication either. */
-	if (site) {
-		/* Ignore the querystring while serving web sites. */
-		fcgi_init_querystring(&c->fcgi_params.qs);
-
-		forward_request(c);
-		free(request_path);
-		return;
-	}
-
 	free(request_path);
 	request_path = NULL;
 
@@ -496,8 +487,16 @@ process_request(struct request *c)
 	if (c->fcgi_params.qs.path[0] != '\0')
 		repo = gotweb_get_repository(srv, c->fcgi_params.qs.path);
 
-	if (repo)
+	if (repo) {
 		auth_config = repo->auth_config;
+		access_rules = &repo->access_rules;
+	} else if (site) {
+		auth_config = site->auth_config;
+		access_rules = &site->access_rules;
+
+		/* Ignore the querystring while serving web sites. */
+		fcgi_init_querystring(&c->fcgi_params.qs);
+	}
 
 	switch (auth_config) {
 	case GOTWEBD_AUTH_SECURE:
@@ -533,8 +532,8 @@ process_request(struct request *c)
 		goto done;
 	}
 
-	if (repo) {
-		switch (auth_check(&identifier, uid, &repo->access_rules)) {
+	if (access_rules) {
+		switch (auth_check(&identifier, uid, access_rules)) {
 		case GOTWEBD_ACCESS_DENIED:
 			error = got_error_msg(GOT_ERR_LOGIN_FAILED,
 			    "permission denied");
@@ -920,6 +919,8 @@ auth_dispatch_main(int fd, short event, void *arg)
 	struct gotwebd		*env = gotwebd_env;
 	struct server		*srv;
 	struct gotwebd_repo	*repo;
+	struct got_pathlist_entry *pe;
+	struct website		*site;
 	ssize_t			 n;
 	int			 shut = 0;
 
@@ -951,9 +952,18 @@ auth_dispatch_main(int fd, short event, void *arg)
 			} else {
 				srv = TAILQ_LAST(&env->servers, serverlist);
 				if (TAILQ_EMPTY(&srv->repos)) {
-					/* per-server access rule */
-					config_get_access_rule(
-					    &srv->access_rules, &imsg);
+					if (RB_EMPTY(&srv->websites)) {
+						/* per-server access rule */
+						config_get_access_rule(
+						    &srv->access_rules, &imsg);
+					} else {
+						pe = RB_MAX(got_pathlist_head,
+						    &srv->websites);
+						site = pe->data;
+						/* per-website access rule */
+						config_get_access_rule(
+						    &site->access_rules, &imsg);
+					}
 				} else {
 					/* per-repository access rule */
 					repo = TAILQ_LAST(&srv->repos,

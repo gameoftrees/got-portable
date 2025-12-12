@@ -400,6 +400,9 @@ struct website {
 	char url_path[MAX_DOCUMENT_URI];
 	char branch_name[MAX_BRANCH_NAME];
 	char path[PATH_MAX];
+
+	enum gotwebd_auth_config	auth_config;
+	struct gotwebd_access_rule_list access_rules;
 };
 
 struct server {

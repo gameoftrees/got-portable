@@ -516,20 +516,63 @@ will display the repository.
 .It Ic website Ar url-path Brq ...
 Show a web site when the browser visits the given
 .Ar url-path .
-The web site's content is composed of files in a Git repository.
 .Pp
-While the underlying repository is subject to authentication as usual,
-web site content is always public, and cannot be hidden via the
+For each web site, access rules can be configured using the
+.Ic permit
+and
+.Ic deny
+configuration directives.
+Multiple access rules can be specified, and the last matching rule
+determines the action taken.
+.Pp
+If no access rules are set in a web site context then the access rules set
+in the server and global configuration contexts apply.
+If no rule matches then the web site will be inaccessible if authentication
+is enabled.
+.Pp
+The
 .Ic hide repository
 or
 .Ic respect_exportok
-directives.
+directives do not apply to web site content.
 .Pp
 The available
 .Ic website
 configuration parameters are as follows:
 .Pp
 .Bl -tag -width Ds
+.It Ic deny Ar identity
+Deny web site access to users with the username
+.Ar identity .
+Group names may be matched by prepending a colon
+.Pq Sq \&:
+to
+.Ar identity .
+Numeric IDs are also accepted.
+.It Ic permit Ar identity
+Permit web site access to users with the username
+.Ar identity .
+Group names may be matched by prepending a colon
+.Pq Sq \&:
+to
+.Ar identity .
+Numeric IDs are also accepted.
+.It Ic disable authentication
+Disable authentication, allowing any browser to view the web site.
+Any access rules configured with
+.Ic permit
+or
+.Ic deny
+directives for this web site will be ignored.
+.Pp
+If not specified, the server context or global context determines
+whether authentication is disabled.
+.It Ic enable authentication Oo Ic insecure Oc
+Enable authentication, requiring browsers to present a login token cookie
+before access to the web site is granted.
+.Pp
+If not specified, the server context or global context determines
+whether authentication is enabled.
 .It Ic repository Ar name
 Serve web site content from the specified Git repository.
 The repository will be looked up within the server's
