@@ -836,6 +836,41 @@ websiteopts1	: REPOSITORY STRING {
 			}
 			free($2);
 		}
+		| DISABLE AUTHENTICATION {
+			if (new_website->auth_config != 0) {
+				yyerror("ambiguous authentication "
+				    "setting for website %s",
+				    new_website->path);
+				YYERROR;
+			}
+			new_website->auth_config = GOTWEBD_AUTH_DISABLED;
+		}
+		| ENABLE AUTHENTICATION {
+			if (new_website->auth_config != 0) {
+				yyerror("ambiguous authentication "
+				    "setting for website %s",
+				    new_website->path);
+				YYERROR;
+			}
+			new_website->auth_config = GOTWEBD_AUTH_SECURE;
+		}
+		| ENABLE AUTHENTICATION INSECURE {
+			if (new_website->auth_config != 0) {
+				yyerror("ambiguous authentication "
+				    "setting for website %s",
+				    new_website->path);
+				YYERROR;
+			}
+			new_website->auth_config = GOTWEBD_AUTH_INSECURE;
+		}
+		| PERMIT numberstring {
+			conf_new_access_rule(&new_website->access_rules,
+			    GOTWEBD_ACCESS_PERMITTED, $2);
+		}
+		| DENY numberstring {
+			conf_new_access_rule(&new_website->access_rules,
+			    GOTWEBD_ACCESS_DENIED, $2);
+		}
 		;
 
 website		: WEBSITE STRING {
@@ -1696,6 +1731,9 @@ parse_config(const char *filename, struct gotwebd *env)
 			const char *url_path = pe->path;
 			struct website *site = pe->data;
 
+			if (site->auth_config == 0)
+				site->auth_config = srv->auth_config;
+
 			if (site->repo_name[0] == '\0') {
 				yyerror("no repository defined for website "
 				    "'%s' on server %s", url_path, srv->name);
@@ -1984,6 +2022,8 @@ conf_new_website(struct server *server, const char *url_path)
 	site = calloc(1, sizeof(*site));
 	if (site == NULL)
 		fatal("calloc");
+
+	STAILQ_INIT(&site->access_rules);
 
 	if (!got_path_is_absolute(url_path)) {
 		int ret;

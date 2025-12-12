@@ -974,13 +974,18 @@ gotwebd_configure(struct gotwebd *env, uid_t uid, gid_t gid)
 			    &srv->access_rules);
 		}
 
-		/* send web sites */
+		/* send web sites and per-site access rules */
 		RB_FOREACH(pe, got_pathlist_head, &srv->websites) {
 			struct website *site = pe->data;
 
 			for (i = 0; i < env->prefork; i++) {
 				config_set_website(&env->iev_auth[i], site);
 				config_set_website(&env->iev_gotweb[i], site);
+
+				config_set_access_rules(&env->iev_auth[i],
+				    &site->access_rules);
+				config_set_access_rules(&env->iev_gotweb[i],
+				    &site->access_rules);
 			}
 		}
 

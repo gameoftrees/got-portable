@@ -55,7 +55,7 @@
 
 static int gotweb_render_index(struct template *);
 static const struct got_error *gotweb_load_got_path(struct repo_dir **,
-    const char *, struct request *, int);
+    const char *, struct request *, struct website *);
 static const struct got_error *gotweb_load_file(char **, const char *,
     const char *, int);
 static const struct got_error *gotweb_get_repo_description(char **,
@@ -749,7 +749,8 @@ gotweb_process_request(struct request *c)
 	}
 
 	if (site) {
-		error = gotweb_load_got_path(&repo_dir, site->repo_name, c, -1);
+		error = gotweb_load_got_path(&repo_dir, site->repo_name, c,
+		    site);
 		c->t->repo_dir = repo_dir;
 		if (error)
 			goto err;
@@ -783,7 +784,7 @@ gotweb_process_request(struct request *c)
 			goto err;
 		}
 
-		error = gotweb_load_got_path(&repo_dir, qs->path, c, 0);
+		error = gotweb_load_got_path(&repo_dir, qs->path, c, NULL);
 		c->t->repo_dir = repo_dir;
 		if (error)
 			goto err;
@@ -1241,7 +1242,7 @@ gotweb_render_index(struct template *tp)
 		}
 
 		error = gotweb_load_got_path(&repo_dir, sd_dent[d_i]->d_name,
-		    c, 0);
+		    c, NULL);
 		if (error) {
 			if (error->code != GOT_ERR_NOT_GIT_REPO)
 				log_warnx("%s: %s: %s", __func__,
@@ -1539,7 +1540,7 @@ auth_check(struct request *c, struct gotwebd_access_rule_list *rules)
 
 static const struct got_error *
 gotweb_load_got_path(struct repo_dir **rp, const char *dir,
-    struct request *c, int requesting_website)
+    struct request *c, struct website *site)
 {
 	const struct got_error *error = NULL;
 	struct gotwebd *env = gotwebd_env;
@@ -1550,6 +1551,7 @@ gotweb_load_got_path(struct repo_dir **rp, const char *dir,
 	char *dir_test;
 	struct gotwebd_repo *repo;
 	enum gotwebd_auth_config auth_config = 0;
+	struct gotwebd_access_rule_list *access_rules = NULL;
 	enum gotwebd_access access = GOTWEBD_ACCESS_DENIED;
 	int repo_is_hidden = 0;
 
@@ -1596,20 +1598,23 @@ gotweb_load_got_path(struct repo_dir **rp, const char *dir,
 		goto err;
 
 	repo = gotweb_get_repository(srv, repo_dir->name);
-	if (repo) {
-		repo_is_hidden = repo->hidden;
-		auth_config = repo->auth_config;
+	if (repo || site) {
+		if (repo) {
+			repo_is_hidden = repo->hidden;
+			auth_config = repo->auth_config;
+			access_rules = &repo->access_rules;
+		} else {
+			auth_config = site->auth_config;
+			access_rules = &site->access_rules;
+		}
+
 		switch (auth_config) {
 		case GOTWEBD_AUTH_DISABLED:
 			access = GOTWEBD_ACCESS_PERMITTED;
 			break;
 		case GOTWEBD_AUTH_SECURE:
 		case GOTWEBD_AUTH_INSECURE:
-			if (requesting_website) {
-				access = GOTWEBD_ACCESS_PERMITTED;
-				break;
-			}
-			access = auth_check(c, &repo->access_rules);
+			access = auth_check(c, access_rules);
 			if (access == GOTWEBD_ACCESS_NO_MATCH)
 				access = auth_check(c, &srv->access_rules);
 			if (access == GOTWEBD_ACCESS_NO_MATCH)
@@ -1627,10 +1632,6 @@ gotweb_load_got_path(struct repo_dir **rp, const char *dir,
 			break;
 		case GOTWEBD_AUTH_SECURE:
 		case GOTWEBD_AUTH_INSECURE:
-			if (requesting_website) {
-				access = GOTWEBD_ACCESS_PERMITTED;
-				break;
-			}
 			access = auth_check(c, &srv->access_rules);
 			if (access == GOTWEBD_ACCESS_NO_MATCH)
 				access = auth_check(c, &env->access_rules);
@@ -1649,7 +1650,7 @@ gotweb_load_got_path(struct repo_dir **rp, const char *dir,
 		goto err;
 	}
 
-	if (!requesting_website) {
+	if (site == NULL) {
 		if (repo_is_hidden) {
 			error = got_error_path(repo_dir->name,
 			    GOT_ERR_NOT_GIT_REPO);
