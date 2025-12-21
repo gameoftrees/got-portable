@@ -22,18 +22,14 @@
 #include <string.h>
 
 #include "media.h"
-#include "log.h"
 
 struct media_type *
 media_add(struct mediatypes *types, struct media_type *media)
 {
 	struct media_type	*entry;
 
-	if ((entry = RB_FIND(mediatypes, types, media)) != NULL) {
-		log_debug("%s: entry overwritten for \"%s\"", __func__,
-		    media->media_name);
+	if ((entry = RB_FIND(mediatypes, types, media)) != NULL)
 		media_delete(types, entry);
-	}
 
 	if ((entry = malloc(sizeof(*media))) == NULL)
 		return (NULL);
