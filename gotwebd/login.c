@@ -62,7 +62,7 @@ static char login_token_secret[32];
 /*
  * The token format is:
  *
- *    "v1\0"[issued at/64bit][expire/64bit][uid/64bit][host]"\0"
+ *    "v2\0"[random/64bit][issued at/64bit][expire/64bit][uid/64bit][host]"\0"
  *
  * Padded with additional \0 to a length divisible by 4, and then
  * followed by the HMAC-SHA256 of it, all encoded in base64.
@@ -75,7 +75,7 @@ login_check_token(uid_t *euid, char **hostname,
     const char *purpose)
 {
 	time_t	 now;
-	uint64_t issued, expire, uid;
+	uint64_t random, issued, expire, uid;
 	uint8_t *data;
 	int	 len;
 	char	 hmac[32], exp[32];
@@ -112,7 +112,7 @@ login_check_token(uid_t *euid, char **hostname,
 		return -1;
 	}
 
-	if (memcmp(data, "v1", 3) != 0) {
+	if (memcmp(data, "v2", 3) != 0) {
 		log_warnx("unknown %s token format version", purpose);
 		free(data);
 		return -1;
@@ -139,6 +139,9 @@ login_check_token(uid_t *euid, char **hostname,
 		free(data);
 		return -1;
 	}
+
+	memcpy(&random, data + used, sizeof(random));
+	used += sizeof(random);
 
 	memcpy(&issued, data + used, sizeof(issued));
 	used += sizeof(issued);
@@ -193,7 +196,7 @@ login_gen_token(uint64_t uid, const char *hostname, time_t validity,
 	FILE		*fp;
 	char		*tok;
 	time_t		 now;
-	uint64_t	 issued, expire;
+	uint64_t	 random, issued, expire;
 	size_t		 siz, hlen, pad;
 	unsigned int	 hmaclen;	/* openssl... */
 
@@ -205,6 +208,7 @@ login_gen_token(uint64_t uid, const char *hostname, time_t validity,
 		fatalx("%s token secret length mismatch", purpose);
 
 	now = time(NULL);
+	arc4random_buf(&random, sizeof(random));
 	issued = (uint64_t)now;
 	expire = issued + validity;
 
@@ -215,7 +219,8 @@ login_gen_token(uint64_t uid, const char *hostname, time_t validity,
 	/* include NUL */
 	hlen = strlen(hostname) + 1;
 
-	if (fwrite("v1", 1, 3, fp) != 3 ||
+	if (fwrite("v2", 1, 3, fp) != 3 ||
+	    fwrite(&random, 1, 8, fp) != 8 ||
 	    fwrite(&issued, 1, 8, fp) != 8 ||
 	    fwrite(&expire, 1, 8, fp) != 8 ||
 	    fwrite(&uid, 1, 8, fp) != 8 ||
