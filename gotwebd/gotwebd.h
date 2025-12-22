@@ -468,7 +468,6 @@ struct socket {
 	struct socket_conf	 conf;
 
 	int		 fd;
-	struct event	 evt;
 	struct event	 ev;
 	struct event	 pause;
 };
