@@ -182,14 +182,14 @@ fcgi_parse_record(struct gotwebd_fcgi_record *rec)
 }
 
 static const struct querystring_keys querystring_keys[] = {
-	{ "action",		ACTION },
-	{ "commit",		COMMIT },
-	{ "file",		RFILE },
-	{ "folder",		FOLDER },
-	{ "headref",		HEADREF },
-	{ "index_page",		INDEX_PAGE },
-	{ "path",		PATH },
-	{ "login",		LOGIN },
+	{ "action",		GOTWEBD_QS_ACTION },
+	{ "commit",		GOTWEBD_QS_COMMIT },
+	{ "file",		GOTWEBD_QS_RFILE },
+	{ "folder",		GOTWEBD_QS_FOLDER },
+	{ "headref",		GOTWEBD_QS_HEADREF },
+	{ "index_page",	GOTWEBD_QS_INDEX_PAGE },
+	{ "path",		GOTWEBD_QS_PATH },
+	{ "login",		GOTWEBD_QS_LOGIN },
 };
 
 static const struct action_keys action_keys[] = {
@@ -297,7 +297,7 @@ assign_querystring(struct querystring *qs, char *key, char *value)
 			continue;
 
 		switch (querystring_keys[el_cnt].element) {
-		case ACTION:
+		case GOTWEBD_QS_ACTION:
 			for (a_cnt = 0; a_cnt < nitems(action_keys); a_cnt++) {
 				if (strcmp(value, action_keys[a_cnt].name) != 0)
 					continue;
@@ -307,7 +307,7 @@ assign_querystring(struct querystring *qs, char *key, char *value)
 			if (a_cnt == nitems(action_keys))
 				qs->action = ERR;
 			break;
-		case COMMIT:
+		case GOTWEBD_QS_COMMIT:
 			if (strlcpy(qs->commit, value, sizeof(qs->commit)) >=
 			    sizeof(qs->commit)) {
 				error = got_error_msg(GOT_ERR_NO_SPACE,
@@ -315,7 +315,7 @@ assign_querystring(struct querystring *qs, char *key, char *value)
 				goto done;
 			}
 			break;
-		case RFILE:
+		case GOTWEBD_QS_RFILE:
 			error = validate_path(value);
 			if (error)
 				goto done;
@@ -326,7 +326,7 @@ assign_querystring(struct querystring *qs, char *key, char *value)
 				goto done;
 			}
 			break;
-		case FOLDER:
+		case GOTWEBD_QS_FOLDER:
 			error = validate_path(value);
 			if (error)
 				goto done;
@@ -338,7 +338,7 @@ assign_querystring(struct querystring *qs, char *key, char *value)
 				goto done;
 			}
 			break;
-		case HEADREF:
+		case GOTWEBD_QS_HEADREF:
 			error = validate_path(value);
 			if (error)
 				goto done;
@@ -349,7 +349,7 @@ assign_querystring(struct querystring *qs, char *key, char *value)
 				goto done;
 			}
 			break;
-		case INDEX_PAGE:
+		case GOTWEBD_QS_INDEX_PAGE:
 			if (*value == '\0')
 				break;
 			qs->index_page = strtonum(value, 0, INT_MAX, &errstr);
@@ -359,7 +359,7 @@ assign_querystring(struct querystring *qs, char *key, char *value)
 				goto done;
 			}
 			break;
-		case PATH:
+		case GOTWEBD_QS_PATH:
 			error = validate_path(value);
 			if (error)
 				goto done;
@@ -370,7 +370,7 @@ assign_querystring(struct querystring *qs, char *key, char *value)
 				goto done;
 			}
 			break;
-		case LOGIN:
+		case GOTWEBD_QS_LOGIN:
 			if (strlcpy(qs->login, value, sizeof(qs->login)) >=
 			    sizeof(qs->login)) {
 				error = got_error_msg(GOT_ERR_NO_SPACE,
