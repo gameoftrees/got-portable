@@ -545,14 +545,14 @@ struct action_keys {
 };
 
 enum querystring_elements {
-	ACTION,
-	COMMIT,
-	RFILE,
-	FOLDER,
-	HEADREF,
-	INDEX_PAGE,
-	PATH,
-	LOGIN,
+	GOTWEBD_QS_ACTION,
+	GOTWEBD_QS_COMMIT,
+	GOTWEBD_QS_RFILE,
+	GOTWEBD_QS_FOLDER,
+	GOTWEBD_QS_HEADREF,
+	GOTWEBD_QS_INDEX_PAGE,
+	GOTWEBD_QS_PATH,
+	GOTWEBD_QS_LOGIN,
 };
 
 extern struct gotwebd	*gotwebd_env;
