@@ -30,7 +30,6 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
-#include <sys/tree.h>
 
 #include <net/if.h>
 #include <netinet/in.h>

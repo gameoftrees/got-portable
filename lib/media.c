@@ -15,7 +15,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <sys/tree.h>
+#include "got_compat.h"
 
 #include <stdarg.h>
 #include <stdlib.h>

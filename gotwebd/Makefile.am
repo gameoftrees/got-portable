@@ -38,6 +38,7 @@ gotwebd_SOURCES = config.c \
 		  $(top_srcdir)/lib/inflate.c \
 		  $(top_srcdir)/lib/lockfile.c \
 		  $(top_srcdir)/lib/log.c \
+		  $(top_srcdir)/lib/media.c \
 		  $(top_srcdir)/lib/murmurhash2.c \
 		  $(top_srcdir)/lib/object.c \
 		  $(top_srcdir)/lib/object_cache.c \
