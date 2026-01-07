@@ -1,0 +1,85 @@
+.\"
+.\" Copyright (c) 2026 Stefan Sperling
+.\"
+.\" Permission to use, copy, modify, and distribute this software for any
+.\" purpose with or without fee is hereby granted, provided that the above
+.\" copyright notice and this permission notice appear in all copies.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+.\" MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+.\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+.\"
+.Dd $Mdocdate$
+.Dt GOTWEBCTL 8
+.Os
+.Sh NAME
+.Nm gotwebctl
+.Nd control the Game of Trees Web Daemon
+.Sh SYNOPSIS
+.Nm
+.Op Fl hV
+.Op Fl f Ar path
+.Ar command
+.Op Ar arg ...
+.Sh DESCRIPTION
+.Nm
+controls the
+.Xr gotwebd 8
+daemon.
+.Pp
+Access to the
+.Xr gotwebd 8
+control socket requires root privileges.
+.Pp
+The options for
+.Nm
+are as follows:
+.Bl -tag -width Ds
+.It Fl h
+Display usage information and exit immediately.
+.It Fl f Ar path
+Set the
+.Ar path
+to the control socket which
+.Xr gotwebd 8
+is listening on.
+If not specified, the default path
+.Pa /var/run/gotwebd.sock
+will be used.
+.It Fl V , -version
+Display program version and exit immediately.
+.El
+.Pp
+The commands for
+.Nm
+are as follows:
+.Bl -tag -width Ds
+.It Cm info
+Display information about a running
+.Xr gotwebd 8
+instance.
+.It Cm stop
+Ask a running
+.Xr gotwebd 8
+instance to gracefully stop itself.
+This is equivalent to sending a TERM signal to
+.Xr gotwebd 8
+without requiring knowledge of the process ID to send the signal to.
+.Pp
+The control socket will be closed by
+.Xr gotwebd 8 ,
+allowing a new instance of
+.Xr gotwebd 8
+to take over.
+New FastCGI socket connections will no longer be accepted, but FastCGI
+requests currently in progress are still processed to completion.
+.Sh SEE ALSO
+.Xr got 1 ,
+.Xr gotwebd.conf 5 ,
+.Xr gotwebd 8
+.Sh AUTHORS
+.An Stefan Sperling Aq Mt stsp@openbsd.org
