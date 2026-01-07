@@ -98,8 +98,10 @@ fcgi_sighdlr(int sig, short event, void *arg)
 		break;
 	case SIGCHLD:
 		break;
-	case SIGINT:
 	case SIGTERM:
+		/* continue until the parent exits */
+		break;
+	case SIGINT:
 		fcgi_shutdown();
 		break;
 	default:

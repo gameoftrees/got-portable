@@ -1872,8 +1872,10 @@ gotweb_sighdlr(int sig, short event, void *arg)
 		break;
 	case SIGCHLD:
 		break;
-	case SIGINT:
 	case SIGTERM:
+		/* continue until the parent exits */
+		break;
+	case SIGINT:
 		gotweb_shutdown();
 		break;
 	default:

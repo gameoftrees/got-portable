@@ -55,6 +55,7 @@ struct gotwebd_login_client {
 
 static volatile int client_cnt;
 static int inflight;
+static volatile int stopping;
 
 static char login_token_secret[32];
 
@@ -419,6 +420,22 @@ login_shutdown(void)
 }
 
 static void
+login_stop(void)
+{
+	struct gotwebd *env = gotwebd_env;
+
+	stopping = 1;
+
+	if (env->iev_gotsh) {
+		evtimer_del(&env->login_pause_ev);
+		event_del(&env->iev_gotsh->ev);
+		close(env->iev_gotsh->ibuf.fd);
+		env->iev_gotsh->ibuf.fd = -1;
+		imsgbuf_clear(&env->iev_gotsh->ibuf);
+	}
+}
+
+static void
 login_sighdlr(int sig, short event, void *arg)
 {
 	switch (sig) {
@@ -433,8 +450,10 @@ login_sighdlr(int sig, short event, void *arg)
 		break;
 	case SIGCHLD:
 		break;
-	case SIGINT:
 	case SIGTERM:
+		login_stop();
+		break;
+	case SIGINT:
 		login_shutdown();
 		break;
 	default:
@@ -616,7 +635,7 @@ login_accept(int fd, short event, void *arg)
 	backoff.tv_sec = 1;
 	backoff.tv_usec = 0;
 
-	if (event_add(&iev->ev, NULL) == -1) {
+	if (!stopping && event_add(&iev->ev, NULL) == -1) {
 		log_warn("event_add");
 		return;
 	}
@@ -637,7 +656,8 @@ login_accept(int fd, short event, void *arg)
 		case EMFILE:
 		case ENFILE:
 			event_del(&iev->ev);
-			evtimer_add(&env->login_pause_ev, &backoff);
+			if (!stopping)
+				evtimer_add(&env->login_pause_ev, &backoff);
 			return;
 		default:
 			log_warn("accept");
@@ -779,6 +799,9 @@ login_dispatch_main(int fd, short event, void *arg)
 		case GOTWEBD_IMSG_CTL_START:
 			login_launch(env);
 			break;
+		case GOTWEBD_IMSG_CTL_STOP:
+			login_stop();
+			break;
 		case GOTWEBD_IMSG_LOGIN_SECRET:
 			if (imsg_get_data(&imsg, login_token_secret,
 			    sizeof(login_token_secret)) == -1)
@@ -806,7 +829,8 @@ accept_paused(int fd, short event, void *arg)
 {
 	struct gotwebd *env = gotwebd_env;
 
-	event_add(&env->iev_gotsh->ev, NULL);
+	if (!stopping)
+		event_add(&env->iev_gotsh->ev, NULL);
 }
 
 void
