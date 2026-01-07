@@ -66,6 +66,7 @@
 #define MAXIMUM(a, b)	(((a) > (b)) ? (a) : (b))
 
 static volatile int client_cnt;
+static volatile int stopping;
 
 static struct timeval	timeout = { TIMEOUT_DEFAULT, 0 };
 
@@ -148,7 +149,8 @@ cleanup_request(struct request *c)
 
 	del_request(c);
 
-	event_add(&c->sock->ev, NULL);
+	if (!stopping)
+		event_add(&c->sock->ev, NULL);
 
 	if (evtimer_initialized(&c->tmo))
 		evtimer_del(&c->tmo);
@@ -158,6 +160,9 @@ cleanup_request(struct request *c)
 		close(c->fd);
 	free(c->buf);
 	free(c);
+
+	if (stopping && client_cnt <= 0)
+		sockets_shutdown();
 }
 
 static void
@@ -757,6 +762,32 @@ recv_fcgi_pipe(struct gotwebd *env, struct imsg *imsg)
 }
 
 static void
+sockets_stop(void)
+{
+	struct socket *sock;
+
+	stopping = 1;
+
+	/*
+	 * Deactivate sockets but to do not free them.
+	 * Client connections maintain a pointer to them via c->sock.
+	 */
+	TAILQ_FOREACH(sock, &gotwebd_env->sockets, entry) {
+		if (sock->fd != -1) {
+			close(sock->fd);
+			sock->fd = -1;
+		}
+		if (event_initialized(&sock->ev))
+			event_del(&sock->ev);
+		if (evtimer_initialized(&sock->ev))
+			evtimer_del(&sock->pause);
+	}
+
+	if (client_cnt == 0)
+		sockets_shutdown();
+}
+
+static void
 sockets_dispatch_main(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
@@ -804,6 +835,9 @@ sockets_dispatch_main(int fd, short event, void *arg)
 		case GOTWEBD_IMSG_CTL_START:
 			sockets_launch(env);
 			break;
+		case GOTWEBD_IMSG_CTL_STOP:
+			sockets_stop();
+			break;
 		default:
 			fatalx("%s: unknown imsg type %d", __func__,
 			    imsg.hdr.type);
@@ -836,8 +870,10 @@ sockets_sighdlr(int sig, short event, void *arg)
 		break;
 	case SIGCHLD:
 		break;
-	case SIGINT:
 	case SIGTERM:
+		sockets_stop();
+		break;
+	case SIGINT:
 		sockets_shutdown();
 		break;
 	default:
@@ -1193,7 +1229,8 @@ sockets_socket_accept(int fd, short event, void *arg)
 	backoff.tv_usec = 0;
 
 	if (event & EV_TIMEOUT) {
-		event_add(&sock->ev, NULL);
+		if (!stopping)
+			event_add(&sock->ev, NULL);
 		return;
 	}
 
@@ -1207,7 +1244,8 @@ sockets_socket_accept(int fd, short event, void *arg)
 		case EINTR:
 		case EWOULDBLOCK:
 		case ECONNABORTED:
-			event_add(&sock->ev, NULL);
+			if (!stopping)
+				event_add(&sock->ev, NULL);
 			return;
 		case EMFILE:
 		case ENFILE:
@@ -1225,7 +1263,8 @@ sockets_socket_accept(int fd, short event, void *arg)
 		close(s);
 		if (c != NULL)
 			free(c);
-		event_add(&sock->ev, NULL);
+		if (!stopping)
+			event_add(&sock->ev, NULL);
 		return;
 	}
 
@@ -1234,7 +1273,8 @@ sockets_socket_accept(int fd, short event, void *arg)
 		log_warn("%s: calloc", __func__);
 		close(s);
 		cgi_inflight--;
-		event_add(&sock->ev, NULL);
+		if (!stopping)
+			event_add(&sock->ev, NULL);
 		return;
 	}
 
@@ -1244,7 +1284,8 @@ sockets_socket_accept(int fd, short event, void *arg)
 		close(s);
 		cgi_inflight--;
 		free(c);
-		event_add(&sock->ev, NULL);
+		if (!stopping)
+			event_add(&sock->ev, NULL);
 		return;
 	}
 

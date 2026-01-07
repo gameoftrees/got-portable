@@ -423,6 +423,18 @@ gotwebd_dispatch_gotweb(int fd, short event, void *arg)
 	}
 }
 
+static void
+gotwebd_stop(void)
+{
+	if (main_compose_sockets(gotwebd_env, GOTWEBD_IMSG_CTL_STOP,
+	    -1, NULL, 0) == -1)
+		fatal("send_imsg GOTWEBD_IMSG_CTL_STOP");
+
+	if (main_compose_login(gotwebd_env, GOTWEBD_IMSG_CTL_STOP,
+	    -1, NULL, 0) == -1)
+		fatal("send_imsg GOTWEBD_IMSG_CTL_STOP");
+}
+
 void
 gotwebd_sighdlr(int sig, short event, void *arg)
 {
@@ -439,6 +451,8 @@ gotwebd_sighdlr(int sig, short event, void *arg)
 		log_info("%s: ignoring SIGUSR1", __func__);
 		break;
 	case SIGTERM:
+		gotwebd_stop();
+		break;
 	case SIGINT:
 		gotwebd_shutdown();
 		break;
