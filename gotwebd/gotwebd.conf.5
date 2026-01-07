@@ -218,6 +218,17 @@ commands.
 By default the path
 .Pa /var/run/gotweb-login.sock
 will be used.
+.It Ic control socket Ar path
+Set the
+.Ar path
+to the
+.Ux Ns -domain
+socket for
+.Xr gotwebctl 8
+commands.
+By default the path
+.Pa /var/run/gotwebd.sock
+will be used.
 .It Ic prefork Ar number
 Spawn enough processes such that
 .Ar number
@@ -927,5 +938,6 @@ server "secure.example.com" {
 .Xr got 1 ,
 .Xr httpd.conf 5 ,
 .Xr services 5 ,
+.Xr gotwebctl 8 ,
 .Xr gotwebd 8 ,
 .Xr httpd 8

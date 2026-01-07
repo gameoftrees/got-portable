@@ -43,6 +43,8 @@
 #define GOTWEBD_LOGIN_SOCKET	 "/var/run/gotweb-login.sock"
 #define GOTWEBD_LOGIN_TIMEOUT	 300 /* in seconds */
 
+#define GOTWEBD_CONTROL_SOCKET	 "/var/run/gotwebd.sock"
+
 #define GOTWEBD_MAXDESCRSZ	 1024
 #define GOTWEBD_MAXCLONEURLSZ	 1024
 #define GOTWEBD_CACHESIZE	 1024
@@ -150,6 +152,7 @@ enum imsg_type {
 	GOTWEBD_IMSG_CTL_PIPE,
 	GOTWEBD_IMSG_CTL_START,
 	GOTWEBD_IMSG_CTL_STOP,
+	GOTWEBD_IMSG_CTL_INFO,
 	GOTWEBD_IMSG_LOGIN_SECRET,
 	GOTWEBD_IMSG_AUTH_SECRET,
 	GOTWEBD_IMSG_AUTH_CONF,
@@ -169,6 +172,12 @@ struct imsgev {
 };
 
 #define IMSG_DATA_SIZE(imsg)	((imsg)->hdr.len - IMSG_HEADER_SIZE)
+
+/* Structure for GOTWEBD_IMSG_CTL_INFO. */
+struct gotwebd_imsg_info {
+	pid_t pid;
+	int verbosity;
+};
 
 struct env_val {
 	SLIST_ENTRY(env_val)	 entry;
@@ -477,12 +486,18 @@ TAILQ_HEAD(socketlist, socket);
 
 struct passwd;
 struct gotwebd {
+	pid_t			pid;
+
 	struct serverlist	servers;
 	struct socketlist	sockets;
 	struct addresslist	addresses;
 
 	struct socket	*login_sock;
 	struct event	 login_pause_ev;
+
+	struct socket	*control_sock;
+	struct event	 control_pause_ev;
+	struct imsgev	*iev_control;
 
 	enum gotwebd_auth_config auth_config;
 	struct gotwebd_access_rule_list access_rules;

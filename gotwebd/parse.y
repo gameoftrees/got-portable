@@ -156,7 +156,7 @@ mediatype_ok(const char *s)
 %token	SUMMARY_COMMITS_DISPLAY SUMMARY_TAGS_DISPLAY USER AUTHENTICATION
 %token	ENABLE DISABLE INSECURE REPOSITORY REPOSITORIES PERMIT DENY HIDE
 %token	WEBSITE PATH BRANCH REPOS_URL_PATH DESCRIPTION
-%token	TYPES INCLUDE
+%token	TYPES INCLUDE GOTWEBD_CONTROL
 
 %token	<v.string>	STRING
 %token	<v.number>	NUMBER
@@ -480,6 +480,20 @@ main		: PREFORK NUMBER {
 			}
 
 			free($2);
+		}
+		| GOTWEBD_CONTROL SOCKET STRING {
+			struct address *h;
+			h = get_unix_addr($3);
+			if (h == NULL) {
+				yyerror("can't listen on %s", $3);
+				free($3);
+				YYERROR;
+			}
+			if (gotwebd->control_sock != NULL)
+				free(gotwebd->control_sock);
+			gotwebd->control_sock = sockets_conf_new_socket(-1, h);
+			free(h);
+			free($3);
 		}
 		;
 
@@ -1065,6 +1079,7 @@ lookup(char *s)
 		{ "authentication",		AUTHENTICATION },
 		{ "branch",			BRANCH },
 		{ "chroot",			CHROOT },
+		{ "control",			GOTWEBD_CONTROL },
 		{ "custom_css",			CUSTOM_CSS },
 		{ "deny",			DENY },
 		{ "description",		DESCRIPTION },
@@ -1632,6 +1647,19 @@ parse_config(const char *filename, struct gotwebd *env)
 			return (-1);
 		}
 		gotwebd->login_sock = sockets_conf_new_socket(-1, h);
+		free(h);
+	}
+
+	/* Add implicit control socket */
+	if (gotwebd->control_sock == NULL) {
+		struct address *h;
+		h = get_unix_addr(GOTWEBD_CONTROL_SOCKET);
+		if (h == NULL) {
+			fprintf(stderr, "cannot listen on %s",
+			    GOTWEBD_CONTROL_SOCKET);
+			return (-1);
+		}
+		gotwebd->control_sock = sockets_conf_new_socket(-1, h);
 		free(h);
 	}
 

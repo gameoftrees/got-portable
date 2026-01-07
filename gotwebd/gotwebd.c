@@ -18,6 +18,7 @@
 #include <sys/param.h>
 #include <sys/queue.h>
 #include <sys/tree.h>
+#include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 
@@ -65,6 +66,9 @@ void	 gotwebd_dispatch_auth(int, short, void *);
 void	 gotwebd_dispatch_gotweb(int, short, void *);
 
 struct gotwebd	*gotwebd_env;
+
+static volatile int client_cnt;
+static volatile int stopping;
 
 void
 imsg_event_add(struct imsgev *iev)
@@ -424,6 +428,26 @@ gotwebd_dispatch_gotweb(int fd, short event, void *arg)
 }
 
 static void
+control_socket_destroy(void)
+{
+	struct gotwebd *env = gotwebd_env;
+
+	if (env->iev_control == NULL)
+		return;
+
+	event_del(&env->iev_control->ev);
+	imsgbuf_clear(&env->iev_control->ibuf);
+	if (env->iev_control->ibuf.fd != -1)
+		close(env->iev_control->ibuf.fd);
+
+	free(env->iev_control);
+	env->iev_control = NULL;
+
+	free(env->control_sock);
+	env->control_sock = NULL;
+}
+
+static void
 gotwebd_stop(void)
 {
 	if (main_compose_sockets(gotwebd_env, GOTWEBD_IMSG_CTL_STOP,
@@ -433,6 +457,9 @@ gotwebd_stop(void)
 	if (main_compose_login(gotwebd_env, GOTWEBD_IMSG_CTL_STOP,
 	    -1, NULL, 0) == -1)
 		fatal("send_imsg GOTWEBD_IMSG_CTL_STOP");
+
+	control_socket_destroy();
+	stopping = 1;
 }
 
 void
@@ -451,10 +478,14 @@ gotwebd_sighdlr(int sig, short event, void *arg)
 		log_info("%s: ignoring SIGUSR1", __func__);
 		break;
 	case SIGTERM:
+		if (stopping)
+			break;
 		gotwebd_stop();
 		break;
 	case SIGINT:
 		gotwebd_shutdown();
+		exit(0);
+		/* NOTREACHED */
 		break;
 	default:
 		log_warn("unexpected signal %d", sig);
@@ -575,6 +606,293 @@ get_usernames(const char **gotwebd_username, const char **www_username,
 
 	*gotwebd_username = &usernames[0];
 	*www_username = colon + 1;
+}
+
+static int
+control_socket_listen(struct gotwebd *env, struct socket *sock,
+    uid_t uid, gid_t gid)
+{
+	int u_fd = -1;
+	mode_t old_umask, mode;
+
+	u_fd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK| SOCK_CLOEXEC, 0);
+	if (u_fd == -1) {
+		log_warn("socket");
+		return -1;
+	}
+
+	if (unlink(sock->conf.unix_socket_name) == -1) {
+		if (errno != ENOENT) {
+			log_warn("unlink %s", sock->conf.unix_socket_name);
+			close(u_fd);
+			return -1;
+		}
+	}
+
+	old_umask = umask(S_IXUSR|S_IXGRP|S_IWOTH|S_IROTH|S_IXOTH);
+	mode = S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH;
+
+	if (bind(u_fd, (struct sockaddr *)&sock->conf.addr.ss,
+	    sock->conf.addr.slen) == -1) {
+		log_warn("bind: %s", sock->conf.unix_socket_name);
+		close(u_fd);
+		(void)umask(old_umask);
+		return -1;
+	}
+
+	(void)umask(old_umask);
+
+	if (chmod(sock->conf.unix_socket_name, mode) == -1) {
+		log_warn("chmod: %s", sock->conf.unix_socket_name);
+		close(u_fd);
+		(void)unlink(sock->conf.unix_socket_name);
+		return -1;
+	}
+
+	if (chown(sock->conf.unix_socket_name, uid, gid) == -1) {
+		log_warn("chown: %s", sock->conf.unix_socket_name);
+		close(u_fd);
+		(void)unlink(sock->conf.unix_socket_name);
+		return -1;
+	}
+
+	if (listen(u_fd, 1) == -1) {
+		log_warn("listen: %s", sock->conf.unix_socket_name);
+		return -1;
+	}
+
+	return u_fd;
+}
+
+struct gotwebd_control_client {
+	int fd;
+	struct imsgev iev;
+	struct event tmo;
+};
+
+static void
+disconnect(struct gotwebd_control_client *client)
+{
+	if (client->fd != -1)
+		close(client->fd);
+	free(client);
+	client_cnt--;
+}
+
+static void
+control_timeout(int fd, short events, void *arg)
+{
+	struct gotwebd_control_client *client = arg;
+
+	log_debug("disconnecting control socket due to timeout");
+
+	disconnect(client);
+}
+
+static void
+send_info(struct gotwebd_control_client *client)
+{
+	struct gotwebd_imsg_info info;
+
+	info.pid = gotwebd_env->pid;
+	info.verbosity = gotwebd_env->gotwebd_verbose;
+
+	if (imsg_compose_event(&client->iev, GOTWEBD_IMSG_CTL_INFO, 0,
+	    gotwebd_env->pid, -1, &info, sizeof(info)) == -1)
+		log_warn("imsg compose INFO");
+}
+
+static void
+control_request(int fd, short event, void *arg)
+{
+	struct gotwebd_control_client *client = arg;
+	struct imsg imsg;
+	ssize_t n;
+
+	if (event & EV_WRITE) {
+		if (imsgbuf_write(&client->iev.ibuf) == -1) {
+			log_warn("imsgbuf_write");
+			disconnect(client);
+			return;
+		}
+
+		if (stopping) {
+			disconnect(client);
+			return;
+		}
+	}
+
+	if (event & EV_READ) {
+		if ((n = imsgbuf_read(&client->iev.ibuf)) == -1)
+			fatal("imsgbuf_read error");
+		if (n == 0) {
+			/* Connection closed. */
+			disconnect(client);
+			return;
+		}
+	}
+
+	for (;;) {
+		n = imsg_get(&client->iev.ibuf, &imsg);
+		if (n == -1) {
+			disconnect(client);
+			return;
+		}
+
+		if (n == 0)
+			break;
+
+		evtimer_del(&client->tmo);
+
+		switch (imsg.hdr.type) {
+		case GOTWEBD_IMSG_CTL_INFO:
+			send_info(client);
+			break;
+		case GOTWEBD_IMSG_CTL_STOP:
+			if (!stopping)
+				gotwebd_stop();
+			disconnect(client);
+			imsg_free(&imsg);
+			return;
+		default:
+			log_warnx("unexpected imsg %d", imsg.hdr.type);
+			break;
+		}
+
+		imsg_free(&imsg);
+	}
+
+	imsg_event_add(&client->iev);
+}
+
+static void
+control_accept(int fd, short event, void *arg)
+{
+	struct imsgev *iev = arg;
+	struct gotwebd *env = gotwebd_env;
+	struct sockaddr_storage ss;
+	struct timeval backoff;
+	socklen_t len;
+	int s = -1;
+	struct gotwebd_control_client *client = NULL;
+	uid_t euid;
+	gid_t egid;
+
+	backoff.tv_sec = 1;
+	backoff.tv_usec = 0;
+
+	if (stopping)
+		return;
+
+	if (event_add(&iev->ev, NULL) == -1) {
+		log_warn("event_add");
+		return;
+	}
+	if (event & EV_TIMEOUT)
+		return;
+
+	len = sizeof(ss);
+
+	s = accept4(fd, (struct sockaddr *)&ss, &len, 
+	    SOCK_NONBLOCK | SOCK_CLOEXEC);
+	if (s == -1) {
+		switch (errno) {
+		case EINTR:
+		case EWOULDBLOCK:
+		case ECONNABORTED:
+			return;
+		case EMFILE:
+		case ENFILE:
+			event_del(&iev->ev);
+			if (!stopping)
+				evtimer_add(&env->control_pause_ev, &backoff);
+			return;
+		default:
+			log_warn("accept");
+			return;
+		}
+	}
+
+	if (client_cnt >= 1)
+		goto err;
+
+	if (getpeereid(s, &euid, &egid) == -1) {
+		log_warn("getpeerid");
+		goto err;
+	}
+
+	if (euid != 0) {
+		log_warnx("control connection from UID %d denied", euid);
+		goto err;
+	}
+
+	client = calloc(1, sizeof(*client));
+	if (client == NULL) {
+		log_warn("%s: calloc", __func__);
+		goto err;
+	}
+	client->fd = s;
+	s = -1;
+
+	client->iev.handler = control_request;
+	client->iev.events = EV_READ;
+	client->iev.data = client;
+
+	imsgbuf_init(&client->iev.ibuf, client->fd);
+	event_set(&client->iev.ev, client->fd, EV_READ, control_request,
+	    client);
+	imsg_event_add(&client->iev);
+
+	evtimer_set(&client->tmo, control_timeout, client);
+
+	log_debug("%s: control connection on fd %d uid %d gid %d", __func__,
+	    client->fd, euid, egid);
+	client_cnt++;
+	return;
+err:
+	if (client) {
+		close(client->fd);
+		free(client);
+	}
+	if (s != -1)
+		close(s);
+}
+
+static void
+accept_paused(int fd, short event, void *arg)
+{
+	struct gotwebd *env = gotwebd_env;
+
+	if (!stopping)
+		event_add(&env->iev_control->ev, NULL);
+}
+
+static void
+control_socket_init(struct gotwebd *env, uid_t uid, gid_t gid)
+{
+	struct imsgev *iev;
+	int fd;
+
+	log_info("initializing control socket %s",
+	    env->control_sock->conf.unix_socket_name);
+
+	iev = calloc(1, sizeof(*iev));
+	if (iev == NULL)
+		fatal("calloc");
+
+	fd = control_socket_listen(env, env->control_sock, uid, gid);
+	if (fd == -1)
+		exit(1);
+
+	if (imsgbuf_init(&iev->ibuf, fd) == -1)
+		fatal("imsgbuf_init");
+
+	iev->data = iev;
+	event_set(&iev->ev, fd, EV_READ, control_accept, iev);
+	event_add(&iev->ev, NULL);
+	evtimer_set(&env->control_pause_ev, accept_paused, NULL);
+
+	env->iev_control = iev;
 }
 
 int
@@ -783,10 +1101,14 @@ main(int argc, char **argv)
 		break;
 	}
 
+	env->pid = getpid();
+
 	if (!env->gotwebd_debug && daemon(1, 0) == -1)
 		fatal("daemon");
 
 	evb = event_init();
+
+	control_socket_init(env, pw->pw_uid, pw->pw_gid);
 
 	env->iev_sockets = calloc(1, sizeof(*env->iev_sockets));
 	if (env->iev_sockets == NULL)
@@ -867,14 +1189,15 @@ main(int argc, char **argv)
 		err(1, "unveil");
 
 #ifndef PROFILE
-	if (pledge("stdio", NULL) == -1)
+	if (pledge("stdio unix", NULL) == -1)
 		err(1, "pledge");
 #endif
 
 	event_dispatch();
-	event_base_free(evb);
 
-	log_debug("%s gotwebd exiting", getprogname());
+	gotwebd_shutdown();
+
+	event_base_free(evb);
 
 	return (0);
 }
@@ -1151,6 +1474,8 @@ gotwebd_shutdown(void)
 
 	free(env->login_sock);
 
+	control_socket_destroy();
+
 	do {
 		pid = waitpid(WAIT_ANY, &status, 0);
 		if (pid <= 0)
@@ -1188,5 +1513,4 @@ gotwebd_shutdown(void)
 	free(gotwebd_env);
 
 	log_warnx("gotwebd terminating");
-	exit(0);
 }

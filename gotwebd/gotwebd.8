@@ -133,6 +133,18 @@ Directory containing HTML, CSS, and image files used by
 Default location for the
 .Nm
 listening socket.
+.It Pa /var/run/gotweb-login.sock
+Default location for the
+.Nm
+login socket.
+.It Pa /var/run/gotwebd.sock
+Default location for the
+.Nm
+control socket.
+.Xr gotwebctl 8
+can be used to send commands to
+.Nm
+via this socket.
 .It Pa /tmp/
 Directory for temporary files created by
 .Nm .
@@ -219,6 +231,7 @@ server "example.com" {
 .Xr git-repository 5 ,
 .Xr gotwebd.conf 5 ,
 .Xr httpd.conf 5 ,
+.Xr gotwebctl 8 ,
 .Xr httpd 8
 .Sh AUTHORS
 .An Omar Polo Aq Mt op@openbsd.org

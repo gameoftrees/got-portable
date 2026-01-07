@@ -45,9 +45,11 @@ tmpl-regress:
 	${MAKE} -C regress/template
 
 webd: tmpl
+	${MAKE} -C gotwebctl
 	${MAKE} -C gotwebd
 
 webd-install:
+	${MAKE} -C gotwebctl install
 	${MAKE} -C gotwebd install
 
 server:
