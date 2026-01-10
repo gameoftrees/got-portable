@@ -777,7 +777,7 @@ write_gotd_conf(int *auth_idx)
 			
 		if (rename(gotd_secrets_tmppath, GOTD_SECRETS_PATH) == -1) {
 			return got_error_from_errno_fmt("rename %s to %s",
-			    gotd_conf_tmppath, GOTD_SECRETS_PATH);
+			    gotd_secrets_tmppath, GOTD_SECRETS_PATH);
 		}
 
 		free(gotd_secrets_tmppath);
