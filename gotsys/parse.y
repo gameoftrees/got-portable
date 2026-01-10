@@ -78,18 +78,6 @@ int		 lgetc(int);
 int		 lungetc(int);
 int		 findeol(void);
 
-TAILQ_HEAD(symhead, sym)	 symhead = TAILQ_HEAD_INITIALIZER(symhead);
-struct sym {
-	TAILQ_ENTRY(sym)	 entry;
-	int			 used;
-	int			 persist;
-	char			*nam;
-	char			*val;
-};
-
-int	 symset(const char *, const char *, int);
-char	*symget(const char *);
-
 static const struct got_error	*gerror;
 
 static struct gotsys_conf	*gotsysconf;
@@ -142,24 +130,6 @@ grammar		:
 		| grammar varset '\n'
 		| grammar main '\n'
 		| grammar repository '\n'
-		;
-
-varset		: STRING '=' STRING	{
-			char *s = $1;
-			while (*s++) {
-				if (isspace((unsigned char)*s)) {
-					yyerror("macro name cannot contain "
-					    "whitespace");
-					free($1);
-					free($3);
-					YYERROR;
-				}
-			}
-			if (symset($1, $3, 0) == -1)
-				yyerror("cannot store variable");
-			free($1);
-			free($3);
-		}
 		;
 
 numberstring	: STRING
@@ -620,8 +590,6 @@ lookup(char *s)
 
 #define MAXPUSHBACK	128
 
-unsigned char *parsebuf;
-int parseindex;
 unsigned char pushback_buffer[MAXPUSHBACK];
 int pushback_index = 0;
 
@@ -629,17 +597,6 @@ int
 lgetc(int quotec)
 {
 	int c, next;
-
-	if (parsebuf) {
-		/* Read character from the parsebuffer instead of input. */
-		if (parseindex >= 0) {
-			c = parsebuf[parseindex++];
-			if (c != '\0')
-				return (c);
-			parsebuf = NULL;
-		} else
-			parseindex++;
-	}
 
 	if (pushback_index)
 		return (pushback_buffer[--pushback_index]);
@@ -672,11 +629,7 @@ lungetc(int c)
 {
 	if (c == EOF)
 		return (EOF);
-	if (parsebuf) {
-		parseindex--;
-		if (parseindex >= 0)
-			return (c);
-	}
+
 	if (pushback_index < MAXPUSHBACK-1)
 		return (pushback_buffer[pushback_index++] = c);
 	else
@@ -687,8 +640,6 @@ int
 findeol(void)
 {
 	int c;
-
-	parsebuf = NULL;
 
 	/* Skip to either EOF or the first real EOL. */
 	while (1) {
@@ -710,11 +661,10 @@ int
 yylex(void)
 {
 	unsigned char buf[8096];
-	unsigned char *p, *val;
+	unsigned char *p;
 	int quotec, next, c;
 	int token;
 
-top:
 	p = buf;
 	c = lgetc(0);
 	while (c == ' ' || c == '\t')
@@ -725,33 +675,6 @@ top:
 		c = lgetc(0);
 		while (c != '\n' && c != EOF)
 			c = lgetc(0); /* nothing */
-	}
-	if (c == '$' && parsebuf == NULL) {
-		while (1) {
-			c = lgetc(0);
-			if (c == EOF)
-				return (0);
-
-			if (p + 1 >= buf + sizeof(buf) - 1) {
-				yyerror("string too long");
-				return (findeol());
-			}
-			if (isalnum((unsigned char)c) || c == '_') {
-				*p++ = c;
-				continue;
-			}
-			*p = '\0';
-			lungetc(c);
-			break;
-		}
-		val = symget(buf);
-		if (val == NULL) {
-			yyerror("macro '%s' not defined", buf);
-			return (findeol());
-		}
-		parsebuf = val;
-		parseindex = 0;
-		goto top;
 	}
 
 	switch (c) {
@@ -839,7 +762,7 @@ nodigits:
 	(isalnum((unsigned char)x) || \
 	(ispunct((unsigned char)x) && x != '(' && x != ')' && \
 	x != '{' && x != '}' && \
-	x != '!' && x != '=' && x != '#' && \
+	x != '!' && x != '#' && \
 	x != ','))
 
 	if (isalnum((unsigned char)c) || c == ':' || c == '_') {
@@ -914,7 +837,6 @@ gotsys_conf_parse(const char *filename, struct gotsys_conf *pgotsysconf,
     int *fd)
 {
 	const struct got_error *error;
-	struct sym *sym, *next;
 	struct gotsys_user *user;
 	struct gotsys_repo *repo;
 	struct gotsys_access_rule *rule;
@@ -927,17 +849,6 @@ gotsys_conf_parse(const char *filename, struct gotsys_conf *pgotsysconf,
 
 	yyparse();
 	closefile(file);
-
-	/* Free macros and check which have not been used. */
-	TAILQ_FOREACH_SAFE(sym, &symhead, entry, next) {
-		fprintf(stderr, "warning: macro '%s' not used\n", sym->nam);
-		if (!sym->persist) {
-			free(sym->nam);
-			free(sym->val);
-			TAILQ_REMOVE(&symhead, sym, entry);
-			free(sym);
-		}
-	}
 
 	if (gerror)
 		return gerror;
@@ -1818,59 +1729,4 @@ done:
 		free(target);
 	}
 	return ret;
-}
-
-int
-symset(const char *nam, const char *val, int persist)
-{
-	struct sym *sym;
-
-	TAILQ_FOREACH(sym, &symhead, entry) {
-		if (strcmp(nam, sym->nam) == 0)
-			break;
-	}
-
-	if (sym != NULL) {
-		if (sym->persist == 1)
-			return (0);
-		else {
-			free(sym->nam);
-			free(sym->val);
-			TAILQ_REMOVE(&symhead, sym, entry);
-			free(sym);
-		}
-	}
-	sym = calloc(1, sizeof(*sym));
-	if (sym == NULL)
-		return (-1);
-
-	sym->nam = strdup(nam);
-	if (sym->nam == NULL) {
-		free(sym);
-		return (-1);
-	}
-	sym->val = strdup(val);
-	if (sym->val == NULL) {
-		free(sym->nam);
-		free(sym);
-		return (-1);
-	}
-	sym->used = 0;
-	sym->persist = persist;
-	TAILQ_INSERT_TAIL(&symhead, sym, entry);
-	return (0);
-}
-
-char *
-symget(const char *nam)
-{
-	struct sym *sym;
-
-	TAILQ_FOREACH(sym, &symhead, entry) {
-		if (strcmp(nam, sym->nam) == 0) {
-			sym->used = 1;
-			return (sym->val);
-		}
-	}
-	return (NULL);
 }

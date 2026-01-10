@@ -192,7 +192,6 @@ ssh-rsa
 .Pp
 The key type must be followed by the base64-encoded public
 .Ar key .
-To avoid syntax errors the base64 string might need to be wrapped in quotes.
 .Pp
 The optional
 .Ar comment
@@ -625,7 +624,7 @@ user flan_hacker {
 user flan_squee {
 	group porters
 	authorized key ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAQ2ZWscmMeCYLwm07gDSf0jApFJ58bMNxiErDqUrFz4
-	authorized key ecdsa-sha2-nistp256 "AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBBVqRHzWh20u49JoZPc34pBFo7w+0KGRCnkuNbeR7ufJUbXceDwzgssQHDVILD1QK0Mmku2jLo1MG/BtwTVpsWc=" flan_squee@localhost
+	authorized key ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBBVqRHzWh20u49JoZPc34pBFo7w+0KGRCnkuNbeR7ufJUbXceDwzgssQHDVILD1QK0Mmku2jLo1MG/BtwTVpsWc= flan_squee@localhost
 }
 
 repository "src" {
