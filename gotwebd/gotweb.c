@@ -1669,10 +1669,18 @@ gotweb_load_got_path(struct repo_dir **rp, const char *dir,
 	    gotwebd_env->pack_fds);
 	if (error)
 		goto err;
-	error = gotweb_get_repo_description(&repo_dir->description, srv,
-	    repo_dir->path, dirfd(dt));
-	if (error)
-		goto err;
+	if (repo && repo->description[0] != '\0') {
+		repo_dir->description = strdup(repo->description);
+		if (repo_dir->description == NULL) {
+			error = got_error_from_errno("strdup");
+			goto err;
+		}
+	} else {
+		error = gotweb_get_repo_description(&repo_dir->description,
+		    srv, repo_dir->path, dirfd(dt));
+		if (error)
+			goto err;
+	}
 	if (srv->show_repo_owner) {
 		error = gotweb_load_file(&repo_dir->owner, repo_dir->path,
 		    "owner", dirfd(dt));

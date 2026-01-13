@@ -153,7 +153,7 @@ mediatype_ok(const char *s)
 %token	SERVER CHROOT CUSTOM_CSS SOCKET HINT HTDOCS GOTWEB_URL_ROOT
 %token	SUMMARY_COMMITS_DISPLAY SUMMARY_TAGS_DISPLAY USER AUTHENTICATION
 %token	ENABLE DISABLE INSECURE REPOSITORY REPOSITORIES PERMIT DENY HIDE
-%token	WEBSITE PATH BRANCH REPOS_URL_PATH
+%token	WEBSITE PATH BRANCH REPOS_URL_PATH DESCRIPTION
 %token	TYPES INCLUDE
 
 %token	<v.string>	STRING
@@ -940,6 +940,17 @@ repoopts1	: DISABLE AUTHENTICATION {
 		| HIDE REPOSITORY boolean {
 			new_repo->hidden = $3;
 		}
+		| DESCRIPTION STRING {
+			n = strlcpy(new_repo->description, $2,
+			    sizeof(new_repo->description));
+			if (n >= sizeof(new_repo->description)) {
+				yyerror("repository description too long, "
+				    "exceeds %zd bytes",
+				    sizeof(new_repo->description) - 1);
+				free($2);
+				YYERROR;
+			}
+		}
 		;
 
 types		: TYPES	'{' optnl mediaopts_l '}'
@@ -1054,6 +1065,7 @@ lookup(char *s)
 		{ "chroot",			CHROOT },
 		{ "custom_css",			CUSTOM_CSS },
 		{ "deny",			DENY },
+		{ "description",		DESCRIPTION },
 		{ "disable",			DISABLE },
 		{ "enable",			ENABLE },
 		{ "gotweb_url_root",		GOTWEB_URL_ROOT },

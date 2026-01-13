@@ -470,6 +470,18 @@ is enabled.
 .Pp
 The available repository configuration directives are as follows:
 .Bl -tag -width Ds
+.It Ic description Ar string
+Sets the repository description shown on the repository listing page.
+The
+.Ar string
+parameter should be wrapped in quotes and can only contain one line of text.
+.Pp
+If no description is set in
+.Nm
+then the description stored in the repository's
+.Pa description
+file will be shown instead.
+This file may contain multiple lines of text.
 .It Ic deny Ar identity
 Deny repository access to users with the username
 .Ar identity .
@@ -627,6 +639,10 @@ Enabled by default.
 The
 .Pa description
 file in the repository should be updated with an appropriate description.
+Alternatively, the per-repository
+.Ic description
+option can be used to set a description in
+.Nm .
 .It Ic show_repo_owner Ar on | off
 Set whether to display the repository owner.
 Enabled by default.
