@@ -387,6 +387,7 @@ struct gotwebd_repo {
 	TAILQ_ENTRY(gotwebd_repo)	 entry;
 
 	char name[NAME_MAX];
+	char description[GOTWEBD_MAXDESCRSZ];
 
 	enum gotwebd_auth_config	auth_config;
 	struct gotwebd_access_rule_list access_rules;
