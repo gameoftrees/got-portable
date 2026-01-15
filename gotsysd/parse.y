@@ -660,7 +660,7 @@ gotsysd_parse_config(const char *filename, enum gotsysd_procid proc_id,
 	}
 	if (strlcpy(gotsysd->repos_path, GOTSYSD_REPOSITORIES_PATH,
 	    sizeof(gotsysd->repos_path)) >= sizeof(gotsysd->repos_path)) {
-		fprintf(stderr, "%s: unix socket path too long", __func__);
+		fprintf(stderr, "%s: repos path too long", __func__);
 		return -1;
 	}
 	if (strlcpy(gotsysd->user_name, GOTSYSD_USER,
