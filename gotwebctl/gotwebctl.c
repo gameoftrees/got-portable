@@ -29,6 +29,7 @@
 #include <locale.h>
 #include <sha1.h>
 #include <sha2.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,6 +49,21 @@
 #ifndef nitems
 #define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0]))
 #endif
+
+static volatile sig_atomic_t sigint_received;
+static volatile sig_atomic_t sigpipe_received;
+
+static void
+catch_sigint(int signo)
+{
+	sigint_received = 1;
+}
+
+static void
+catch_sigpipe(int signo)
+{
+	sigpipe_received = 1;
+}
 
 struct gotwebctl_cmd {
 	const char	*cmd_name;
@@ -118,10 +134,21 @@ cmd_info(int argc, char *argv[], int gotwebd_sock)
 
 	if (imsgbuf_flush(&ibuf) == -1) {
 		imsgbuf_clear(&ibuf);
+
+		if (errno == EPIPE) {
+			return got_error_fmt(GOT_ERR_EOF,
+			    "gotwebd control socket");
+		}
+
 		return got_error_from_errno("imsgbuf_flush");
 	}
 
 	while (!done && err == NULL) {
+		if (sigint_received) {
+			err = got_error(GOT_ERR_CANCELLED);
+			break;
+		}
+
 		n = imsgbuf_read(&ibuf);
 		if (n == -1) {
 			if  (errno != EAGAIN) {
@@ -194,10 +221,21 @@ cmd_stop(int argc, char *argv[], int gotwebd_sock)
 
 	if (imsgbuf_flush(&ibuf) == -1) {
 		imsgbuf_clear(&ibuf);
+
+		if (errno == EPIPE) {
+			return got_error_fmt(GOT_ERR_EOF,
+			    "gotwebd control socket");
+		}
+
 		return got_error_from_errno("imsgbuf_flush");
 	}
 
 	for (;;) {
+		if (sigint_received) {
+			err = got_error(GOT_ERR_CANCELLED);
+			break;
+		}
+
 		n = imsg_get(&ibuf, &imsg);
 		if (n == -1) {
 			err = got_error_from_errno("imsg_get");
@@ -316,6 +354,9 @@ main(int argc, char *argv[])
 
 	if (argc <= 0)
 		usage(hflag, hflag ? 0 : 1);
+
+	signal(SIGINT, catch_sigint);
+	signal(SIGPIPE, catch_sigpipe);
 
 	for (i = 0; i < nitems(gotwebctl_commands); i++) {
 		const struct got_error *error;
