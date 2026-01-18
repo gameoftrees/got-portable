@@ -16,11 +16,8 @@ LDADD = -lutil -levent
 .endif
 DPADD = ${LIBUTIL} ${LIBEVENT}
 
-.if ${GOT_RELEASE} != "Yes"
-NOMAN = Yes
-.else
+PREFIX ?= /usr/local
 BINDIR = ${PREFIX}/sbin
-.endif
 
 realinstall:
 	${INSTALL} ${INSTALL_COPY} -o ${BINOWN} -g ${BINGRP} \
