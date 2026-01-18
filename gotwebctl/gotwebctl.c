@@ -49,9 +49,6 @@
 #define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0]))
 #endif
 
-#define GOTCTL_CMD_INFO "info"
-#define GOTCTL_CMD_STOP "stop"
-
 struct gotwebctl_cmd {
 	const char	*cmd_name;
 	const struct got_error *(*cmd_main)(int, char *[], int);
