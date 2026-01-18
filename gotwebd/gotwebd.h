@@ -486,8 +486,6 @@ TAILQ_HEAD(socketlist, socket);
 
 struct passwd;
 struct gotwebd {
-	pid_t			pid;
-
 	struct serverlist	servers;
 	struct socketlist	sockets;
 	struct addresslist	addresses;

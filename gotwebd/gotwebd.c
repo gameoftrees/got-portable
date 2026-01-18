@@ -694,11 +694,11 @@ send_info(struct gotwebd_control_client *client)
 {
 	struct gotwebd_imsg_info info;
 
-	info.pid = gotwebd_env->pid;
+	info.pid = getpid();
 	info.verbosity = gotwebd_env->gotwebd_verbose;
 
 	if (imsg_compose_event(&client->iev, GOTWEBD_IMSG_CTL_INFO, 0,
-	    gotwebd_env->pid, -1, &info, sizeof(info)) == -1)
+	    getpid(), -1, &info, sizeof(info)) == -1)
 		log_warn("imsg compose INFO");
 }
 
@@ -1100,8 +1100,6 @@ main(int argc, char **argv)
 	default:
 		break;
 	}
-
-	env->pid = getpid();
 
 	if (!env->gotwebd_debug && daemon(1, 0) == -1)
 		fatal("daemon");
