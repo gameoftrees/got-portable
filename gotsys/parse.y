@@ -867,7 +867,8 @@ newfile(struct file **nfile, const char *filename, int *fd)
 	(*nfile)->stream = fdopen(*fd, "r");
 	if ((*nfile)->stream == NULL) {
 		error = got_error_from_errno("fdopen");
-		free((*nfile));
+		free(*nfile);
+		*nfile = NULL;
 		return error;
 	}
 	*fd = -1; /* Stream owns the file descriptor now. */
@@ -878,7 +879,8 @@ newfile(struct file **nfile, const char *filename, int *fd)
 	if ((*nfile)->ungetbuf == NULL) {
 		error = got_error_from_errno("malloc");
 		fclose((*nfile)->stream);
-		free((*nfile));
+		free(*nfile);
+		*nfile = NULL;
 		return error;
 	}
 	return NULL;
