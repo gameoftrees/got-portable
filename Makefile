@@ -7,7 +7,7 @@ SUBDIR += regress
 .endif
 
 .if make(clean) || make(obj) || make(release)
-SUBDIR += gotwebd gotd gotsh gotctl template gitwrapper
+SUBDIR += gotwebd gotwebctl gotd gotsh gotctl template gitwrapper
 SUBDIR += gotsysd gotsys gotsysctl
 .endif
 
