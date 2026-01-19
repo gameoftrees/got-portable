@@ -1601,13 +1601,13 @@ gotweb_load_got_path(struct repo_dir **rp, const char *dir,
 
 	repo = gotweb_get_repository(srv, repo_dir->name);
 	if (repo || site) {
-		if (repo) {
+		if (site) {
+			auth_config = site->auth_config;
+			access_rules = &site->access_rules;
+		} else {
 			repo_is_hidden = repo->hidden;
 			auth_config = repo->auth_config;
 			access_rules = &repo->access_rules;
-		} else {
-			auth_config = site->auth_config;
-			access_rules = &site->access_rules;
 		}
 
 		switch (auth_config) {
