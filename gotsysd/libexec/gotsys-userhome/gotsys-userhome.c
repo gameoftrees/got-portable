@@ -39,8 +39,11 @@
 #include "got_error.h"
 #include "got_path.h"
 #include "got_object.h"
+#include "got_reference.h"
 
 #include "gotsysd.h"
+#include "media.h"
+#include "gotwebd.h"
 #include "gotsys.h"
 
 enum gotsys_userhome_state {

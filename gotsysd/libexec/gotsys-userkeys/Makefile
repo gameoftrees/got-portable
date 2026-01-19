@@ -4,10 +4,11 @@
 
 PROG=		gotsys-userkeys
 SRCS=		gotsys-userkeys.c error.c hash.c pollfd.c path.c opentemp.c \
-		imsg.c gotsys_conf.c gotsys_imsg.c
+		imsg.c gotsys_conf.c media.c gotsys_imsg.c reference_parse.c
 
 CPPFLAGS = -I${.CURDIR}/../../../include -I${.CURDIR}/../../../lib \
-	-I${.CURDIR}/../../../gotsys -I${.CURDIR}/../../ -I${.CURDIR}
+	-I${.CURDIR}/../../../gotsys -I${.CURDIR}/../../../gotwebd \
+	-I${.CURDIR}/../../ -I${.CURDIR}
 YFLAGS =
 
 .if defined(PROFILE)

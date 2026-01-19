@@ -17,6 +17,13 @@
 #include <sys/types.h>
 #include <sys/queue.h>
 #include <sys/tree.h>
+#include <sys/un.h>
+
+#include <net/if.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+#include <netdb.h>
 
 #include <event.h>
 #include <imsg.h>
@@ -31,8 +38,11 @@
 #include "got_error.h"
 #include "got_path.h"
 #include "got_object.h"
+#include "got_reference.h"
 
+#include "media.h"
 #include "gotsysd.h"
+#include "gotwebd.h"
 #include "gotsys.h"
 
 #ifndef MIN
@@ -999,6 +1009,371 @@ send_notification_config(struct gotsysd_imsgev *iev, struct gotsys_repo *repo)
 	return send_notification_targets(iev, repo->name, &repo->notification_targets);
 }
 
+
+void
+gotsysd_web_config_init(struct gotsysd_web_config *webcfg)
+{
+	memset(webcfg, 0, sizeof(*webcfg));
+	TAILQ_INIT(&webcfg->listen_addrs);
+	STAILQ_INIT(&webcfg->servers);
+	webcfg->auth_config = GOTSYSD_WEB_AUTH_UNSET;
+}
+
+const struct got_error *
+gotsys_imsg_recv_web_cfg(struct gotsysd_web_config *new, struct imsg *imsg)
+{
+	const struct got_error *err;
+	struct gotsysd_web_config cfg;
+
+	if (imsg_get_data(imsg, &cfg, sizeof(cfg)) == -1)
+		return got_error_from_errno("imsg_get_data");
+
+	switch (cfg.auth_config) {
+	case GOTSYSD_WEB_AUTH_UNSET:
+	case GOTSYSD_WEB_AUTH_DISABLED:
+	case GOTSYSD_WEB_AUTH_SECURE:
+	case GOTSYSD_WEB_AUTH_INSECURE:
+		break;
+	default:
+		return got_error_msg(GOT_ERR_PRIVSEP_MSG,
+		    "bad web authentication setting");
+	}
+
+	if (cfg.control_socket[nitems(cfg.control_socket) - 1] != '\0' ||
+	    cfg.httpd_chroot[nitems(cfg.httpd_chroot) - 1] != '\0'||
+	    cfg.htdocs_path[nitems(cfg.htdocs_path) - 1] != '\0' ||
+	    cfg.repos_path[nitems(cfg.repos_path) - 1] != '\0' ||
+	    cfg.gotwebd_user[nitems(cfg.gotwebd_user) - 1] != '\0' ||
+	    cfg.www_user[nitems(cfg.www_user) - 1] != '\0' ||
+	    cfg.login_hint_user[nitems(cfg.login_hint_user) - 1] != '\0' ||
+	    cfg.login_hint_port[nitems(cfg.login_hint_port) - 1] != '\0')
+		return got_error(GOT_ERR_PRIVSEP_LEN);
+
+	if (cfg.control_socket[0] != '\0') {
+		err = gotsys_conf_validate_path(cfg.control_socket);
+		if (err)
+			return err;
+	}
+
+	if (cfg.httpd_chroot[0] != '\0') {
+		err = gotsys_conf_validate_path(cfg.httpd_chroot);
+		if (err)
+			return err;
+	}
+
+	if (cfg.htdocs_path[0] != '\0') {
+		err = gotsys_conf_validate_path(cfg.htdocs_path);
+		if (err)
+			return err;
+	}
+
+	if (cfg.repos_path[0] == '\0') {
+		return got_error_msg(GOT_ERR_PRIVSEP_LEN,
+		    "empty repos_path in web config");
+	}
+	err = gotsys_conf_validate_path(cfg.repos_path);
+	if (err)
+		return err;
+
+	if (cfg.gotwebd_user[0] != '\0') {
+		err = gotsys_conf_validate_name(cfg.gotwebd_user, "user");
+		if (err)
+			return err;
+	}
+
+	if (cfg.www_user[0] != '\0') {
+		err = gotsys_conf_validate_name(cfg.www_user, "user");
+		if (err)
+			return err;
+	}
+
+	if (cfg.login_hint_user[0] != '\0') {
+		err = gotsys_conf_validate_name(cfg.login_hint_user, "user");
+		if (err)
+			return err;
+	}
+
+	if (cfg.login_hint_port[0] != '\0') {
+		const char *errstr = NULL;
+
+		strtonum(cfg.login_hint_port, 1, USHRT_MAX, &errstr);
+		if (errstr) {
+			return got_error_fmt(GOT_ERR_PRIVSEP_LEN,
+			    "port number %s is %s", cfg.login_hint_port,
+			    errstr);
+		}
+
+	}
+
+	memcpy(new, &cfg, sizeof(*new));
+	TAILQ_INIT(&new->listen_addrs);
+	STAILQ_INIT(&new->servers);
+
+	return NULL;
+}
+
+const struct got_error *
+gotsysd_conf_validate_inet_addr(const char *hostname, const char *servname)
+{
+	struct addrinfo hints, *res0;
+	int error;
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG;
+	error = getaddrinfo(hostname, servname, &hints, &res0);
+	if (error) {
+		return got_error_fmt(GOT_ERR_PARSE_CONFIG,
+		    "could not parse \"%s:%s\": %s", hostname, servname,
+		    gai_strerror(error));
+	}
+
+	freeaddrinfo(res0);
+	return NULL;
+}
+
+const struct got_error *
+gotsys_imsg_recv_webaddr(struct gotsysd_web_address **new, struct imsg *imsg)
+{
+	const struct got_error *err = NULL;
+	struct gotsysd_web_address *addr = NULL;
+
+	*new = NULL;
+
+	addr = calloc(1, sizeof(*addr));
+	if (addr == NULL)
+		return got_error_from_errno("calloc");
+
+	if (imsg_get_data(imsg, addr, sizeof(*addr)) == -1)
+		return got_error_from_errno("imsg_get_data");
+
+	switch (addr->family) {
+	case GOTSYSD_LISTEN_ADDR_UNIX:
+		err = gotsys_conf_validate_path(addr->addr.unix_socket_path);
+		break;
+	case GOTSYSD_LISTEN_ADDR_INET:
+		err = gotsysd_conf_validate_inet_addr(
+		    addr->addr.inet.address, addr->addr.inet.port);
+		break;
+	default:
+		return got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+		    "bad listen address family %u", addr->family);
+	}
+
+	if (err)
+		free(addr);
+	else
+		*new = addr;
+
+	return err;
+}
+
+const struct got_error *
+gotsys_imsg_recv_gotweb_server(struct gotsysd_web_server **new,
+    struct imsg *imsg)
+{
+	const struct got_error *err = NULL;
+	struct gotsysd_web_server *srv = NULL;
+
+	*new = NULL;
+
+	srv = calloc(1, sizeof(*srv));
+	if (srv == NULL)
+		return got_error_from_errno("calloc");
+
+	if (imsg_get_data(imsg, srv, sizeof(*srv)) == -1)
+		return got_error_from_errno("imsg_get_data");
+
+	switch (srv->auth_config) {
+	case GOTSYSD_WEB_AUTH_UNSET:
+	case GOTSYSD_WEB_AUTH_DISABLED:
+	case GOTSYSD_WEB_AUTH_SECURE:
+	case GOTSYSD_WEB_AUTH_INSECURE:
+		break;
+	default:
+		return got_error_msg(GOT_ERR_PRIVSEP_MSG,
+		    "bad web authentication setting");
+	}
+
+	if (srv->server_name[nitems(srv->server_name) - 1] != '\0' ||
+	    srv->gotweb_url_root[nitems(srv->gotweb_url_root) - 1] != '\0' ||
+	    srv->htdocs_path[nitems(srv->htdocs_path) - 1] != '\0')
+		return got_error(GOT_ERR_PRIVSEP_LEN);
+
+	if (srv->server_name[0] != '\0') {
+		err = gotsys_conf_validate_hostname(srv->server_name);
+		if (err)
+			goto done;
+	}
+
+	if (srv->gotweb_url_root[0] != '\0') {
+		err = gotsys_conf_validate_path(srv->gotweb_url_root);
+		if (err)
+			goto done;
+	}
+
+	if (srv->htdocs_path[0] != '\0') {
+		err = gotsys_conf_validate_path(srv->htdocs_path);
+		if (err)
+			goto done;
+	}
+done:
+	if (err)
+		free(srv);
+	else
+		*new = srv;
+
+	return err;
+}
+
+
+static const struct got_error *
+send_webrepo(struct gotsysd_imsgev *iev, struct gotsys_webrepo *webrepo)
+{
+	const struct got_error *err;
+	struct gotsys_access_rule *rule;
+
+	if (gotsysd_imsg_compose_event(iev, GOTSYSD_IMSG_SYSCONF_WEBREPO,
+	    0, -1, webrepo, sizeof(*webrepo)) == -1)
+		return got_error_from_errno("gotsysd_imsg_compose_event");
+
+	STAILQ_FOREACH(rule, &webrepo->access_rules, entry) {
+		err = gotsys_imsg_send_access_rule(iev, rule,
+		    GOTSYSD_IMSG_SYSCONF_WEBREPO_ACCESS_RULE);
+		if (err)
+			return err;
+	}
+
+	if (gotsysd_imsg_compose_event(iev,
+	    GOTSYSD_IMSG_SYSCONF_WEBREPO_ACCESS_RULES_DONE, 0, -1,
+	    NULL, 0) == -1)
+		return got_error_from_errno("gotsysd_imsg_compose_event");
+
+	return NULL;
+}
+
+static const struct got_error *
+send_website(struct gotsysd_imsgev *iev, const char *path,
+    struct gotsys_website *web)
+{
+	const struct got_error *err;
+	struct gotsys_access_rule *rule;
+
+	if (gotsysd_imsg_compose_event(iev, GOTSYSD_IMSG_SYSCONF_WEBSITE_PATH,
+	    0, -1, (void *)path, strlen(path)) == -1)
+		return got_error_from_errno("gotsysd_imsg_compose_event");
+
+	if (gotsysd_imsg_compose_event(iev, GOTSYSD_IMSG_SYSCONF_WEBSITE,
+	    0, -1, web, sizeof(*web)) == -1)
+		return got_error_from_errno("gotsysd_imsg_compose_event");
+
+	STAILQ_FOREACH(rule, &web->access_rules, entry) {
+		err = gotsys_imsg_send_access_rule(iev, rule,
+		    GOTSYSD_IMSG_SYSCONF_WEBSITE_ACCESS_RULE);
+		if (err)
+			return err;
+	}
+
+	if (gotsysd_imsg_compose_event(iev,
+	    GOTSYSD_IMSG_SYSCONF_WEBSITE_ACCESS_RULES_DONE, 0, -1,
+	    NULL, 0) == -1)
+		return got_error_from_errno("gotsysd_imsg_compose_event");
+
+	return NULL;
+}
+
+const struct got_error *
+gotsys_imsg_recv_website_path(struct gotsys_website **site, struct imsg *imsg)
+{
+	const struct got_error *err;
+	size_t datalen;
+	char *url_path = NULL;
+
+	*site = NULL;
+
+	datalen = imsg->hdr.len - IMSG_HEADER_SIZE;
+	if (datalen >= sizeof((*site)->url_path))
+		return got_error(GOT_ERR_PRIVSEP_LEN);
+	
+	url_path = strndup((const char *)imsg->data, datalen);
+	if (url_path == NULL)
+		return got_error_from_errno("strndup");
+	
+	err = gotsys_conf_new_website(site, url_path);
+	free(url_path);
+	return err;
+}
+
+const struct got_error *
+gotsys_imsg_recv_website(struct gotsys_website *new, struct imsg *imsg)
+{
+	const struct got_error *err;
+	struct gotsys_website site;
+
+	if (imsg_get_data(imsg, &site, sizeof(site)) == -1)
+		return got_error_from_errno("imsg_get_data");
+
+	switch (site.auth_config) {
+	case GOTSYS_AUTH_UNSET:
+	case GOTSYS_AUTH_DISABLED:
+	case GOTSYS_AUTH_ENABLED:
+		break;
+	default:
+		return got_error_msg(GOT_ERR_PRIVSEP_MSG,
+		    "bad website authentication setting");
+	}
+
+	if (site.url_path[nitems(site.url_path) - 1] != '\0' ||
+	    site.branch_name[nitems(site.branch_name) - 1] != '\0'||
+	    site.path[nitems(site.path) - 1] != '\0')
+		return got_error(GOT_ERR_PRIVSEP_LEN);
+
+	if (strcmp(new->url_path, site.url_path) != 0)
+		return got_error(GOT_ERR_PRIVSEP_MSG);
+
+	if (site.branch_name[0] != '\0') {
+		if (!got_ref_name_is_valid(site.branch_name))
+			return got_error_path(site.branch_name,
+			    GOT_ERR_BAD_REF_NAME);
+	}
+
+	if (site.path[0] != '\0') {
+		err = gotsys_conf_validate_path(site.path);
+		if (err)
+			return err;
+	}
+
+	memcpy(new, &site, sizeof(*new));
+	STAILQ_INIT(&new->access_rules);
+
+	return NULL;
+}
+
+const struct got_error *
+gotsys_imsg_recv_webrepo(struct gotsys_webrepo *new, struct imsg *imsg)
+{
+	struct gotsys_webrepo web;
+
+	if (imsg_get_data(imsg, &web, sizeof(web)) == -1)
+		return got_error_from_errno("imsg_get_data");
+
+	switch (web.auth_config) {
+	case GOTSYS_AUTH_UNSET:
+	case GOTSYS_AUTH_DISABLED:
+	case GOTSYS_AUTH_ENABLED:
+		break;
+	default:
+		return got_error_msg(GOT_ERR_PRIVSEP_MSG,
+		    "bad web authentication setting");
+	}
+
+	memcpy(new, &web, sizeof(*new));
+	STAILQ_INIT(&new->access_rules);
+
+	return NULL;
+}
+
 static const struct got_error *
 send_repo(struct gotsysd_imsgev *iev, struct gotsys_repo *repo)
 {
@@ -1012,6 +1387,7 @@ send_repo(struct gotsysd_imsgev *iev, struct gotsys_repo *repo)
 	irepo.name_len = strlen(repo->name);
 	if (repo->headref)
 		irepo.headref_len = strlen(repo->headref);
+	irepo.description_len = strlen(repo->description);
 
 	wbuf = imsg_create(&iev->ibuf, GOTSYSD_IMSG_SYSCONF_REPO,
 	    0, 0, sizeof(irepo) + irepo.name_len + irepo.headref_len);
@@ -1024,6 +1400,9 @@ send_repo(struct gotsysd_imsgev *iev, struct gotsys_repo *repo)
 		return got_error_from_errno("imsg_add SYSCONF_REPO");
 	if (repo->headref &&
 	    imsg_add(wbuf, repo->headref, irepo.headref_len) == -1)
+		return got_error_from_errno("imsg_add SYSCONF_REPO");
+	if (irepo.description_len > 0 &&
+	    imsg_add(wbuf, repo->description, irepo.description_len) == -1)
 		return got_error_from_errno("imsg_add SYSCONF_REPO");
 
 	imsg_close(&iev->ibuf, wbuf);
@@ -1047,6 +1426,211 @@ send_repo(struct gotsysd_imsgev *iev, struct gotsys_repo *repo)
 	err = send_notification_config(iev, repo);
 	if (err)
 		return err;
+
+	return NULL;
+}
+
+static const struct got_error *
+send_media_type(struct gotsysd_imsgev *iev,
+    struct media_type *media, int imsg_type)
+{
+	if (gotsysd_imsg_compose_event(iev, imsg_type, 0, -1,
+	        media, sizeof(*media)) == -1)
+		return got_error_from_errno("gotsysd_imsg_compose_event");
+	
+	return NULL;
+}
+
+const struct got_error *
+gotsys_imsg_recv_media_type(struct media_type *new, struct imsg *imsg)
+{
+	const struct got_error *err;
+	struct media_type media;
+
+	if (imsg_get_data(imsg, &media, sizeof(media)) == -1)
+		return got_error_from_errno("imsg_get_data");
+
+	if (media.media_name[nitems(media.media_name) - 1] != '\0' ||
+	    media.media_type[nitems(media.media_type) - 1] != '\0' ||
+	    media.media_subtype[nitems(media.media_subtype) - 1] != '\0')
+		return got_error(GOT_ERR_PRIVSEP_LEN);
+
+	err = gotsys_conf_validate_mediatype(media.media_name);
+	if (err)
+		return err;
+
+	err = gotsys_conf_validate_mediatype(media.media_type);
+	if (err)
+		return err;
+	
+	err = gotsys_conf_validate_mediatype(media.media_subtype);
+	if (err)
+		return err;
+
+	memcpy(new, &media, sizeof(*new));
+	return NULL;
+}
+
+
+static const struct got_error *
+send_webserver(struct gotsysd_imsgev *iev, struct gotsys_webserver *srv)
+{
+	const struct got_error *err = NULL;
+	struct gotsys_access_rule *rule;
+	struct gotsys_webrepo *webrepo;
+	struct got_pathlist_entry *pe;
+
+	if (gotsysd_imsg_compose_event(iev,
+	    GOTSYSD_IMSG_SYSCONF_WEB_SERVER, 0, -1, srv, sizeof(*srv)) == -1)
+		return got_error_from_errno("gotsysd_imsg_compose_event");
+	
+	STAILQ_FOREACH(rule, &srv->access_rules, entry) {
+		err = gotsys_imsg_send_access_rule(iev, rule,
+		    GOTSYSD_IMSG_SYSCONF_WEB_ACCESS_RULE);
+		if (err)
+			return err;
+	}
+
+	if (gotsysd_imsg_compose_event(iev,
+	    GOTSYSD_IMSG_SYSCONF_WEB_ACCESS_RULES_DONE, 0, -1, NULL, 0) == -1)
+		return got_error_from_errno("gotsysd_imsg_compose_event");
+
+	STAILQ_FOREACH(webrepo, &srv->repos, entry) {
+		err = send_webrepo(iev, webrepo);
+		if (err)
+			return err;
+	}
+
+	if (gotsysd_imsg_compose_event(iev,
+	    GOTSYSD_IMSG_SYSCONF_WEBREPOS_DONE, 0, -1, NULL, 0) == -1)
+		return got_error_from_errno("gotsysd_imsg_compose_event");
+
+	RB_FOREACH(pe, got_pathlist_head, &srv->websites) {
+		struct gotsys_website *site = pe->data;
+
+		err = send_website(iev, pe->path, site);
+		if (err)
+			return err;
+	}
+
+	if (gotsysd_imsg_compose_event(iev,
+	    GOTSYSD_IMSG_SYSCONF_WEBSITES_DONE, 0, -1, NULL, 0) == -1)
+		return got_error_from_errno("gotsysd_imsg_compose_event");
+
+	err = gotsys_imsg_send_mediatypes(iev, &srv->mediatypes,
+	    GOTSYSD_IMSG_SYSCONF_MEDIA_TYPE,
+	    GOTSYSD_IMSG_SYSCONF_MEDIA_TYPES_DONE);
+	if (err)
+		return err;
+
+	return NULL;
+}
+
+const struct got_error *
+gotsys_imsg_send_webservers(struct gotsysd_imsgev *iev,
+    struct gotsys_webserverlist *servers)
+{
+	const struct got_error *err = NULL;
+	struct gotsys_webserver *srv;
+
+	STAILQ_FOREACH(srv, servers, entry) {
+		err = send_webserver(iev, srv);
+		if (err)
+			return err;
+	}
+
+	if (gotsysd_imsg_compose_event(iev,
+	    GOTSYSD_IMSG_SYSCONF_WEB_SERVERS_DONE, 0, -1, NULL, 0) == -1) {
+		return got_error_from_errno("gotsysd_imsg_compose_event");
+	}
+
+	return NULL;
+}
+
+const struct got_error *
+gotsys_imsg_send_mediatypes(struct gotsysd_imsgev *iev,
+    struct mediatypes *mediatypes, int imsg_code, int done_code)
+{
+	const struct got_error *err;
+	struct media_type *media;
+
+	RB_FOREACH(media, mediatypes, mediatypes) {
+		err = send_media_type(iev, media, imsg_code);
+		if (err)
+			return err;
+	}
+
+	if (gotsysd_imsg_compose_event(iev, done_code, 0, -1, NULL, 0) == -1)
+		return got_error_from_errno("gotsysd_imsg_compose_event");
+
+	return NULL;
+}
+
+const struct got_error *
+gotsys_imsg_recv_web_server(struct gotsys_webserver *new, struct imsg *imsg)
+{
+	const struct got_error *err;
+	struct gotsys_webserver srv;
+
+	if (imsg_get_data(imsg, &srv, sizeof(srv)) == -1)
+		return got_error_from_errno("imsg_get_data");
+
+	err = gotsys_conf_validate_hostname(srv.server_name);
+	if (err)
+		return err;
+
+	switch (srv.auth_config) {
+	case GOTSYS_AUTH_UNSET:
+	case GOTSYS_AUTH_DISABLED:
+	case GOTSYS_AUTH_ENABLED:
+		break;
+	default:
+		return got_error_msg(GOT_ERR_PRIVSEP_MSG,
+		    "bad web server authentication setting");
+	}
+
+	if (srv.css[nitems(srv.css) - 1] != '\0' ||
+	    srv.logo[nitems(srv.logo) - 1] != '\0'||
+	    srv.logo_url[nitems(srv.logo_url) - 1] != '\0'||
+	    srv.site_owner[nitems(srv.site_owner) - 1] != '\0' ||
+	    srv.repos_url_path[nitems(srv.repos_url_path) - 1] != '\0')
+		return got_error(GOT_ERR_PRIVSEP_LEN);
+
+	if (srv.css[0] != '\0') {
+		err = gotsys_conf_validate_path(srv.css);
+		if (err)
+			return err;
+	}
+
+	if (srv.logo[0] != '\0') {
+		err = gotsys_conf_validate_path(srv.logo);
+		if (err)
+			return err;
+	}
+
+	if (srv.logo_url[0] != '\0') {
+		err = gotsys_conf_validate_url(srv.logo_url);
+		if (err)
+			return err;
+	}
+
+	if (srv.site_owner[0] != '\0') {
+		err = gotsys_conf_validate_string(srv.site_owner);
+		if (err)
+			return err;
+	}
+
+	if (srv.repos_url_path[0] != '\0') {
+		err = gotsys_conf_validate_path(srv.repos_url_path);
+		if (err)
+			return err;
+	}
+
+	memcpy(new, &srv, sizeof(*new));
+	STAILQ_INIT(&new->access_rules);
+	RB_INIT(&new->mediatypes);
+	STAILQ_INIT(&new->repos);
+	RB_INIT(&new->websites);
 
 	return NULL;
 }
@@ -1077,7 +1661,7 @@ gotsys_imsg_recv_repository(struct gotsys_repo **repo, struct imsg *imsg)
 	const struct got_error *err;
 	struct gotsysd_imsg_sysconf_repo irepo;
 	size_t datalen;
-	char *name = NULL, *headref = NULL;
+	char *name = NULL, *headref = NULL, *description = NULL;
 
 	*repo = NULL;
 
@@ -1086,7 +1670,8 @@ gotsys_imsg_recv_repository(struct gotsys_repo **repo, struct imsg *imsg)
 		return got_error(GOT_ERR_PRIVSEP_LEN);
 	
 	memcpy(&irepo, imsg->data, sizeof(irepo));
-	if (datalen != sizeof(irepo) + irepo.name_len + irepo.headref_len ||
+	if (datalen != sizeof(irepo) +
+	    irepo.name_len + irepo.headref_len + irepo.description_len ||
 	    irepo.name_len == 0)
 		return got_error(GOT_ERR_PRIVSEP_LEN);
 
@@ -1097,6 +1682,9 @@ gotsys_imsg_recv_repository(struct gotsys_repo **repo, struct imsg *imsg)
 		err = got_error(GOT_ERR_PRIVSEP_LEN);
 		goto done;
 	}
+	err = gotsys_conf_validate_repo_name(name);
+	if (err)
+		goto done;
 
 	if (irepo.headref_len > 0) {
 		headref = strndup(imsg->data + sizeof(irepo) + irepo.name_len,
@@ -1109,6 +1697,29 @@ gotsys_imsg_recv_repository(struct gotsys_repo **repo, struct imsg *imsg)
 			err = got_error(GOT_ERR_PRIVSEP_LEN);
 			goto done;
 		}
+
+		if (!got_ref_name_is_valid(headref)) {
+			err = got_error_path(headref, GOT_ERR_BAD_REF_NAME);
+			goto done;
+		}
+	}
+
+	if (irepo.description_len > 0) {
+		description = strndup(imsg->data + sizeof(irepo) +
+		    irepo.name_len + irepo.headref_len,
+		    irepo.description_len);
+		if (description == NULL) {
+			err = got_error_from_errno("strndup");
+			goto done;
+		}
+		if (strlen(description) != irepo.description_len) {
+			err = got_error(GOT_ERR_PRIVSEP_LEN);
+			goto done;
+		}
+
+		err = gotsys_conf_validate_string(description);
+		if (err)
+			goto done;
 	}
 
 	err = gotsys_conf_new_repo(repo, name);
@@ -1116,8 +1727,17 @@ gotsys_imsg_recv_repository(struct gotsys_repo **repo, struct imsg *imsg)
 		goto done;
 
 	(*repo)->headref = headref;
+	if (description != NULL) {
+		if (strlcpy((*repo)->description, description,
+		    sizeof((*repo)->description)) >=
+		    sizeof((*repo)->description)) {
+			err = got_error(GOT_ERR_PRIVSEP_LEN);
+			goto done;
+		}
+	}
 done:
 	free(name);
+	free(description);
 	if (err)
 		free(headref);
 	return err;

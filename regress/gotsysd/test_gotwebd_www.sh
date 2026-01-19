@@ -49,7 +49,28 @@ repository www {
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
+
+web server "${VMIP}" {
+	repository gotsys {
+		hide repository on
+	}
+
+	repositories url path "/repos"
+
+	website "/" {
+		repository "www"
+		disable authentication
+	}
+}
 EOF
+	(cd ${testroot}/wt && gotsys check -q)
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "bad gotsys.conf written by test" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
 	(cd ${testroot}/wt && got commit  -m "add www.git" >/dev/null)
 	local commit_id=`git_show_head $testroot/${GOTSYS_REPO}`
 

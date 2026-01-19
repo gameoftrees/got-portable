@@ -32,8 +32,11 @@
 #include "got_error.h"
 #include "got_path.h"
 #include "got_object.h"
+#include "got_reference.h"
 
 #include "gotsysd.h"
+#include "media.h"
+#include "gotwebd.h"
 #include "gotsys.h"
 
 static void
@@ -136,6 +139,10 @@ dispatch_event(int fd, short event, void *arg)
 			}
 
 			gotsys_conf_clear(&gotsysconf);
+			err = gotsys_conf_init_media_types(
+			    &gotsysconf.mediatypes);
+			if (err)
+				break;
 			if (gotsys_conf_parse(GOTSYSD_SYSCONF_FILENAME,
 			    &gotsysconf, &sysconf_fd))
 				err = got_error(GOT_ERR_PARSE_CONFIG);
@@ -182,6 +189,16 @@ dispatch_event(int fd, short event, void *arg)
 			    &gotsysconf.repos);
 			if (err)
 				break;
+			err = gotsys_imsg_send_mediatypes(iev,
+			    &gotsysconf.mediatypes,
+			    GOTSYSD_IMSG_SYSCONF_GLOBAL_MEDIA_TYPE,
+			    GOTSYSD_IMSG_SYSCONF_GLOBAL_MEDIA_TYPES_DONE);
+			if (err)
+				break;
+			err = gotsys_imsg_send_webservers(iev,
+			    &gotsysconf.webservers);
+			if (err)
+				break;
 			err = send_done(iev);
 			if (err)
 				break;
@@ -226,6 +243,12 @@ main(int argc, char *argv[])
 #endif
 	gotsys_conf_init(&gotsysconf);
 
+	err = gotsys_conf_init_media_types(&gotsysconf.mediatypes);
+	if (err) {
+		warnx("could not initialize media types: %s", err->msg);
+		return 1;
+	}
+		
 	event_init();
 
 	signal_set(&evsigint, SIGINT, sighdlr, NULL);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Stefan Sperling <stsp@openbsd.org>
+ * Copyright (c) 2026 Stefan Sperling <stsp@openbsd.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -21,7 +21,6 @@
 
 #include <err.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <event.h>
 #include <imsg.h>
 #include <limits.h>
@@ -39,15 +38,17 @@
 #include "got_opentemp.h"
 #include "got_reference.h"
 
-#include "gotsysd.h"
 #include "media.h"
+#include "gotsysd.h"
 #include "gotwebd.h"
 #include "gotsys.h"
-#include "gotd.h"
 
 static struct gotsysd_imsgev gotsysd_iev;
-static struct gotsysd_imsgev gotd_iev;
-static int gotd_sock = -1;
+static struct gotsysd_imsgev gotwebd_iev;
+static int gotwebd_sock = -1;
+static char *gotwebd_sockpath = NULL;
+static int gotwebd_stop_sent;
+static int flush_and_exit;
 
 static void
 sighdlr(int sig, short event, void *arg)
@@ -72,74 +73,123 @@ sighdlr(int sig, short event, void *arg)
 }
 
 static const struct got_error *
-connect_gotd(const char *socket_path)
+start_child(pid_t *pid,
+    const char *argv0, const char *argv1, const char *argv2)
+{
+	const char	*argv[4];
+	int		 argc = 0;
+
+	switch (*pid = fork()) {
+	case -1:
+		return got_error_from_errno("fork");
+	case 0:
+		break;
+	default:
+		return NULL;
+	}
+
+	argv[argc++] = argv0;
+	if (argv1 != NULL)
+		argv[argc++] = argv1;
+	if (argv2 != NULL)
+		argv[argc++] = argv2;
+	argv[argc++] = NULL;
+
+	execvp(argv0, (char * const *)argv);
+	err(1, "execvp: %s", argv0);
+
+	/* NOTREACHED */
+	return NULL;
+}
+
+static const struct got_error *
+connect_gotwebd(const char *socket_path)
 {
 	const struct got_error *err = NULL;
 	struct sockaddr_un sun;
 
-	gotd_sock = socket(AF_UNIX, SOCK_STREAM, 0);
-	if (gotd_sock == -1)
+	gotwebd_sock = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (gotwebd_sock == -1)
 		return got_error_from_errno("socket");
 
 	memset(&sun, 0, sizeof(sun));
 	sun.sun_family = AF_UNIX;
 	if (strlcpy(sun.sun_path, socket_path, sizeof(sun.sun_path)) >=
 	    sizeof(sun.sun_path)) {
+		close(gotwebd_sock);
+		gotwebd_sock = -1;
 		return got_error_msg(GOT_ERR_NO_SPACE,
-		    "gotd socket path too long");
+		    "gotwebd socket path too long");
 	}
-	if (connect(gotd_sock, (struct sockaddr *)&sun, sizeof(sun)) == -1) {
+	if (connect(gotwebd_sock, (struct sockaddr *)&sun, sizeof(sun)) == -1) {
 		err = got_error_from_errno2("connect", socket_path);
-		close(gotd_sock);
-		gotd_sock = -1;
+		close(gotwebd_sock);
+		gotwebd_sock = -1;
 	}
 
 	return err;
 }
 
 static const struct got_error *
+start_gotwebd(void)
+{
+	pid_t pid;
+
+	/* TODO: fetch gotwebd_flags from rc.conf.local and pass them in? */
+	return start_child(&pid, GOTSYSD_PATH_PROG_GOTWEBD, NULL, NULL);
+}
+
+static const struct got_error *
 send_done(struct gotsysd_imsgev *iev)
 {
 	if (gotsysd_imsg_compose_event(iev,
-	    GOTSYSD_IMSG_SYSCONF_APPLY_CONF_DONE,
+	    GOTSYSD_IMSG_SYSCONF_APPLY_WEBCONF_DONE,
 	    0, -1, NULL, 0) == -1) {
 		return got_error_from_errno("imsg_compose "
-		    "SYSCONF_WRITE_CONF_DONE");
+		    "SYSCONF_APPLY_WEBCONF_DONE");
 	}
 
 	return NULL;
 }
 
 static void
-dispatch_gotd(int fd, short event, void *arg)
+dispatch_gotwebd(int fd, short event, void *arg)
 {
 	const struct got_error *err = NULL;
 	struct gotsysd_imsgev *iev = arg;
 	struct imsgbuf *ibuf = &iev->ibuf;
 	struct imsg imsg;
 	ssize_t n;
-	int shut = 0;
-	static int flush_and_exit;
+
+	if (event & EV_WRITE) {
+		err = gotsysd_imsg_flush(ibuf);
+		if (err) {
+			warn("%s", err->msg);
+			goto loopexit;
+		}
+
+		if (imsgbuf_queuelen(ibuf) == 0 && flush_and_exit)
+			event_del(&iev->ev);
+	}
+
+	if (flush_and_exit)
+		return;
 
 	if (event & EV_READ) {
 		if ((n = imsgbuf_read(ibuf)) == -1) {
 			warn("imsgbuf_read error");
-			goto fatal;
+			goto loopexit;
 		}
 		if (n == 0) {	/* Connection closed. */
+			err = start_gotwebd();
+			if (err)
+				warn("%s", err->msg);
+
 			err = send_done(&gotsysd_iev);
 			if (err)
 				warn("%s", err->msg);
-			return;
-		}
-	}
-
-	if (event & EV_WRITE) {
-		if (imsgbuf_flush(ibuf) == -1) {
-			warn("imsgbuf_flush");
-			goto fatal;
-		} else if (imsgbuf_queuelen(ibuf) == 0 && flush_and_exit) {
 			event_del(&iev->ev);
+			flush_and_exit = 1;
 			return;
 		}
 	}
@@ -147,7 +197,7 @@ dispatch_gotd(int fd, short event, void *arg)
 	for (;;) {
 		if ((n = imsg_get(ibuf, &imsg)) == -1) {
 			warn("%s: imsg_get", __func__);
-			goto fatal;
+			goto loopexit;
 		}
 		if (n == 0)	/* No more messages. */
 			break;
@@ -168,14 +218,13 @@ dispatch_gotd(int fd, short event, void *arg)
 		imsg_free(&imsg);
 	}
 
-	if (!shut) {
-		gotsysd_imsg_event_add(iev);
-	} else {
-fatal:
-		/* This pipe is dead. Remove its event handler */
-		event_del(&iev->ev);
-		event_loopexit(NULL);
-	}
+	gotsysd_imsg_event_add(iev);
+	return;
+
+loopexit:
+	/* This pipe is dead. Remove its event handler */
+	event_del(&iev->ev);
+	event_loopexit(NULL);
 }
 
 static void
@@ -187,34 +236,48 @@ dispatch_gotsysd(int fd, short event, void *arg)
 	struct imsg imsg;
 	ssize_t n;
 	int shut = 0;
-	static int flush_and_exit;
-
-	if (event & EV_READ) {
-		if ((n = imsgbuf_read(ibuf)) == -1) {
-			warn("imsgbuf_read error");
-			goto fatal;
-		}
-		if (n == 0)	/* Connection closed. */
-			shut = 1;
-	}
 
 	if (event & EV_WRITE) {
 		err = gotsysd_imsg_flush(ibuf);
 		if (err) {
 			warn("%s", err->msg);
-			goto fatal;
+			goto loopexit;
 		}
 
-		if (imsgbuf_queuelen(ibuf) == 0 && flush_and_exit) {
+		if (imsgbuf_queuelen(ibuf) == 0)
 			event_del(&iev->ev);
-			return;
+		else
+			gotsysd_imsg_event_add(iev);
+
+		if (gotwebd_sock != -1 && !gotwebd_stop_sent) {
+			if (gotsysd_imsg_compose_event(&gotwebd_iev,
+			    GOTWEBD_IMSG_CTL_STOP, 0, -1, NULL, 0) == -1) {
+				err = got_error_from_errno("imsg_compose "
+				    "CTL_STOP");
+				gotsysd_imsg_send_error(&iev->ibuf, 0, 0, err);
+				flush_and_exit = 1;
+			}
+
+			gotwebd_stop_sent = 1;
 		}
+	}
+	
+	if (flush_and_exit)
+		return;
+
+	if (event & EV_READ) {
+		if ((n = imsgbuf_read(ibuf)) == -1) {
+			warn("imsgbuf_read error");
+			goto loopexit;
+		}
+		if (n == 0)	/* Connection closed. */
+			shut = 1;
 	}
 
 	for (;;) {
 		if ((n = imsg_get(ibuf, &imsg)) == -1) {
 			warn("%s: imsg_get", __func__);
-			goto fatal;
+			goto loopexit;
 		}
 		if (n == 0)	/* No more messages. */
 			break;
@@ -238,30 +301,17 @@ dispatch_gotsysd(int fd, short event, void *arg)
 	if (!shut) {
 		gotsysd_imsg_event_add(iev);
 	} else {
-fatal:
+loopexit:
 		/* This pipe is dead. Remove its event handler */
 		event_del(&iev->ev);
 		event_loopexit(NULL);
 	}
 }
 
-static const struct got_error *
-apply_unveil(const char *unix_socket_path)
-{
-	if (unveil(unix_socket_path, "w") != 0)
-		return got_error_from_errno2("unveil w", unix_socket_path);
-
-	if (unveil(NULL, NULL) != 0)
-		return got_error_from_errno("unveil");
-
-	return NULL;
-}
-
 __dead static void
 usage(void)
 {
-	/* TODO: add -f gotd-socket option */
-	fprintf(stderr, "usage: %s [-c config-file] [-s secrets]\n",
+	fprintf(stderr, "usage: %s [-c config-file] [-f socket]\n",
 	    getprogname());
 	exit(1);
 }
@@ -271,11 +321,10 @@ main(int argc, char *argv[])
 {
 	const struct got_error *err = NULL;
 	struct event evsigint, evsigterm, evsighup, evsigusr1;
-	char *confpath = NULL, *secretspath = NULL;
-	int ch, conf_fd = -1, secrets_fd = -1;
+	int ch;
 
 	gotsysd_iev.ibuf.fd = -1;
-	gotd_iev.ibuf.fd = -1;
+	gotwebd_iev.ibuf.fd = -1;
 
 #if 0
 	static int attached;
@@ -283,27 +332,11 @@ main(int argc, char *argv[])
 	while (!attached)
 		sleep(1);
 #endif
-	while ((ch = getopt(argc, argv, "c:s:")) != -1) {
+	while ((ch = getopt(argc, argv, "s:")) != -1) {
 		switch (ch) {
-		case 'c':
-			if (unveil(optarg, "r") != 0) {
-				err = got_error_from_errno("unveil");
-				goto done;
-			}
-			confpath = realpath(optarg, NULL);
-			if (confpath == NULL) {
-				err = got_error_from_errno2("realpath",
-				    optarg);
-				goto done;
-			}
-			break;
 		case 's':
-			if (unveil(optarg, "r") != 0) {
-				err = got_error_from_errno("unveil");
-				goto done;
-			}
-			secretspath = realpath(optarg, NULL);
-			if (secretspath == NULL) {
+			gotwebd_sockpath = realpath(optarg, NULL);
+			if (gotwebd_sockpath == NULL) {
 				err = got_error_from_errno2("realpath",
 				    optarg);
 				goto done;
@@ -315,45 +348,12 @@ main(int argc, char *argv[])
 		}
 	}
 
-	if (confpath == NULL) {
-		confpath = strdup(GOTD_CONF_PATH);
-		if (confpath == NULL) {
+	if (gotwebd_sockpath == NULL) {
+		gotwebd_sockpath = strdup(GOTWEBD_CONTROL_SOCKET);
+		if (gotwebd_sockpath == NULL) {
 			err = got_error_from_errno("strdup");
 			goto done;
 		}
-	}
-
-	if (unveil(confpath, "r") == -1) {
-		err = got_error_from_errno2("unveil", confpath);
-		goto done;
-	}
-
-	if (unveil(secretspath ? secretspath : GOTD_SECRETS_PATH, "r") == -1) {
-		err = got_error_from_errno2("unveil",
-		    secretspath ? secretspath : GOTD_SECRETS_PATH);
-		goto done;
-	}
-
-	secrets_fd = open(secretspath ? secretspath : GOTD_SECRETS_PATH,
-	    O_RDONLY | O_NOFOLLOW);
-	if (secrets_fd == -1) {
-		if (secretspath != NULL || errno != ENOENT) {
-			err = got_error_from_errno2("open",
-			    secretspath ? secretspath : GOTD_SECRETS_PATH);
-			goto done;
-		}
-	} else if (secretspath == NULL) {
-		secretspath = strdup(GOTD_SECRETS_PATH);
-		if (secretspath == NULL) {
-			err = got_error_from_errno("strdup");
-			goto done;
-		}
-	}
-
-	conf_fd = open(confpath, O_RDONLY | O_NOFOLLOW);
-	if (conf_fd == -1) {
-		err = got_error_from_errno2("open", confpath);
-		goto done;
 	}
 
 	event_init();
@@ -375,36 +375,67 @@ main(int argc, char *argv[])
 	}
 
 #ifndef PROFILE
-	if (pledge("stdio unix sendfd unveil", NULL) == -1) {
+	if (pledge("stdio proc exec unix unveil", NULL) == -1) {
 		err = got_error_from_errno("pledge");
 		goto done;
 	}
 #endif
-	/* TODO: make gotd socket path configurable -- pass via argv[1] */
-	err = apply_unveil(GOTD_UNIX_SOCKET);
-	if (err)
+	if (unveil(gotwebd_sockpath, "w") != 0) {
+		err = got_error_from_errno2("unveil", gotwebd_sockpath);
 		goto done;
+	}
 
-	err = connect_gotd(GOTD_UNIX_SOCKET);
-	if (err)
+	if (unveil(GOTSYSD_PATH_PROG_GOTWEBD, "x") != 0) {
+		err = got_error_from_errno2("unveil",
+		    GOTSYSD_PATH_PROG_GOTWEBD);
 		goto done;
+	}
+
+	if (unveil(NULL, NULL) != 0) {
+		err = got_error_from_errno("unveil");
+		goto done;
+	}
+
+	/*
+	 * If we cannot conncet to the control socket then gotwebd might have
+	 * crashed and restarting it could have bad consequences (such as
+	 * leaking info to a remote attacker). Log a warning and send 'done'
+	 * to gotsysd which can then proceed with system configuration tasks.
+	 */
+	err = connect_gotwebd(gotwebd_sockpath);
+	if (err) {
+		if (err->code != GOT_ERR_ERRNO ||
+		    (errno != ENOENT && errno != ECONNREFUSED))
+			goto done;
+
+		warnx("%s: %s", gotwebd_sockpath, err->msg);
+		err = NULL;
 #ifndef PROFILE
-	if (pledge("stdio sendfd", NULL) == -1) {
-		err = got_error_from_errno("pledge");
-		goto done;
-	}
+		/* We will not attempt to restart gotwebd. */
+		if (pledge("stdio", NULL) == -1) {
+			err = got_error_from_errno("pledge");
+			goto done;
+		}
 #endif
-	if (imsgbuf_init(&gotd_iev.ibuf, gotd_sock) == -1) {
-		err = got_error_from_errno("imsgbuf_init");
-		goto done;
-	}
-	imsgbuf_allow_fdpass(&gotd_iev.ibuf);
+	} else {
+#ifndef PROFILE
+		/* We will attempt to restart gotwebd. */
+		if (pledge("stdio proc exec", NULL) == -1) {
+			err = got_error_from_errno("pledge");
+			goto done;
+		}
+#endif
+		if (imsgbuf_init(&gotwebd_iev.ibuf, gotwebd_sock) == -1) {
+			err = got_error_from_errno("imsgbuf_init");
+			goto done;
+		}
 
-	gotd_iev.handler = dispatch_gotd;
-	gotd_iev.events = EV_READ;
-	gotd_iev.handler_arg = NULL;
-	event_set(&gotd_iev.ev, gotd_iev.ibuf.fd, EV_READ,
-	    dispatch_gotd, &gotd_iev);
+		gotwebd_iev.handler = dispatch_gotwebd;
+		gotwebd_iev.events = EV_READ;
+		gotwebd_iev.handler_arg = NULL;
+		event_set(&gotwebd_iev.ev, gotwebd_iev.ibuf.fd, EV_READ,
+		    dispatch_gotwebd, &gotwebd_iev);
+	}
 
 	gotsysd_iev.handler = dispatch_gotsysd;
 	gotsysd_iev.events = EV_READ;
@@ -418,52 +449,29 @@ main(int argc, char *argv[])
 		goto done;
 	}
 
-	if (secrets_fd != -1) {
-		if (gotsysd_imsg_compose_event(&gotd_iev,
-		    GOTD_IMSG_RELOAD_SECRETS, 0, secrets_fd,
-		    secretspath, strlen(secretspath)) == -1) {
-			err = got_error_from_errno("imsg_compose "
-			    "RELOAD_SECRETS");
+	if (gotwebd_sock == -1) {
+		/* If gotwebd is not running then we are done. */
+		err = send_done(&gotsysd_iev);
+		if (err)
 			goto done;
-		}
-		secrets_fd = -1;
-	} else {
-		if (gotsysd_imsg_compose_event(&gotd_iev,
-		    GOTD_IMSG_RELOAD_SECRETS, 0, -1, NULL, 0) == -1) {
-			err = got_error_from_errno("imsg_compose "
-			    "RELOAD_SECRETS");
-			goto done;
-		}
+		flush_and_exit = 1;
 	}
-	if (gotsysd_imsg_compose_event(&gotd_iev, GOTD_IMSG_RELOAD,
-	    0, conf_fd, confpath, strlen(confpath)) == -1) {
-		err = got_error_from_errno("imsg_compose "
-		    "RELOAD");
-		goto done;
-	}
-	conf_fd = -1;
 
 	event_dispatch();
 done:
-	free(confpath);
-	free(secretspath);
-	if (conf_fd != -1 && close(conf_fd) == -1 && err == NULL)
+	free(gotwebd_sockpath);
+	if (gotwebd_iev.ibuf.fd != -1)
+		imsgbuf_clear(&gotwebd_iev.ibuf);
+	if (gotwebd_sock != -1 && close(gotwebd_sock) == -1 && err == NULL)
 		err = got_error_from_errno("close");
-	if (secrets_fd != -1 && close(secrets_fd) == -1 && err == NULL)
-		err = got_error_from_errno("close"); 
+	if (err)
+		gotsysd_imsg_send_error(&gotsysd_iev.ibuf, 0, 0, err);
+
 	if (gotsysd_iev.ibuf.fd != -1)
 		imsgbuf_clear(&gotsysd_iev.ibuf);
-	if (gotd_iev.ibuf.fd != -1)
-		imsgbuf_clear(&gotd_iev.ibuf);
-	if (gotd_sock != -1 && close(gotd_sock) == -1 && err == NULL)
+	if (close(GOTSYSD_FILENO_MSG_PIPE) == -1 && err == NULL)
 		err = got_error_from_errno("close");
-	if (err) {
+	if (err)
 		fprintf(stderr, "%s: %s\n", getprogname(), err->msg);
-		gotsysd_imsg_send_error(&gotsysd_iev.ibuf, 0, 0, err);
-	}
-	if (close(GOTSYSD_FILENO_MSG_PIPE) == -1 && err == NULL) {
-		err = got_error_from_errno("close");
-		fprintf(stderr, "%s: %s\n", getprogname(), err->msg);
-	}
 	return err ? 1 : 0;
 }

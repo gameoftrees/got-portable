@@ -43,6 +43,8 @@
 #include "got_reference.h"
 #include "got_object.h"
 
+#include "media.h"
+#include "gotwebd.h"
 #include "gotsys.h"
 #include "gotsysd.h"
 

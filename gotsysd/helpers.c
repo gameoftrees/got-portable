@@ -36,8 +36,11 @@
 #include "got_error.h"
 #include "got_path.h"
 #include "got_object.h"
+#include "got_reference.h"
 
 #include "gotsysd.h"
+#include "media.h"
+#include "gotwebd.h"
 #include "gotsys.h"
 #include "log.h"
 #include "helpers.h"
@@ -174,6 +177,8 @@ get_helper_prog_name(int imsg_type)
 		return GOTSYSD_PATH_PROG_WRITE_CONF;
 	case GOTSYSD_IMSG_START_PROG_APPLY_CONF:
 		return GOTSYSD_PATH_PROG_APPLY_CONF;
+	case GOTSYSD_IMSG_START_PROG_APPLY_WEBCONF:
+		return GOTSYSD_PATH_PROG_APPLY_WEBCONF;
 	case GOTSYSD_IMSG_START_PROG_SSHDCONFIG:
 		return GOTSYSD_PATH_PROG_SSHDCONFIG;
 	default:
@@ -441,6 +446,18 @@ send_apply_conf_ready(struct gotsysd_imsgev *iev)
 }
 
 static const struct got_error *
+send_apply_webconf_ready(struct gotsysd_imsgev *iev)
+{
+	if (gotsysd_imsg_compose_event(iev,
+	    GOTSYSD_IMSG_SYSCONF_APPLY_WEBCONF_READY, gotsysd_helpers.proc_id,
+	    -1, NULL, 0) == -1)
+		return got_error_from_errno("imsg_compose APPLY_WEBCONF_READY");
+	
+	return NULL;
+}
+
+
+static const struct got_error *
 send_sshdconfig_ready(struct gotsysd_imsgev *iev)
 {
 	if (gotsysd_imsg_compose_event(iev,
@@ -489,6 +506,9 @@ proc_ready(struct gotsysd_helper_proc *proc)
 		break;
 	case GOTSYSD_IMSG_START_PROG_APPLY_CONF:
 		err = send_apply_conf_ready(sysconf_iev);
+		break;
+	case GOTSYSD_IMSG_START_PROG_APPLY_WEBCONF:
+		err = send_apply_webconf_ready(sysconf_iev);
 		break;
 	case GOTSYSD_IMSG_START_PROG_SSHDCONFIG:
 		err = send_sshdconfig_ready(sysconf_iev);
@@ -577,10 +597,27 @@ dispatch_helper_child(int fd, short event, void *arg)
 		case GOTSYSD_IMSG_SYSCONF_GROUP_MEMBERS:
 		case GOTSYSD_IMSG_SYSCONF_GROUP_MEMBERS_DONE:
 		case GOTSYSD_IMSG_SYSCONF_GROUPS_DONE:
+		case GOTSYSD_IMSG_SYSCONF_WEB_SERVER:
+		case GOTSYSD_IMSG_SYSCONF_WEB_SERVERS_DONE:
+		case GOTSYSD_IMSG_SYSCONF_WEB_ACCESS_RULE:
+		case GOTSYSD_IMSG_SYSCONF_WEB_ACCESS_RULES_DONE:
 		case GOTSYSD_IMSG_SYSCONF_REPO:
+		case GOTSYSD_IMSG_SYSCONF_WEBREPO:
+		case GOTSYSD_IMSG_SYSCONF_WEBREPO_ACCESS_RULE:
+		case GOTSYSD_IMSG_SYSCONF_WEBREPO_ACCESS_RULES_DONE:
+		case GOTSYSD_IMSG_SYSCONF_WEBREPOS_DONE:
+		case GOTSYSD_IMSG_SYSCONF_WEBSITE_PATH:
+		case GOTSYSD_IMSG_SYSCONF_WEBSITE:
+		case GOTSYSD_IMSG_SYSCONF_WEBSITE_ACCESS_RULE:
+		case GOTSYSD_IMSG_SYSCONF_WEBSITE_ACCESS_RULES_DONE:
+		case GOTSYSD_IMSG_SYSCONF_WEBSITES_DONE:
+		case GOTSYSD_IMSG_SYSCONF_GLOBAL_MEDIA_TYPE:
+		case GOTSYSD_IMSG_SYSCONF_GLOBAL_MEDIA_TYPES_DONE:
 		case GOTSYSD_IMSG_SYSCONF_REPOS_DONE:
 		case GOTSYSD_IMSG_SYSCONF_ACCESS_RULE:
 		case GOTSYSD_IMSG_SYSCONF_ACCESS_RULES_DONE:
+		case GOTSYSD_IMSG_SYSCONF_MEDIA_TYPE:
+		case GOTSYSD_IMSG_SYSCONF_MEDIA_TYPES_DONE:
 		case GOTSYSD_IMSG_SYSCONF_PROTECTED_TAG_NAMESPACES:
 		case GOTSYSD_IMSG_SYSCONF_PROTECTED_TAG_NAMESPACES_ELEM:
 		case GOTSYSD_IMSG_SYSCONF_PROTECTED_BRANCH_NAMESPACES:
@@ -701,6 +738,19 @@ dispatch_helper_child(int fd, short event, void *arg)
 		case GOTSYSD_IMSG_SYSCONF_APPLY_CONF_DONE:
 			if (proc->type !=
 			    GOTSYSD_IMSG_START_PROG_APPLY_CONF) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "unexpected message type %d from helper "
+				        "process type %d pid %u\n",
+				    imsg.hdr.type, proc->type, proc->pid);
+				break;
+			}
+			if (gotsysd_imsg_forward(sysconf_iev, &imsg, -1) == -1)
+				err = got_error_from_errno("imsg_forward");
+			shut = 1;
+			break;
+		case GOTSYSD_IMSG_SYSCONF_APPLY_WEBCONF_DONE:
+			if (proc->type !=
+			    GOTSYSD_IMSG_START_PROG_APPLY_WEBCONF) {
 				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
 				    "unexpected message type %d from helper "
 				        "process type %d pid %u\n",
@@ -911,6 +961,7 @@ helpers_dispatch_sysconf(int fd, short event, void *arg)
 		case GOTSYSD_IMSG_START_PROG_GROUPADD:
 		case GOTSYSD_IMSG_START_PROG_WRITE_CONF:
 		case GOTSYSD_IMSG_START_PROG_APPLY_CONF:
+		case GOTSYSD_IMSG_START_PROG_APPLY_WEBCONF:
 		case GOTSYSD_IMSG_START_PROG_SSHDCONFIG:
 			prog = get_helper_prog_name(imsg.hdr.type);
 			if (prog == NULL)
@@ -1017,17 +1068,38 @@ helpers_dispatch_sysconf(int fd, short event, void *arg)
 			if (gotsysd_imsg_forward(&proc->iev, &imsg, -1) == -1)
 				err = got_error_from_errno("imsg_forward");
 			break;
+		case GOTSYSD_IMSG_SYSCONF_GOTWEB_CFG:
+		case GOTSYSD_IMSG_SYSCONF_GOTWEB_ADDR:
+		case GOTSYSD_IMSG_SYSCONF_GOTWEB_ADDRS_DONE:
+		case GOTSYSD_IMSG_SYSCONF_GOTWEB_SERVER:
+		case GOTSYSD_IMSG_SYSCONF_GOTWEB_SERVERS_DONE:
+		case GOTSYSD_IMSG_SYSCONF_GOTWEB_CFG_DONE:
 		case GOTSYSD_IMSG_SYSCONF_WRITE_CONF_USERS:
 		case GOTSYSD_IMSG_SYSCONF_WRITE_CONF_USERS_DONE:
 		case GOTSYSD_IMSG_SYSCONF_WRITE_CONF_GROUP:
 		case GOTSYSD_IMSG_SYSCONF_WRITE_CONF_GROUP_MEMBERS:
 		case GOTSYSD_IMSG_SYSCONF_WRITE_CONF_GROUP_MEMBERS_DONE:
 		case GOTSYSD_IMSG_SYSCONF_WRITE_CONF_GROUPS_DONE:
+		case GOTSYSD_IMSG_SYSCONF_WEB_ACCESS_RULE:
+		case GOTSYSD_IMSG_SYSCONF_WEB_ACCESS_RULES_DONE:
 		case GOTSYSD_IMSG_SYSCONF_REPO:
+		case GOTSYSD_IMSG_SYSCONF_WEBREPO:
+		case GOTSYSD_IMSG_SYSCONF_WEBREPO_ACCESS_RULE:
+		case GOTSYSD_IMSG_SYSCONF_WEBREPO_ACCESS_RULES_DONE:
+		case GOTSYSD_IMSG_SYSCONF_WEBREPOS_DONE:
+		case GOTSYSD_IMSG_SYSCONF_WEBSITE_PATH:
+		case GOTSYSD_IMSG_SYSCONF_WEBSITE:
+		case GOTSYSD_IMSG_SYSCONF_WEBSITE_ACCESS_RULE:
+		case GOTSYSD_IMSG_SYSCONF_WEBSITE_ACCESS_RULES_DONE:
+		case GOTSYSD_IMSG_SYSCONF_WEBSITES_DONE:
 		case GOTSYSD_IMSG_SYSCONF_GLOBAL_ACCESS_RULE:
 		case GOTSYSD_IMSG_SYSCONF_GLOBAL_ACCESS_RULES_DONE:
+		case GOTSYSD_IMSG_SYSCONF_GLOBAL_MEDIA_TYPE:
+		case GOTSYSD_IMSG_SYSCONF_GLOBAL_MEDIA_TYPES_DONE:
 		case GOTSYSD_IMSG_SYSCONF_ACCESS_RULE:
 		case GOTSYSD_IMSG_SYSCONF_ACCESS_RULES_DONE:
+		case GOTSYSD_IMSG_SYSCONF_MEDIA_TYPE:
+		case GOTSYSD_IMSG_SYSCONF_MEDIA_TYPES_DONE:
 		case GOTSYSD_IMSG_SYSCONF_PROTECTED_TAG_NAMESPACES:
 		case GOTSYSD_IMSG_SYSCONF_PROTECTED_TAG_NAMESPACES_ELEM:
 		case GOTSYSD_IMSG_SYSCONF_PROTECTED_BRANCH_NAMESPACES:
@@ -1045,6 +1117,8 @@ helpers_dispatch_sysconf(int fd, short event, void *arg)
 		case GOTSYSD_IMSG_SYSCONF_NOTIFICATION_TARGET_HTTP:
 		case GOTSYSD_IMSG_SYSCONF_NOTIFICATION_TARGETS_DONE:
 		case GOTSYSD_IMSG_SYSCONF_REPOS_DONE:
+		case GOTSYSD_IMSG_SYSCONF_WEB_SERVER:
+		case GOTSYSD_IMSG_SYSCONF_WEB_SERVERS_DONE:
 			proc = find_proc(GOTSYSD_IMSG_START_PROG_WRITE_CONF,
 			    1);
 			if (proc == NULL)

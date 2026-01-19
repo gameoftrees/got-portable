@@ -8,7 +8,7 @@ SRCS=		gotsys-apply-conf.c error.c path.c hash.c pollfd.c \
 
 CPPFLAGS = -I${.CURDIR}/../../../include -I${.CURDIR}/../../../lib \
 	-I${.CURDIR}/../../../gotsys -I${.CURDIR}/../../../gotd \
-	-I${.CURDIR}/../../ -I${.CURDIR}
+	-I${.CURDIR}/../../../gotwebd -I${.CURDIR}/../../ -I${.CURDIR}
 YFLAGS =
 
 .if defined(PROFILE)

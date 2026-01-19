@@ -626,6 +626,214 @@ The tag message.
 .El
 .El
 .El
+.Sh WEB SERVER CONFIGURATION
+.Nm
+can set configuration parameters for
+.Xr gotwebd 8 
+to display Git repositories on the web,
+.Pp
+One or more web servers can be declared with the directive:
+.Pp
+.Ic web server Ar name Brq ...
+.Pp
+The given
+.Ar hostname
+should be the name which web browsers use to reach the host running the
+web server.
+.Pp
+All web servers share the same underlying repository directory managed by
+.Xr gotsysd 8 .
+However, each web server can be configured to display an arbitrary subset
+of repositories and/or web sites, providing a unique view on the shared data.
+.Pp
+If the given hostname does not exist in
+.Xr gotsysd.conf 5
+on the server then
+.Xr gotsysd 8
+will silently ignore web server parameters.
+The server administrator can use
+.Xr gotsysd.conf 5
+to set global defaults for web server parameters documented here.
+When in doubt, the correct host name to use and the server-side defaults
+should be obtained from the server administrator.
+.Pp
+Parameters for the web server must be given in curly braces and are as follows:
+.Bl -tag -width Ds
+.It Ic disable authentication
+Disable authentication, allowing any browser to view any web sites and
+any repository not hidden via the
+.Ic hide repositories
+or
+.Ic hide repository
+directives.
+.Pp
+Authentication can also be configured per repository and per web site.
+.It Ic enable authentication
+Enable authentication, requiring browsers to present a login token cookie
+before read-only repository or web site access is granted.
+.Pp
+Browsers presenting a valid login token cookie will be mapped to the
+user account which obtained the login token over SSH from the
+.Cm weblogin
+command of
+.Xr gotsh 1 .
+.Pp
+Authentication can also be configured per repository and per web site.
+.It Ic deny Ar identity
+Deny repository access to users with the username
+.Ar identity .
+Group names may be matched by prepending a colon
+.Pq Sq \&:
+to
+.Ar identity .
+Numeric IDs are also accepted.
+.It Ic permit Ar identity
+Permit repository access to users with the username
+.Ar identity .
+Group names may be matched by prepending a colon
+.Pq Sq \&:
+to
+.Ar identity .
+Numeric IDs are also accepted.
+.It Ic hide repositories Ar on | off
+Controls whether repositories are hidden by default.
+Hidden repositories cannot be browsed via
+.Xr gotwebd 8 .
+However, web sites can be served out of a repository even if the
+repository is hidden.
+.It Ic site owner Ar name
+Set the displayed site owner.
+If not set then no site owner will be displayed by
+.Xr gotwebd 8 .
+.It Ic repositories url path Ar url-path
+Sets the URL path under which Git repositories will be displayed by
+.Xr gotwebd 8 .
+This allows for displaying a web site at the root URL path, while still
+displaying the default
+.Xr gotwebd 8
+repository browser view at another URL path.
+.It Ic repository name Brq ...
+Set repository-specific parameters for
+.Xr gotwebd 8 .
+The given
+.Ar name
+must match a Git repository declared in the
+.Sx REPOSITORY CONFIGURATION
+section of
+.Nm .
+.Pp
+The available parameters are as follows:
+.Bl -tag -width Ds
+.It Ic hide repository Ar on | off
+Controls whether the repository is hidden.
+Hidden repositories cannot be browsed via
+.Xr gotwebd 8 .
+If not set, the web server context's
+.Ic hide repositories
+parameter determines whether
+.Xr gotwebd 8
+will display the repository.
+.Pp
+Web sites can be served out of a repository even if the
+repository is hidden.
+.It Ic disable authentication
+Disable authentication, allowing any browser to view this repository
+unless it is hidden via the
+.Ic hide repositories
+or
+.Ic hide repository
+directives.
+.It Ic enable authentication
+Enable authentication, requiring browsers to present a login token cookie
+before read-only access to this repository is granted.
+.Pp
+Browsers presenting a valid login token cookie will be mapped to the
+user account which obtained the login token over SSH from the
+.Cm weblogin
+command of
+.Xr gotsh 1 .
+.It Ic deny Ar identity
+Deny repository access to users with the username
+.Ar identity .
+Group names may be matched by prepending a colon
+.Pq Sq \&:
+to
+.Ar identity .
+Numeric IDs are also accepted.
+.It Ic permit Ar identity
+Permit repository access to users with the username
+.Ar identity .
+Group names may be matched by prepending a colon
+.Pq Sq \&:
+to
+.Ar identity .
+Numeric IDs are also accepted.
+.El
+.It Ic website Ar url-path Brq ...
+Declare a web site to be served by
+.Xr gotwebd 8
+when the browser visits the given
+.Ar url-path .
+.Pp
+The available web site configuration parameters are as follows:
+.Bl -tag -width Ds
+.It Ic repository Ar name
+Serve web site content from the specified Git repository.
+The given
+.Ar name
+must match a Git repository declared in the
+.Sx REPOSITORY CONFIGURATION
+section of
+.Nm .
+.It Ic path Ar path
+Look up files to serve as web site content at the specified path
+in the repository.
+Defaults to the root directory, 
+.Dq / .
+.It Ic branch Ar name
+Look up files to serve as web site content on the specified branch
+in the repository.
+By default, the branch resolved via the repository's HEAD reference is used.
+.Pp
+If the
+.Ar name
+does not begin with
+.Dq refs/heads
+then the
+.Ar name
+is searched in the
+.Dq refs/heads
+reference namespace.
+.It Ic disable authentication
+Disable authentication, allowing any browser to view this web site.
+.It Ic enable authentication
+Enable authentication, requiring browsers to present a login token cookie
+before web site access is granted.
+.Pp
+Browsers presenting a valid login token cookie will be mapped to the
+user account which obtained the login token over SSH from the
+.Cm weblogin
+command of
+.Xr gotsh 1 .
+.It Ic deny Ar identity
+Deny web site access to users with the username
+.Ar identity .
+Group names may be matched by prepending a colon
+.Pq Sq \&:
+to
+.Ar identity .
+Numeric IDs are also accepted.
+.It Ic permit Ar identity
+Permit web site access to users with the username
+.Ar identity .
+Group names may be matched by prepending a colon
+.Pq Sq \&:
+to
+.Ar identity .
+Numeric IDs are also accepted.
+.El
+\".It Ic media types Brq ...
+.El
 .Sh EXAMPLES
 .Bd -literal -offset indent
 group developers
@@ -679,7 +887,8 @@ repository "secret" {
 .Xr got 1 ,
 .Xr gotsys 1 ,
 .Xr gotd 8 ,
-.Xr gotsysd 8
+.Xr gotsysd 8 ,
+.Xr gotwebd 8
 .Sh CAVEATS
 There is no way to rename or delete repositories via
 .Nm .

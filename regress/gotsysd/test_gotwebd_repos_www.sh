@@ -49,6 +49,22 @@ repository www {
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
+web server "${VMIP}" {
+	repository gotsys {
+		hide repository on
+	}
+
+	repositories url path "/"
+
+	website "/website" {
+		repository "www"
+		disable authentication
+	}
+
+	repository www {
+		permit ${GOTSYSD_TEST_USER}
+	}
+}
 EOF
 	(cd ${testroot}/wt && got commit  -m "add www.git" >/dev/null)
 	local commit_id=`git_show_head $testroot/${GOTSYS_REPO}`

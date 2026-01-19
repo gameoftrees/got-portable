@@ -69,8 +69,11 @@
 #include "got_path.h"
 #include "got_opentemp.h"
 #include "got_object.h"
+#include "got_reference.h"
 
 #include "gotsysd.h"
+#include "media.h"
+#include "gotwebd.h"
 #include "gotsys.h"
 
 static gid_t groupadd_gid_start = GOTSYSD_UID_DEFAULT_START;

@@ -2,14 +2,13 @@
 
 .include "../../../got-version.mk"
 
-PROG=		gotsys-repo-create
-SRCS=		gotsys-repo-create.c error.c hash.c pollfd.c path.c \
-		imsg.c gotsys_conf.c media.c gotsys_imsg.c repository_init.c \
-		reference_parse.c lockfile.c
+PROG=		gotsys-apply-webconf
+SRCS=		gotsys-apply-webconf.c error.c path.c hash.c pollfd.c \
+		log.c imsg.c
 
 CPPFLAGS = -I${.CURDIR}/../../../include -I${.CURDIR}/../../../lib \
-	-I${.CURDIR}/../../../gotsys -I${.CURDIR}/../../../gotwebd \
-	-I${.CURDIR}/../../ -I${.CURDIR}
+	-I${.CURDIR}/../../../gotsys -I${.CURDIR}/../../../gotd \
+	-I${.CURDIR}/../../../gotwebd -I${.CURDIR}/../../ -I${.CURDIR}
 YFLAGS =
 
 .if defined(PROFILE)

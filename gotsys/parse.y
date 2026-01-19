@@ -47,9 +47,12 @@
 
 #include "got_error.h"
 #include "got_path.h"
+#include "got_object.h"
 #include "got_reference.h"
 
 #include "log.h"
+#include "media.h"
+#include "gotwebd.h"
 #include "gotsys.h"
 
 #ifndef nitems
@@ -78,11 +81,17 @@ int		 lgetc(int);
 int		 lungetc(int);
 int		 findeol(void);
 
+struct media_type		 media;
+
 static const struct got_error	*gerror;
 
 static struct gotsys_conf	*gotsysconf;
 static struct gotsys_repo	*new_repo;
 static struct gotsys_user	*new_user;
+static struct mediatypes	*new_mediatypes;
+static struct gotsys_webserver	*new_webserver;
+static struct gotsys_webrepo	*new_webrepo;
+static struct gotsys_website	*new_website;
 static const struct got_error	*conf_new_repo(struct gotsys_repo **,
 				    const char *);
 static const struct got_error	*conf_user_password(char *,
@@ -117,19 +126,22 @@ typedef struct {
 
 %token	ERROR USER GROUP REPOSITORY PERMIT DENY RO RW AUTHORIZED KEY
 %token	PROTECT NAMESPACE BRANCH TAG REFERENCE PORT PASSWORD
-%token	NOTIFY EMAIL FROM REPLY TO URL INSECURE HMAC HEAD
+%token	NOTIFY EMAIL FROM REPLY TO URL INSECURE HMAC HEAD WEB SERVER
+%token	HIDE REPOSITORIES STYLESHEET LOGO SITE OWNER WEBSITE PATH
+%token	DISABLE ENABLE AUTHENTICATION MEDIA TYPES DESCRIPTION
 
 %token	<v.string>	STRING
 %token	<v.number>	NUMBER
+%type	<v.number>	boolean
 %type	<v.string>	numberstring
 
 %%
 
 grammar		:
 		| grammar '\n'
-		| grammar varset '\n'
 		| grammar main '\n'
 		| grammar repository '\n'
+		| grammar webserver '\n'
 		;
 
 numberstring	: STRING
@@ -138,6 +150,29 @@ numberstring	: STRING
 				yyerror("asprintf: %s", strerror(errno));
 				YYERROR;
 			}
+		}
+		;
+
+boolean		: STRING {
+			if (strcasecmp($1, "1") == 0 ||
+			    strcasecmp($1, "on") == 0)
+				$$ = 1;
+			else if (strcasecmp($1, "0") == 0 ||
+			    strcasecmp($1, "off") == 0)
+				$$ = 0;
+			else {
+				yyerror("invalid boolean value '%s'", $1);
+				free($1);
+				YYERROR;
+			}
+			free($1);
+		}
+		| NUMBER {
+			if ($1 != 0 && $1 != 1) {
+				yyerror("invalid boolean value '%lld'", $1);
+				YYERROR;
+			}
+			$$ = $1;
 		}
 		;
 
@@ -197,6 +232,9 @@ main		: USER STRING {
 			}
 			STAILQ_INSERT_TAIL(&gotsysconf->groups, group, entry);
 			free($2);
+		}
+		| MEDIA TYPES '{' optnl mediaopts_l '}' {
+			new_mediatypes = &gotsysconf->mediatypes;
 		}
 		;
 
@@ -442,6 +480,9 @@ repository	: REPOSITORY STRING {
 		}
 		;
 
+repoopts2	: repoopts2 repoopts1 nl
+		| repoopts1 optnl
+
 repoopts1	: PERMIT RO numberstring {
 			const struct got_error *err;
 			struct gotsys_access_rule *rule;
@@ -552,19 +593,612 @@ repoopts1	: PERMIT RO numberstring {
 			}
 			free($2);
 		}
+		| DESCRIPTION STRING {
+			const struct got_error *err;
+
+			err = gotsys_conf_validate_string($2);
+			if (err) {
+				yyerror("%s", err->msg);
+				free($2);
+				YYERROR;
+			}
+				
+			if (strlcpy(new_repo->description, $2,
+			    sizeof(new_repo->description)) >=
+			    sizeof(new_repo->description)) {
+				yyerror("HTML-escaped repository description "
+				    "too long, exceeds %zd bytes: %s",
+				    sizeof(new_repo->description) - 1, $2);
+				free($2);
+				YYERROR;
+			}
+			free($2);
+		}
 		;
 
-repoopts2	: repoopts2 repoopts1 nl
-		| repoopts1 optnl
+webrepo		: REPOSITORY STRING {
+			const struct got_error *err;
+			struct gotsys_webrepo *webrepo;
+
+			err = gotsys_conf_new_webrepo(&new_webrepo, $2);
+			if (err) {
+				err = got_error_from_errno("asprintf");
+				yyerror("%s", err->msg);
+				free($2);
+				YYERROR;
+			}
+
+			STAILQ_FOREACH(webrepo, &new_webserver->repos, entry) {
+				if (strcmp(webrepo->repo_name,
+				    new_webrepo->repo_name) == 0) {
+					err = got_error_fmt(
+					    GOT_ERR_PARSE_CONFIG,
+					    "duplicate repository '%s' for "
+					    "server '%s'",
+					    new_webrepo->repo_name,
+					    new_webserver->server_name);
+					yyerror("%s", err->msg);
+					free($2);
+					YYERROR;
+				}
+			}
+
+			STAILQ_INSERT_TAIL(&new_webserver->repos, new_webrepo,
+			    entry);
+			free($2);
+		} '{' optnl repowebopts2 '}' {
+		}
+		;
+
+repowebopts2	: repowebopts2 repowebopts1 nl
+		| repowebopts1 optnl
+
+repowebopts1	: HIDE REPOSITORY boolean {
+			new_webrepo->hidden = $3;
+		}
+		| DISABLE AUTHENTICATION {
+			if (new_webrepo->auth_config != 0) {
+				yyerror("ambiguous web authentication "
+				    "setting for repository %s",
+				    new_webrepo->repo_name);
+				YYERROR;
+			}
+			new_webrepo->auth_config = GOTSYS_AUTH_DISABLED;
+		}
+		| ENABLE AUTHENTICATION {
+			if (new_webrepo->auth_config != 0) {
+				yyerror("ambiguous web authentication "
+				    "setting for repository %s",
+				    new_webrepo->repo_name);
+				YYERROR;
+			}
+			new_webrepo->auth_config = GOTSYS_AUTH_ENABLED;
+		}
+		| DENY numberstring {
+			const struct got_error *err;
+			struct gotsys_access_rule *rule;
+
+			err = gotsys_conf_new_access_rule(&rule,
+			    GOTSYS_ACCESS_DENIED, 0, $2,
+			    &gotsysconf->users, &gotsysconf->groups);
+			if (err) {
+				yyerror("%s", err->msg);
+				free($2);
+				YYERROR;
+			}
+			STAILQ_INSERT_TAIL(&new_webrepo->access_rules, rule,
+			    entry);
+			free($2);
+		}
+		| PERMIT numberstring {
+			const struct got_error *err;
+			struct gotsys_access_rule *rule;
+
+			err = gotsys_conf_new_access_rule(&rule,
+			    GOTSYS_ACCESS_PERMITTED, GOTSYS_AUTH_READ, $2,
+			    &gotsysconf->users, &gotsysconf->groups);
+			if (err) {
+				yyerror("%s", err->msg);
+				free($2);
+				YYERROR;
+			}
+			STAILQ_INSERT_TAIL(&new_webrepo->access_rules, rule,
+			    entry);
+			free($2);
+		}
+		;
+
+websiteopts2	: websiteopts2 websiteopts1 nl
+		| websiteopts1 optnl
+
+websiteopts1	: PATH STRING {
+			const struct got_error *err;
+			size_t n;
+
+			err = gotsys_conf_validate_path($2);
+			if (err) {
+				yyerror("path %s: %s", $2, err->msg);
+				free($2);
+				YYERROR;
+			}
+
+			n = strlcpy(new_website->path, $2,
+			    sizeof(new_website->path));
+			if (n >= sizeof(new_website->path)) {
+				yyerror("website in-repository path too long, "
+				    "exceeds %zd bytes",
+				    sizeof(new_website->path) - 1);
+				free($2);
+				YYERROR;
+			}
+
+			if (new_website->path[0] != '/') {
+				yyerror("a website path must be an absolute "
+				    "path: bad path %s", $2);
+				free($2);
+				YYERROR;
+			}
+
+			free($2);
+		}
+		| REPOSITORY STRING {
+			const struct got_error *err;
+			size_t n;
+
+			err = gotsys_conf_validate_repo_name($2);
+			if (err) {
+				yyerror("repository name %s: %s", $2, err->msg);
+				free($2);
+				YYERROR;
+			}
+
+			n = strlcpy(new_website->repo_name, $2,
+			    sizeof(new_website->repo_name));
+			if (n >= sizeof(new_website->repo_name)) {
+				yyerror("website repository name too long, "
+				    "exceeds %zd bytes",
+				    sizeof(new_website->path) - 1);
+				free($2);
+				YYERROR;
+			}
+
+			free($2);
+		}
+		| BRANCH STRING {
+			size_t n;
+
+			if (!branch_name_is_valid($2)) {
+				yyerror("invalid reference name %s", $2);
+				free($2);
+				YYERROR;
+			}
+
+			n = strlcpy(new_website->branch_name, $2,
+			    sizeof(new_website->branch_name));
+			if (n >= sizeof(new_website->branch_name)) {
+				yyerror("website branch name too long, "
+				    "exceeds %zd bytes",
+				    sizeof(new_website->branch_name) - 1);
+				free($2);
+				YYERROR;
+			}
+			free($2);
+		}
+		| DISABLE AUTHENTICATION {
+			if (new_website->auth_config != 0) {
+				yyerror("ambiguous authentication "
+				    "setting for website %s",
+				    new_website->path);
+				YYERROR;
+			}
+			new_website->auth_config = GOTSYS_AUTH_DISABLED;
+		}
+		| ENABLE AUTHENTICATION {
+			if (new_website->auth_config != 0) {
+				yyerror("ambiguous authentication "
+				    "setting for website %s",
+				    new_website->path);
+				YYERROR;
+			}
+			new_website->auth_config = GOTSYS_AUTH_ENABLED;
+		}
+		| PERMIT numberstring {
+			const struct got_error *err;
+			struct gotsys_access_rule *rule;
+
+			err = gotsys_conf_new_access_rule(&rule,
+			    GOTSYS_ACCESS_PERMITTED, GOTSYS_AUTH_READ, $2,
+			    &gotsysconf->users, &gotsysconf->groups);
+			if (err) {
+				yyerror("%s", err->msg);
+				free($2);
+				YYERROR;
+			}
+			STAILQ_INSERT_TAIL(&new_website->access_rules, rule,
+			    entry);
+			free($2);
+		}
+		| DENY numberstring {
+			const struct got_error *err;
+			struct gotsys_access_rule *rule;
+
+			err = gotsys_conf_new_access_rule(&rule,
+			    GOTSYS_ACCESS_DENIED, 0, $2,
+			    &gotsysconf->users, &gotsysconf->groups);
+			if (err) {
+				yyerror("%s", err->msg);
+				free($2);
+				YYERROR;
+			}
+			STAILQ_INSERT_TAIL(&new_website->access_rules, rule,
+			    entry);
+			free($2);
+		}
+		;
+
+website		: WEBSITE STRING {
+			const struct got_error *err;
+			struct got_pathlist_entry *new;
+
+			err = gotsys_conf_new_website(&new_website, $2);
+			if (err) {
+				yyerror("%s", err->msg);
+				free($2);
+				YYERROR;
+			}
+
+			err = got_pathlist_insert(&new,
+			    &new_webserver->websites, new_website->url_path,
+			    new_website);
+			if (err) {
+				yyerror("%s", err->msg);
+				free($2);
+				YYERROR;
+			}
+			if (new == NULL) {
+				err = got_error_fmt(GOT_ERR_PARSE_CONFIG,
+				    "duplicate web site '%s' in "
+				    "web server '%s'", new_website->url_path,
+				    new_webserver->server_name);
+				yyerror("%s", err->msg);
+				free($2);
+				YYERROR;
+			}
+			free($2);
+		} '{' optnl websiteopts2 '}' {
+		}
+		;
+
+webserver	: WEB SERVER STRING {
+			const struct got_error *err;
+			struct gotsys_webserver *srv;
+
+			STAILQ_FOREACH(srv, &gotsysconf->webservers, entry) {
+				if (strcasecmp(srv->server_name, $3) != 0)
+					continue;
+
+				err = got_error_fmt(GOT_ERR_PARSE_CONFIG,
+				    "duplicate web server '%s' clashes "
+				    "with web server '%s'", $3,
+				    srv->server_name);
+				yyerror("%s", err->msg);
+				free($3);
+				YYERROR;
+			}
+
+			err = gotsys_conf_new_webserver(&new_webserver, $3);
+			if (err) {
+				yyerror("%s", err->msg);
+				free($3);
+				YYERROR;
+			}
+
+			STAILQ_INSERT_TAIL(&gotsysconf->webservers,
+			    new_webserver, entry);
+
+			free($3);
+		} '{' optnl webopts2 '}' {
+		}
+		;
+
+webopts1	: DISABLE AUTHENTICATION {
+			if (new_webserver->auth_config != 0) {
+				yyerror("ambiguous web authentication setting");
+				YYERROR;
+			}
+			new_webserver->auth_config = GOTSYS_AUTH_DISABLED;
+		}
+		| ENABLE AUTHENTICATION {
+			if (new_webserver->auth_config != 0) {
+				yyerror("ambiguous web authentication setting");
+				YYERROR;
+			}
+			new_webserver->auth_config = GOTSYS_AUTH_ENABLED;
+		}
+		| DENY numberstring {
+			const struct got_error *err;
+			struct gotsys_access_rule *rule;
+
+			err = gotsys_conf_new_access_rule(&rule,
+			    GOTSYS_ACCESS_DENIED, 0, $2,
+			    &gotsysconf->users, &gotsysconf->groups);
+			if (err) {
+				yyerror("%s", err->msg);
+				free($2);
+				YYERROR;
+			}
+			STAILQ_INSERT_TAIL(&new_webserver->access_rules, rule,
+			    entry);
+			free($2);
+		}
+		| PERMIT numberstring {
+			const struct got_error *err;
+			struct gotsys_access_rule *rule;
+
+			err = gotsys_conf_new_access_rule(&rule,
+			    GOTSYS_ACCESS_PERMITTED, GOTSYS_AUTH_READ, $2,
+			    &gotsysconf->users, &gotsysconf->groups);
+			if (err) {
+				yyerror("%s", err->msg);
+				free($2);
+				YYERROR;
+			}
+			STAILQ_INSERT_TAIL(&new_webserver->access_rules, rule,
+			    entry);
+			free($2);
+		}
+		| HIDE REPOSITORIES boolean {
+			new_webserver->hide_repositories = $3;
+		}
+		| STYLESHEET STRING {
+			const struct got_error *err;
+			size_t n;
+
+			err = gotsys_conf_validate_path($2);
+			if (err) {
+				yyerror("stylesheet path %s: %s", $2, err->msg);
+				free($2);
+				YYERROR;
+			}
+
+			n = strlcpy(new_webserver->css, $2,
+			    sizeof(new_webserver->css));
+			if (n >= sizeof(new_webserver->css)) {
+				yyerror("stylesheet path too long, "
+				    "exceeds %zd bytes",
+				    sizeof(new_webserver->css) - 1);
+				free($2);
+				YYERROR;
+			}
+			free($2);
+		}
+		| LOGO STRING {
+			const struct got_error *err;
+			size_t n;
+
+			err = gotsys_conf_validate_path($2);
+			if (err) {
+				yyerror("logo path %s: %s", $2, err->msg);
+				free($2);
+				YYERROR;
+			}
+
+			n = strlcpy(new_webserver->logo, $2,
+			    sizeof(new_webserver->logo));
+			if (n >= sizeof(new_webserver->logo)) {
+				yyerror("logo path too long, exceeds %zd bytes",
+				    sizeof(new_webserver->logo) - 1);
+				free($2);
+				YYERROR;
+			}
+			free($2);
+		}
+		| LOGO URL STRING {
+			const struct got_error *err;
+			size_t n;
+
+			err = gotsys_conf_validate_url($3);
+			if (err) {
+				yyerror("logo url %s: %s", $3, err->msg);
+				free($3);
+				YYERROR;
+			}
+
+			n = strlcpy(new_webserver->logo_url, $3,
+			    sizeof(new_webserver->logo_url));
+			if (n >= sizeof(new_webserver->logo_url)) {
+				yyerror("logo URL too long, "
+				    "exceeds %zd bytes: %s",
+				    sizeof(new_webserver->logo_url) -1, $3);
+				free($3);
+				YYERROR;
+			}
+			free($3);
+		}
+		| SITE OWNER STRING {
+			const struct got_error *err;
+
+			err = gotsys_conf_validate_string($3);
+			if (err) {
+				yyerror("%s", err->msg);
+				free($3);
+				YYERROR;
+			}
+				
+			if (strlcpy(new_webserver->site_owner, $3,
+			    sizeof(new_webserver->site_owner))
+			    >= sizeof(new_webserver->site_owner)) {
+				yyerror("site owner too long, "
+				    "exceeds %zd bytes: %s",
+				    sizeof(new_webserver->site_owner) - 1, $3);
+				free($3);
+				YYERROR;
+			}
+			free($3);
+		}
+		| REPOSITORIES URL PATH STRING {
+			const struct got_error *err;
+			struct gotsys_webserver *srv = new_webserver;
+
+			if (*$4 == '\0') {
+				yyerror("repositories URL path can't be "
+				    "an empty string");
+				free($4);
+				YYERROR;
+			}
+
+			if (!got_path_is_root_dir($4))
+				got_path_strip_trailing_slashes($4);
+
+			if (!got_path_is_absolute($4)) {
+				int ret;
+
+				ret = snprintf(srv->repos_url_path,
+				    sizeof(srv->repos_url_path),
+				    "/%s", $4);
+				if (ret == -1) {
+					yyerror("snprintf: %s",
+					    strerror(errno));
+					free($4);
+					YYERROR;
+				}
+				if ((size_t)ret >=
+				    sizeof(srv->repos_url_path)) {
+					yyerror("repositories URL path too "
+					    "long, exceeds %zd bytes: %s",
+					    sizeof(srv->repos_url_path), $4);
+					free($4);
+					YYERROR;
+				}
+			} else {
+				size_t n;
+
+				n = strlcpy(srv->repos_url_path, $4,
+				    sizeof(srv->repos_url_path));
+				if (n >= sizeof(srv->repos_url_path)) {
+					yyerror("repositories URL path too "
+					    "long, exceeds %zd bytes: %s",
+					    sizeof(srv->repos_url_path),
+					    $4);
+					free($4);
+					YYERROR;
+				}
+			}
+
+			err = gotsys_conf_validate_path(srv->repos_url_path);
+			if (err) {
+				yyerror("repositories URL path %s: %s",
+				    srv->repos_url_path, err->msg);
+				free($4);
+				YYERROR;
+			}
+			free($4);
+		}
+		| MEDIA TYPES {
+			new_mediatypes = &new_webserver->mediatypes;
+		} '{' optnl mediaopts_l '}' {
+		}
+		| webrepo
+		| website
+		; 
+
+webopts2	: webopts2 webopts1 nl
+		| webopts1 optnl
+		;
+
+mediaopts_l	: mediaopts_l mediaoptsl nl
+		| mediaoptsl nl
+		;
+
+mediaoptsl	: mediastring medianames_l optsemicolon
+		;
+
+mediastring	: STRING {
+			const struct got_error *err;
+			char *slash, *type, *subtype;
+
+			slash = strchr($1, '/');
+			if (slash == NULL) {
+				yyerror("%s: malformed media type", $1);
+				free($1);
+				YYERROR;
+			}
+
+
+			type = $1;
+			*slash = '\0';
+			subtype = &slash[1];
+
+			err = gotsys_conf_validate_mediatype(type);
+			if (err) {
+				yyerror("%s: %s", $1, err->msg);
+				free($1);
+				YYERROR;
+			}
+
+			err = gotsys_conf_validate_mediatype(subtype);
+			if (err) {
+				yyerror("%s: %s", $1, err->msg);
+				free($1);
+				YYERROR;
+			}
+
+			if (strlcpy(media.media_type, type,
+			    sizeof(media.media_type)) >=
+			    sizeof(media.media_type) ||
+			    strlcpy(media.media_subtype, subtype,
+			    sizeof(media.media_subtype)) >=
+			    sizeof(media.media_subtype)) {
+				yyerror("%s: media type too long", $1);
+				free($1);
+				YYERROR;
+			}
+			free($1);
+		}
+		;
+
+medianames_l	: medianames_l medianamesl
+		| medianamesl
+		;
+
+medianamesl	: numberstring {
+			const struct got_error *err;
+
+			err = gotsys_conf_validate_mediatype($1);
+			if (err) {
+				yyerror("%s: %s", $1, err->msg);
+				free($1);
+				YYERROR;
+			}
+
+			if (strlcpy(media.media_name, $1,
+			    sizeof(media.media_name)) >=
+			    sizeof(media.media_name)) {
+				yyerror("%s: media name too long", $1);
+				free($1);
+				YYERROR;
+			}
+			free($1);
+
+			if (media_add(new_mediatypes, &media) == NULL) {
+				yyerror("%s/%s %s: failed to add media type",
+				    media.media_type, media.media_subtype,
+				    media.media_name);
+				YYERROR;
+			}
+		}
 		;
 
 nl		: '\n' optnl
 		;
 
-optnl		: '\n' optnl		/* zero or more newlines */
+optsemicolon	: ';'
 		| /* empty */
 		;
 
+optnl		: '\n' optnl		/* zero or more newlines */
+		| /* empty */
+		;
 %%
 
 struct keywords {
@@ -611,31 +1245,48 @@ lookup(char *s)
 {
 	/* This has to be sorted always. */
 	static const struct keywords keywords[] = {
+		{ "authentication",		AUTHENTICATION },
 		{ "authorized",			AUTHORIZED },
 		{ "branch",			BRANCH },
 		{ "deny",			DENY },
+		{ "description",		DESCRIPTION },
+		{ "disable",			DISABLE },
 		{ "email",			EMAIL },
+		{ "enable",			ENABLE },
 		{ "from",			FROM },
 		{ "group",			GROUP },
 		{ "head",			HEAD },
+		{ "hide",			HIDE },
 		{ "hmac",			HMAC },
 		{ "insecure",			INSECURE },
 		{ "key",			KEY },
+		{ "logo",			LOGO },
+		{ "media",			MEDIA },
 		{ "namespace",			NAMESPACE },
 		{ "notify",			NOTIFY },
+		{ "owner",			OWNER },
 		{ "password",			PASSWORD },
+		{ "path",			PATH },
 		{ "permit",			PERMIT },
 		{ "port",			PORT },
 		{ "protect",			PROTECT },
 		{ "reference",			REFERENCE },
 		{ "reply",			REPLY },
+		{ "repositories",		REPOSITORIES },
 		{ "repository",			REPOSITORY },
 		{ "ro",				RO },
 		{ "rw",				RW },
+		{ "server",			SERVER },
+		{ "site",			SITE },
+		{ "stylesheet",			STYLESHEET },
 		{ "tag",			TAG },
 		{ "to",				TO },
+		{ "types",			TYPES },
 		{ "url",			URL },
 		{ "user",			USER },
+		{ "web",			WEB },
+		{ "website",			WEBSITE },
+
 	};
 	const struct keywords *p;
 
@@ -902,6 +1553,7 @@ gotsys_conf_parse(const char *filename, struct gotsys_conf *pgotsysconf,
 	struct gotsys_user *user;
 	struct gotsys_repo *repo;
 	struct gotsys_access_rule *rule;
+	struct gotsys_webserver *srv;
 
 	gotsysconf = pgotsysconf;
 
@@ -966,6 +1618,62 @@ gotsys_conf_parse(const char *filename, struct gotsys_conf *pgotsysconf,
 		return got_error_fmt(GOT_ERR_PARSE_CONFIG,
 		    "at least one user must have write access to "
 		    "repository %s.git", GOTSYS_SYSTEM_REPOSITORY_NAME);
+	}
+
+	STAILQ_FOREACH(srv, &gotsysconf->webservers, entry) {
+		struct gotsys_webrepo *webrepo;
+		struct gotsys_repo *repo;
+		struct got_pathlist_entry *pe;
+
+		STAILQ_FOREACH(webrepo, &srv->repos, entry) {
+			if (webrepo->auth_config == GOTSYS_AUTH_UNSET &&
+			    srv->auth_config != GOTSYS_AUTH_UNSET)
+				webrepo->auth_config = srv->auth_config;
+
+			if (webrepo->hidden == -1 &&
+			    srv->hide_repositories != -1)
+				webrepo->hidden = srv->hide_repositories;
+
+			TAILQ_FOREACH(repo, &gotsysconf->repos, entry) {
+				if (strcmp(repo->name, webrepo->repo_name) == 0)
+					break;
+			}
+			if (repo == NULL) {
+				return got_error_fmt(GOT_ERR_PARSE_CONFIG,
+				    "unknown repository '%s' used on "
+				    "web server '%s'",
+				    webrepo->repo_name, srv->server_name);
+			}
+		}
+
+		RB_FOREACH(pe, got_pathlist_head, &srv->websites) {
+			struct gotsys_website *site = pe->data;
+
+			if (site->auth_config == GOTSYS_AUTH_UNSET &&
+			    srv->auth_config != GOTSYS_AUTH_UNSET)
+				site->auth_config = srv->auth_config;
+
+			TAILQ_FOREACH(repo, &gotsysconf->repos, entry) {
+				if (site->repo_name[0] == '\0') {
+					return got_error_fmt(
+					    GOT_ERR_PARSE_CONFIG, "no "
+					    "repository defined for website "
+					    "'%s' on server %s", pe->path,
+					    srv->server_name);
+				}
+
+				if (strcmp(repo->name, site->repo_name) == 0)
+					break;
+			}
+
+			if (repo == NULL) {
+				return got_error_fmt(GOT_ERR_PARSE_CONFIG,
+				    "unknown repository '%s' used for "
+				    "website '%s' on server '%s'",
+				    site->repo_name, pe->path,
+				    srv->server_name);
+			}
+		}
 	}
 
 	return NULL;
@@ -1065,6 +1773,18 @@ gotsys_ref_name_is_valid(char *refname)
 }
 
 static int
+branch_name_is_valid(char *refname)
+{
+	if (!got_ref_name_is_valid(refname) ||
+	    !gotsys_ref_name_is_valid(refname)) {
+		yyerror("invalid reference name: %s", refname);
+		return 0;
+	}
+
+	return 1;
+}
+
+static int
 refname_is_valid(char *refname)
 {
 	if (strncmp(refname, "refs/", 5) != 0) {
@@ -1073,13 +1793,7 @@ refname_is_valid(char *refname)
 		return 0;
 	}
 
-	if (!got_ref_name_is_valid(refname) ||
-	    !gotsys_ref_name_is_valid(refname)) {
-		yyerror("invalid reference name: %s", refname);
-		return 0;
-	}
-
-	return 1;
+	return branch_name_is_valid(refname);
 }
 
 static int
@@ -1401,190 +2115,6 @@ free_target:
 	return -1;
 }
 
-static inline int
-should_urlencode(int c)
-{
-	if (c <= ' ' || c >= 127)
-		return 1;
-
-	switch (c) {
-		/* gen-delim */
-	case ':':
-	case '/':
-	case '?':
-	case '#':
-	case '[':
-	case ']':
-	case '@':
-		/* sub-delims */
-	case '!':
-	case '$':
-	case '&':
-	case '\'':
-	case '(':
-	case ')':
-	case '*':
-	case '+':
-	case ',':
-	case ';':
-	case '=':
-		/* needed because the URLs are embedded into gotd.conf */
-	case '\"':
-		return 1;
-	default:
-		return 0;
-	}
-}
-
-static char *
-urlencode(const char *str)
-{
-	const char *s;
-	char *escaped;
-	size_t i, len;
-	int a, b;
-
-	len = 0;
-	for (s = str; *s; ++s) {
-		len++;
-		if (len == 1 && *s == '/')
-			continue;
-		if (should_urlencode(*s))
-			len += 2;
-	}
-
-	escaped = calloc(1, len + 1);
-	if (escaped == NULL)
-		return NULL;
-
-	i = 0;
-	for (s = str; *s; ++s) {
-		if (i == 0 && *s == '/') {
-			escaped[i++] = *s;
-			continue;
-		}
-		if (should_urlencode(*s)) {
-			a = (*s & 0xF0) >> 4;
-			b = (*s & 0x0F);
-
-			escaped[i++] = '%';
-			escaped[i++] = a <= 9 ? ('0' + a) : ('7' + a);
-			escaped[i++] = b <= 9 ? ('0' + b) : ('7' + b);
-		} else
-			escaped[i++] = *s;
-	}
-
-	return escaped;
-}
-
-static const struct got_error *
-parse_url(char **proto, char **host, char **port,
-    char **request_path, const char *url)
-{
-	const struct got_error *err = NULL;
-	char *s, *p, *q;
-	size_t i, host_len;
-
-	*proto = *host = *port = *request_path = NULL;
-
-	p = strstr(url, "://");
-	if (!p) {
-		return got_error_msg(GOT_ERR_PARSE_URI,
-		    "no protocol specified");
-	}
-
-	*proto = strndup(url, p - url);
-	if (*proto == NULL) {
-		err = got_error_from_errno("strndup");
-		goto done;
-	}
-	s = p + 3;
-
-	p = strstr(s, "/");
-	if (p == NULL)
-		p = strchr(s, '\0');
-
-	q = memchr(s, ':', p - s);
-	if (q) {
-		*host = strndup(s, q - s);
-		if (*host == NULL) {
-			err = got_error_from_errno("strndup");
-			goto done;
-		}
-		if ((*host)[0] == '\0') {
-			err = got_error(GOT_ERR_PARSE_URI);
-			goto done;
-		}
-		*port = strndup(q + 1, p - (q + 1));
-		if (*port == NULL) {
-			err = got_error_from_errno("strndup");
-			goto done;
-		}
-		if ((*port)[0] == '\0') {
-			err = got_error(GOT_ERR_PARSE_URI);
-			goto done;
-		}
-		if (strcmp(*port, "http") != 0 &&
-		    strcmp(*port, "https") != 0) {
-			const char *errstr;
-
-			(void)strtonum(*port, 1, USHRT_MAX, &errstr);
-			if (errstr != NULL) {
-				err = got_error_fmt(GOT_ERR_PARSE_URI,
-				    "port number '%s' is %s", *port, errstr);
-				goto done;
-			}
-		}
-	} else {
-		*host = strndup(s, p - s);
-		if (*host == NULL) {
-			err = got_error_from_errno("strndup");
-			goto done;
-		}
-		if ((*host)[0] == '\0') {
-			err = got_error_msg(GOT_ERR_PARSE_URI,
-			    "hostname cannot be empty");
-			goto done;
-		}
-	}
-
-	host_len = strlen(*host);
-	for (i = 0; i < host_len; i++) {
-		if (isalnum((unsigned char)(*host)[i]) ||
-		    (*host)[i] == '.' || (*host)[i] == '-')
-			continue;
-		err = got_error_fmt(GOT_ERR_PARSE_URI,
-		    "invalid hostname: %s", *host);
-		goto done;
-
-	}
-
-	while (p[0] == '/' && p[1] == '/')
-		p++;
-	if (p[0] == '\0') {
-		*request_path = strdup("/");
-		if (*request_path == NULL) {
-			err = got_error_from_errno("strdup");
-		}
-	} else {
-		*request_path = urlencode(p);
-		if (*request_path == NULL)
-			err = got_error_from_errno("calloc");
-	}
-done:
-	if (err) {
-		free(*proto);
-		*proto = NULL;
-		free(*host);
-		*host = NULL;
-		free(*port);
-		*port = NULL;
-		free(*request_path);
-		*request_path = NULL;
-	}
-	return err;
-}
-
 static int
 basic_auth_user_is_valid(const char *s)
 {
@@ -1656,7 +2186,7 @@ conf_notify_http(struct gotsys_repo *repo, char *url, char *user,
 	char *proto, *hostname, *port, *path;
 	int tls = 0, ret = -1;
 
-	error = parse_url(&proto, &hostname, &port, &path, url);
+	error = gotsys_conf_parse_url(&proto, &hostname, &port, &path, url);
 	if (error) {
 		yyerror("invalid HTTP notification URL '%s' in "
 		    "repository '%s': %s", url, repo->name, error->msg);
@@ -1670,6 +2200,10 @@ conf_notify_http(struct gotsys_repo *repo, char *url, char *user,
 		    "repository '%s", proto, url, repo->name);
 		goto done;
 	}
+
+	error = gotsys_conf_validate_hostname(hostname);
+	if (error)
+		goto done;
 
 	if (port == NULL) {
 		if (strcmp(proto, "http") == 0)
