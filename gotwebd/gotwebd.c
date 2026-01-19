@@ -19,7 +19,6 @@
 
 #include <sys/param.h>
 #include <sys/queue.h>
-#include <sys/tree.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
@@ -616,8 +615,13 @@ control_socket_listen(struct gotwebd *env, struct socket *sock,
 {
 	int u_fd = -1;
 	mode_t old_umask, mode;
+	int sock_flags = SOCK_STREAM | SOCK_NONBLOCK;
 
-	u_fd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK| SOCK_CLOEXEC, 0);
+#ifdef SOCK_CLOEXEC
+	sock_flags |= SOCK_CLOEXEC;
+#endif
+
+	u_fd = socket(AF_UNIX, sock_flags, 0);
 	if (u_fd == -1) {
 		log_warn("socket");
 		return -1;
@@ -795,8 +799,12 @@ control_accept(int fd, short event, void *arg)
 
 	len = sizeof(ss);
 
+#ifdef __APPLE__
+	s = accept(fd, (struct sockaddr *)&ss, &len);
+#else
 	s = accept4(fd, (struct sockaddr *)&ss, &len, 
 	    SOCK_NONBLOCK | SOCK_CLOEXEC);
+#endif
 	if (s == -1) {
 		switch (errno) {
 		case EINTR:

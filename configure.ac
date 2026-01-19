@@ -929,6 +929,7 @@ AC_CONFIG_FILES([Makefile
 		 gotd/libexec/got-notify-email/Makefile
 		 gotd/libexec/got-notify-http/Makefile
 		 gotsh/Makefile
+		 gotwebctl/Makefile
 		 gotwebd/Makefile
 		 libexec/Makefile
 		 libexec/got-fetch-http/Makefile

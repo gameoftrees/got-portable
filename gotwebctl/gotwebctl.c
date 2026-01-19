@@ -14,8 +14,9 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include "got_compat.h"
+
 #include <sys/queue.h>
-#include <sys/tree.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/stat.h>
@@ -27,8 +28,6 @@
 #include <imsg.h>
 #include <limits.h>
 #include <locale.h>
-#include <sha1.h>
-#include <sha2.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>

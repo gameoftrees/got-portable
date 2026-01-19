@@ -11,6 +11,7 @@ SUBDIRS = compat \
 	  gotctl \
 	  gotd \
 	  gotsh \
+	  gotwebctl \
 	  gotwebd \
 	  libexec \
 	  template \
