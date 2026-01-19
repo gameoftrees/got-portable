@@ -1763,7 +1763,7 @@ conf_notify_http(struct gotsys_repo *repo, char *url, char *user,
  	}
 
 	if (hmac_secret) {
-		if (hmac_secret[9] == '\0') {
+		if (hmac_secret[0] == '\0') {
 			yyerror("hmac secrets cannot be empty");
 			goto done;
 		}
