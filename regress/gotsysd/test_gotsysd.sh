@@ -1720,6 +1720,7 @@ test_override_access_rules() {
 	local testroot=`test_init override_access_rules 1`
 
 	# Override gotsys.conf access rules which deny access to foo.git.
+	ssh -q -i ${GOTSYSD_SSH_KEY} root@${VMIP} 'cp /etc/gotsysd.conf /etc/gotsysd.conf.orig'
 	echo "repository permit ro ${GOTSYSD_DEV_USER}" | \
 		ssh -q -i ${GOTSYSD_SSH_KEY} root@${VMIP} \
 		'cat >> /etc/gotsysd.conf'
@@ -1813,6 +1814,17 @@ EOF
 		test_done "$testroot" "$ret"
 		return 1
 	fi
+
+	# Undo gotsys.conf override
+	ssh -q -i ${GOTSYSD_SSH_KEY} root@${VMIP} 'mv -f /etc/gotsysd.conf.orig /etc/gotsysd.conf'
+
+	# Restart gotsysd (XXX need a better way to do this...)
+	ssh -q -i ${GOTSYSD_SSH_KEY} root@${VMIP} 'pkill -xf /usr/local/sbin/gotsysd'
+	sleep 1
+	ssh -q -i ${GOTSYSD_SSH_KEY} root@${VMIP} '/usr/local/sbin/gotsysd -vvv'
+	sleep 1
+	ssh -q -i ${GOTSYSD_SSH_KEY} root@${VMIP} 'gotsys apply -w' > /dev/null
+
 	test_done "$testroot" "$ret"
 }
 
@@ -1820,6 +1832,7 @@ test_override_all_user_access() {
 	local testroot=`test_init override_all_user_access 1`
 
 	# Override gotsys.conf access rules which deny access to foo.git.
+	ssh -q -i ${GOTSYSD_SSH_KEY} root@${VMIP} 'cp /etc/gotsysd.conf /etc/gotsysd.conf.orig'
 	echo 'repository deny "*"' | \
 		ssh -q -i ${GOTSYSD_SSH_KEY} root@${VMIP} \
 		'cat >> /etc/gotsysd.conf'
@@ -1882,7 +1895,7 @@ test_override_all_user_access() {
 	done
 
 	# Undo gotsys.conf override
-	ssh -q -i ${GOTSYSD_SSH_KEY} root@${VMIP} 'rm -f /etc/gotsysd.conf'
+	ssh -q -i ${GOTSYSD_SSH_KEY} root@${VMIP} 'mv -f /etc/gotsysd.conf.orig /etc/gotsysd.conf'
 
 	# Restart gotsysd (XXX need a better way to do this...)
 	ssh -q -i ${GOTSYSD_SSH_KEY} root@${VMIP} 'pkill -xf /usr/local/sbin/gotsysd'
