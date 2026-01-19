@@ -39,11 +39,15 @@
 #include "got_reference.h"
 
 #include "gotsysd.h"
+#include "media.h"
+#include "gotwebd.h"
 #include "gotsys.h"
 
+static struct gotsysd_web_config webcfg;
 static struct gotsys_conf gotsysconf;
 static struct gotsys_userlist *users_cur;
 static struct gotsys_repo *repo_cur;
+static struct gotsys_website *site_cur;
 static struct got_pathlist_head *protected_refs_cur;
 static size_t nprotected_refs_needed;
 static size_t nprotected_refs_received;
@@ -51,6 +55,8 @@ static int gotd_conf_tmpfd = -1;
 static char *gotd_conf_tmppath;
 static int gotd_secrets_tmpfd = -1;
 static char *gotd_secrets_tmppath;
+static int gotwebd_conf_tmpfd = -1;
+static char *gotwebd_conf_tmppath;
 static struct gotsys_access_rule_list global_repo_access_rules;
 static struct got_pathlist_head *notif_refs_cur;
 static size_t *num_notif_refs_cur;
@@ -58,14 +64,20 @@ static size_t num_notif_refs_needed;
 static size_t num_notif_refs_received;
 
 enum writeconf_state {
+	WRITECONF_STATE_EXPECT_GOTWEB_CFG,
+	WRITECONF_STATE_EXPECT_GOTWEB_ADDRS,
+	WRITECONF_STATE_EXPECT_GOTWEB_SERVERS,
 	WRITECONF_STATE_EXPECT_USERS,
 	WRITECONF_STATE_EXPECT_GROUPS,
+	WRITECONF_STATE_EXPECT_GLOBAL_ACCESS_RULES,
 	WRITECONF_STATE_EXPECT_REPOS,
+	WRITECONF_STATE_EXPECT_MEDIA_TYPES,
+	WRITECONF_STATE_EXPECT_WEB_SERVERS,
 	WRITECONF_STATE_WRITE_CONF,
 	WRITECONF_STATE_DONE
 };
 
-static enum writeconf_state writeconf_state = WRITECONF_STATE_EXPECT_USERS;
+static enum writeconf_state writeconf_state = WRITECONF_STATE_EXPECT_GOTWEB_CFG;
 
 static void
 sighdlr(int sig, short event, void *arg)
@@ -103,19 +115,98 @@ send_done(struct gotsysd_imsgev *iev)
 }
 
 static const struct got_error *
-write_access_rule(const char *access, const char * authorization,
-    const char *identifier)
+write_access_rule(int fd, const char *path, const char *prefix,
+    const char *access, const char * authorization, const char *identifier)
 {
 	int ret;
 
-	ret = dprintf(gotd_conf_tmpfd, "\t%s%s%s\n",
-	    access, authorization, identifier);
+	ret = dprintf(fd, "%s%s%s%s\n", prefix, access, authorization,
+	    identifier);
 	if (ret == -1)
-		return got_error_from_errno2("dprintf", gotd_conf_tmppath);
-	if (ret != 1 + strlen(access) + strlen(authorization) +
+		return got_error_from_errno2("dprintf", path);
+	if (ret != strlen(prefix) + strlen(access) + strlen(authorization) +
 	    strlen(identifier) + 1) {
 		return got_error_fmt(GOT_ERR_IO,
-		    "short write to %s", gotd_conf_tmppath);
+		    "short write to %s", path);
+	}
+
+	return NULL;
+}
+
+static const struct got_error *
+write_gotsys_auth_config(int fd, const char *path,
+    const char *prefix, enum gotsys_auth_config auth_config,
+    enum gotsysd_web_auth_config webd_auth_config)
+{
+	int ret;
+
+	switch (auth_config) {
+	case GOTSYS_AUTH_UNSET:
+		break;
+	case GOTSYS_AUTH_DISABLED:
+		ret = dprintf(fd, "%sdisable authentication\n", prefix);
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		if (ret != strlen(prefix) + 22 + 1) {
+			return got_error_fmt(GOT_ERR_IO,
+			"short write to %s", path);
+		}
+		break;
+	case GOTSYS_AUTH_ENABLED:
+		if (webd_auth_config == GOTSYSD_WEB_AUTH_INSECURE) {
+			ret = dprintf(fd,
+			    "%senable authentication insecure\n", prefix);
+			if (ret == -1) 
+				return got_error_from_errno2("dprintf", path);
+			if (ret != strlen(prefix) + 30 + 1) {
+				return got_error_fmt(GOT_ERR_IO,
+				"short write to %s", path);
+			}
+		} else {
+			ret = dprintf(fd, "%senable authentication\n", prefix);
+			if (ret == -1) 
+				return got_error_from_errno2("dprintf", path);
+			if (ret != strlen(prefix) + 21 + 1) {
+				return got_error_fmt(GOT_ERR_IO,
+				"short write to %s", path);
+			}
+		}
+		break;
+	default:
+		return got_error_fmt(GOT_ERR_PARSE_CONFIG,
+		    "bad gotsysd web authentication mode %u", auth_config);
+	}
+
+	return NULL;
+}
+
+static const struct got_error *
+write_gotsysd_web_auth_config(int fd, const char *path,
+    enum gotsysd_web_auth_config auth_config)
+{
+	int ret;
+
+	switch (auth_config) {
+	case GOTSYSD_WEB_AUTH_UNSET:
+		break;
+	case GOTSYSD_WEB_AUTH_DISABLED:
+		ret = dprintf(fd, "\tdisable authentication\n");
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		break;
+	case GOTSYSD_WEB_AUTH_SECURE:
+		ret = dprintf(fd, "\tenable authentication\n");
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		break;
+	case GOTSYSD_WEB_AUTH_INSECURE:
+		ret = dprintf(fd, "\tenable authentication insecure\n");
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		break;
+	default:
+		return got_error_fmt(GOT_ERR_PARSE_CONFIG,
+		    "bad gotsysd web authentication mode %u", auth_config);
 	}
 
 	return NULL;
@@ -161,13 +252,15 @@ write_global_access_rules(void)
 				if (rule->access == GOTSYS_ACCESS_PERMITTED &&
 				    strcmp(user->name, "anonymous") == 0)
 					continue;
-				err = write_access_rule(access, authorization,
-				    user->name);
+				err = write_access_rule(gotd_conf_tmpfd,
+				    gotd_conf_tmppath, "\t",
+				    access, authorization, user->name);
 				if (err)
 					return err;
 			}
 		} else {
-			err = write_access_rule(access, authorization,
+			err = write_access_rule(gotd_conf_tmpfd,
+			    gotd_conf_tmppath, "\t", access, authorization,
 			    rule->identifier);
 			if (err)
 				return err;
@@ -178,7 +271,8 @@ write_global_access_rules(void)
 }
 
 static const struct got_error *
-write_access_rules(struct gotsys_access_rule_list *rules)
+write_access_rules(int fd, const char *path,
+    struct gotsys_access_rule_list *rules)
 {
 	const struct got_error *err;
 	struct gotsys_access_rule *rule;
@@ -206,9 +300,40 @@ write_access_rules(struct gotsys_access_rule_list *rules)
 		else
 			authorization = "";
 
-		err = write_access_rule(access, authorization,
-		    rule->identifier);
+		err = write_access_rule(fd, path, "\t",
+		    access, authorization, rule->identifier);
 		if (err)
+			return err;
+	}
+
+	return NULL;
+}
+
+static const struct got_error *
+write_web_access_rules(int fd, const char *path,
+    const char *prefix, struct gotsys_access_rule_list *rules)
+{
+	const struct got_error *err;
+	struct gotsys_access_rule *rule;
+
+	STAILQ_FOREACH(rule, rules, entry) {
+		const char *access;
+
+		switch (rule->access) {
+		case GOTSYS_ACCESS_DENIED:
+			access = "deny ";
+			break;
+		case GOTSYS_ACCESS_PERMITTED:
+			access = "permit ";
+			break;
+		default:
+			return got_error_fmt(GOT_ERR_PARSE_CONFIG,
+			    "access rule with unknown access flag %d",
+			    rule->access);
+		}
+
+		err = write_access_rule(fd, path, prefix, access, "",
+		    rule->identifier); if (err)
 			return err;
 	}
 
@@ -743,7 +868,8 @@ write_gotd_conf(int *auth_idx)
 			    "short write to %s", gotd_conf_tmppath);
 		}
 
-		err = write_access_rules(&repo->access_rules);
+		err = write_access_rules(gotd_conf_tmpfd, gotd_conf_tmppath,
+		    &repo->access_rules);
 		if (err)
 			return err;
 
@@ -799,6 +925,502 @@ write_gotd_conf(int *auth_idx)
 	return NULL;
 }
 
+static const struct got_error *
+write_webrepo(int *show_repo_description, int fd, const char *path,
+    struct gotsys_webrepo *webrepo,
+    enum gotsysd_web_auth_config webd_auth_config)
+{
+	const struct got_error *err;
+	struct gotsys_repo *repo;
+	int ret;
+
+	TAILQ_FOREACH(repo, &gotsysconf.repos, entry) {
+		if (strcmp(repo->name, webrepo->repo_name) == 0)
+			break;
+	}
+
+	ret = dprintf(fd, "\trepository \"%s\" {\n", webrepo->repo_name);
+	if (ret == -1) 
+		return got_error_from_errno2("dprintf", path);
+	if (ret != 16 + strlen(webrepo->repo_name) + 1)
+		return got_error_fmt(GOT_ERR_IO, "short write to %s", path);
+
+	err = write_gotsys_auth_config(fd, path, "\t\t", webrepo->auth_config,
+	    webd_auth_config);
+	if (err)
+		return err;
+
+	err = write_web_access_rules(fd, path, "\t\t", &webrepo->access_rules);
+	if (err)
+		return err;
+
+	if (webrepo->hidden != -1) {
+		const char *val;
+
+		val = webrepo->hidden ? "on" : "off";
+		ret = dprintf(fd, "\t\thide repository %s\n", val);
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		if (ret != 18 + strlen(val) + 1) {
+			return got_error_fmt(GOT_ERR_IO,
+			    "short write to %s", path);
+		}
+	}
+
+	if (repo && repo->description[0] != '\0') {
+		ret = dprintf(fd, "\t\tdescription \"%s\"\n", repo->description);
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		if (ret != 16 + strlen(repo->description) + 1) {
+			return got_error_fmt(GOT_ERR_IO,
+			    "short write to %s", path);
+		}
+
+		*show_repo_description = 1;
+	}
+
+	ret = dprintf(fd, "\t}\n");
+	if (ret == -1) 
+		return got_error_from_errno2("dprintf", path);
+	if (ret != 3)
+		return got_error_fmt(GOT_ERR_IO, "short write to %s", path);
+
+	return NULL;
+}
+
+static const struct got_error *
+write_website(int fd, const char *path, struct gotsys_website *site,
+    enum gotsysd_web_auth_config webd_auth_config)
+{
+	const struct got_error *err;
+	int ret;
+
+	ret = dprintf(fd, "\twebsite \"%s\" {\n", site->url_path);
+	if (ret == -1) 
+		return got_error_from_errno2("dprintf", path);
+	if (ret != 13 + strlen(site->url_path) + 1)
+		return got_error_fmt(GOT_ERR_IO, "short write to %s", path);
+
+	ret = dprintf(fd, "\t\trepository \"%s\"\n", site->repo_name);
+	if (ret == -1) 
+		return got_error_from_errno2("dprintf", path);
+	if (ret != 15 + strlen(site->repo_name) + 1)
+		return got_error_fmt(GOT_ERR_IO, "short write to %s", path);
+
+	if (site->branch_name[0] != '\0') {
+		ret = dprintf(fd, "\t\tbranch \"%s\"\n", site->branch_name);
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		if (ret != 11 + strlen(site->branch_name) + 1) {
+			return got_error_fmt(GOT_ERR_IO,
+			    "short write to %s", path);
+		}
+	}
+
+	ret = dprintf(fd, "\t\tpath \"%s\"\n", site->path[0] ? site->path : "/");
+	if (ret == -1) 
+		return got_error_from_errno2("dprintf", path);
+	if (ret != 9 + (site->path[0] ? strlen(site->path) : 1) + 1)
+		return got_error_fmt(GOT_ERR_IO, "short write to %s", path);
+
+	err = write_gotsys_auth_config(fd, path, "\t\t", site->auth_config,
+	    webd_auth_config);
+	if (err)
+		return err;
+
+	err = write_web_access_rules(fd, path, "\t\t", &site->access_rules);
+	if (err)
+		return err;
+
+	ret = dprintf(fd, "\t}\n");
+	if (ret == -1) 
+		return got_error_from_errno2("dprintf", path);
+	if (ret != 3)
+		return got_error_fmt(GOT_ERR_IO, "short write to %s", path);
+
+	return NULL;
+}
+
+static const struct got_error *
+write_gotwebd_conf(void)
+{
+	const struct got_error *err = NULL;
+	int ret, fd = gotwebd_conf_tmpfd;
+	const char *path = gotwebd_conf_tmppath;
+	struct gotsysd_web_address *addr;
+	struct gotsysd_web_server *srv_cfg;
+
+	err = got_opentemp_truncatefd(fd);
+	if (err)
+		return err;
+
+	/* TODO: show gotsys.git commit hash */
+	ret = dprintf(fd, "# generated by gotsysd, do not edit\n");
+	if (ret == -1)
+		return got_error_from_errno2("dprintf", path);
+	if (ret != 35 + 1)
+		return got_error_fmt(GOT_ERR_IO, "short write to %s", path);
+
+	if (webcfg.control_socket[0] != '\0') {
+		ret = dprintf(fd, "control socket \"%s\"\n",
+		    webcfg.control_socket);
+		if (ret == -1)
+			return got_error_from_errno2("dprintf", path);
+		if (ret != 17 + strlen(webcfg.control_socket) + 1) {
+			return got_error_fmt(GOT_ERR_IO, "short write to %s",
+			    path);
+		}
+	}
+
+	if (webcfg.httpd_chroot[0] != '\0') {
+		ret = dprintf(fd, "chroot \"%s\"\n", webcfg.httpd_chroot);
+		if (ret == -1)
+			return got_error_from_errno2("dprintf", path);
+		if (ret != 9 + strlen(webcfg.httpd_chroot) + 1) {
+			return got_error_fmt(GOT_ERR_IO, "short write to %s",
+			    path);
+		}
+	}
+
+	if (webcfg.htdocs_path[0] != '\0') {
+		ret = dprintf(fd, "htdocs \"%s\"\n", webcfg.htdocs_path);
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		if (ret != 9 + strlen(webcfg.htdocs_path) + 1) {
+			return got_error_fmt(GOT_ERR_IO, "short write to %s",
+			    path);
+		}
+	}
+
+	if (webcfg.gotwebd_user[0] != '\0') {
+		ret = dprintf(fd, "user \"%s\"\n", webcfg.gotwebd_user);
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		if (ret != 7 + strlen(webcfg.gotwebd_user) + 1) {
+			return got_error_fmt(GOT_ERR_IO, "short write to %s",
+			    path);
+		}
+	}
+
+	if (webcfg.www_user[0] != '\0') {
+		ret = dprintf(fd, "www user \"%s\"\n", webcfg.www_user);
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		if (ret != 11 + strlen(webcfg.www_user) + 1) {
+			return got_error_fmt(GOT_ERR_IO, "short write to %s",
+			    path);
+		}
+	}
+
+	if (webcfg.login_hint_user[0] != '\0') {
+		ret = dprintf(fd, "login hint user \"%s\"\n",
+		    webcfg.login_hint_user);
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		if (ret != 18 + strlen(webcfg.login_hint_user) + 1) {
+			return got_error_fmt(GOT_ERR_IO, "short write to %s",
+			    path);
+		}
+	}
+
+	if (webcfg.login_hint_port[0] != '\0') {
+		ret = dprintf(fd, "login hint port \"%s\"\n",
+		    webcfg.login_hint_port);
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		if (ret != 18 + strlen(webcfg.login_hint_port) + 1) {
+			return got_error_fmt(GOT_ERR_IO, "short write to %s",
+			    path);
+		}
+	}
+
+	switch (webcfg.auth_config) {
+	case GOTSYSD_WEB_AUTH_UNSET:
+		break;
+	case GOTSYSD_WEB_AUTH_DISABLED:
+		ret = dprintf(fd, "disable authentication\n");
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		if (ret != 22 + 1) {
+			return got_error_fmt(GOT_ERR_IO, "short write to %s",
+			    path);
+		}
+		break;
+	case GOTSYSD_WEB_AUTH_SECURE:
+		ret = dprintf(fd, "enable authentication\n");
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		if (ret != 21 + 1) {
+			return got_error_fmt(GOT_ERR_IO, "short write to %s",
+			    path);
+		}
+		break;
+	case GOTSYSD_WEB_AUTH_INSECURE:
+		ret = dprintf(fd, "enable authentication insecure\n");
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		if (ret != 30 + 1) {
+			return got_error_fmt(GOT_ERR_IO, "short write to %s",
+			    path);
+		}
+		break;
+	default:
+		return got_error_fmt(GOT_ERR_PARSE_CONFIG,
+		    "bad global authentication mode %u", webcfg.auth_config);
+	}
+
+	TAILQ_FOREACH(addr, &webcfg.listen_addrs, entry) {
+		switch (addr->family) {
+		case GOTSYSD_LISTEN_ADDR_UNIX:
+			ret = dprintf(fd, "listen on socket \"%s\"\n",
+			    addr->addr.unix_socket_path);
+			if (ret == -1) 
+				return got_error_from_errno2("dprintf", path);
+			if (ret != 19 +
+			    strlen(addr->addr.unix_socket_path) + 1) {
+				return got_error_fmt(GOT_ERR_IO,
+				    "short write to %s", path);
+			}
+			break;
+		case GOTSYSD_LISTEN_ADDR_INET:
+			ret = dprintf(fd, "listen on \"%s\" port \"%s\"\n",
+			    addr->addr.inet.address, addr->addr.inet.port);
+			if (ret == -1) 
+				return got_error_from_errno2("dprintf", path);
+			if (ret != 20 +
+			    strlen(addr->addr.inet.address) +
+			    strlen(addr->addr.inet.port) + 1) {
+				return got_error_fmt(GOT_ERR_IO,
+				    "short write to %s", path);
+			}
+			break;
+		default:
+			return got_error_fmt(GOT_ERR_PARSE_CONFIG,
+			    "bad listen address family %u", addr->family);
+		}
+	}
+
+	STAILQ_FOREACH(srv_cfg, &webcfg.servers, entry) {
+		struct gotsys_webserver *srv;
+		int hide_repositories = -1;
+
+		STAILQ_FOREACH(srv, &gotsysconf.webservers, entry) {
+			if (strcmp(srv->server_name, srv_cfg->server_name) == 0)
+				break;
+		}
+
+		ret = dprintf(fd, "server \"%s\" {\n", srv_cfg->server_name);
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		if (ret != 11 + strlen(srv_cfg->server_name) + 1) {
+			return got_error_fmt(GOT_ERR_IO,
+			    "short write to %s", path);
+		}
+
+		ret = dprintf(fd, "\trepos_path \"%s\"\n", webcfg.repos_path);
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		if (ret != 14 + strlen(webcfg.repos_path) + 1) {
+			return got_error_fmt(GOT_ERR_IO,
+			    "short write to %s", path);
+		}
+
+		if (srv_cfg->gotweb_url_root[0] != '\0') {
+			ret = dprintf(fd, "\tgotweb_url_root \"%s\"\n",
+			    srv_cfg->gotweb_url_root);
+			if (ret == -1) 
+				return got_error_from_errno2("dprintf", path);
+			if (ret != 19 + strlen(srv_cfg->gotweb_url_root) + 1) {
+				return got_error_fmt(GOT_ERR_IO,
+				    "short write to %s", path);
+			}
+		}
+
+		if (srv_cfg->htdocs_path[0] != '\0') {
+			ret = dprintf(fd, "\thtdocs \"%s\"\n",
+			    srv_cfg->htdocs_path);
+			if (ret == -1) 
+				return got_error_from_errno2("dprintf", path);
+			if (ret != 10 + strlen(srv_cfg->htdocs_path) + 1) {
+				return got_error_fmt(GOT_ERR_IO,
+				    "short write to %s", path);
+			}
+		}
+
+		if (srv && srv->auth_config != GOTSYS_AUTH_UNSET) {
+			err = write_gotsys_auth_config(fd, path, "\t",
+			    srv->auth_config, srv_cfg->auth_config);
+			if (err)
+				return err;
+		} else {
+			err = write_gotsysd_web_auth_config(fd, path,
+			    srv_cfg->auth_config);
+			if (err)
+				return err;
+		}
+
+		if (srv && srv->hide_repositories != -1)
+			hide_repositories = srv->hide_repositories;
+		else if (srv_cfg->hide_repositories != -1)
+			hide_repositories = srv_cfg->hide_repositories;
+
+		if (hide_repositories != -1) {
+			const char *val;
+
+			val = srv->hide_repositories ? "on" : "off";
+			ret = dprintf(fd, "\thide repositories %s\n", val);
+			if (ret == -1) 
+				return got_error_from_errno2("dprintf", path);
+			if (ret != 19 + strlen(val) + 1) {
+				return got_error_fmt(GOT_ERR_IO,
+				    "short write to %s", path);
+			}
+		}
+
+		if (srv) {
+			struct gotsys_webrepo *webrepo;
+			struct got_pathlist_entry *pe;
+			int show_repo_description = 0;
+
+			err = write_web_access_rules(fd, path, "\t",
+			    &srv->access_rules);
+			if (err)
+				return err;
+
+			/* TODO: css, logo, logo URL */
+
+			if (srv->site_owner[0] != '\0') {
+				ret = dprintf(fd, "\tsite_owner \"%s\"\n",
+				    srv->site_owner);
+				if (ret == -1) {
+					return got_error_from_errno2("dprintf",
+					    path);
+				}
+				if (ret != 14 + strlen(srv->site_owner) + 1) {
+					return got_error_fmt(GOT_ERR_IO,
+					    "short write to %s", path);
+				}
+			} else {
+				ret = dprintf(fd, "\tshow_site_owner off\n");
+				if (ret == -1)  {
+					return got_error_from_errno2("dprintf",
+					    path);
+				}
+				if (ret != 20 + 1) {
+					return got_error_fmt(GOT_ERR_IO,
+					    "short write to %s", path);
+				}
+			}
+
+			if (srv->repos_url_path[0] != '\0') {
+				ret = dprintf(fd, "\trepos_url_path \"%s\"\n",
+				    srv->repos_url_path);
+				if (ret == -1)  {
+					return got_error_from_errno2("dprintf",
+					    path);
+				}
+				if (ret != 18 +
+				    strlen(srv->repos_url_path) + 1) {
+					return got_error_fmt(GOT_ERR_IO,
+					    "short write to %s", path);
+				}
+			}
+
+			/* TODO mediatypes */
+
+			STAILQ_FOREACH(webrepo, &srv->repos, entry) {
+				err = write_webrepo(&show_repo_description,
+				    fd, path, webrepo, srv_cfg->auth_config);
+				if (err)
+					return err;
+			}
+			if (!show_repo_description) {
+				ret = dprintf(fd,
+				    "\tshow_repo_description off\n");
+				if (ret == -1)  {
+					return got_error_from_errno2("dprintf",
+					    path);
+				}
+				if (ret != 26 + 1) {
+					return got_error_fmt(GOT_ERR_IO,
+					    "short write to %s", path);
+				}
+			}
+
+			/*
+			 * Repository age and owner currently need to be off
+			 * to keep our regression tests passing: And these
+			 * options cannot be controlled via gotsys.conf yet.
+			 */
+			ret = dprintf(fd, "\tshow_repo_age off\n");
+			if (ret == -1) 
+				return got_error_from_errno2("dprintf", path);
+			if (ret != 18 + 1) {
+				return got_error_fmt(GOT_ERR_IO,
+				    "short write to %s", path);
+			}
+			ret = dprintf(fd, "\tshow_repo_owner off\n");
+			if (ret == -1) 
+				return got_error_from_errno2("dprintf", path);
+			if (ret != 20 + 1) {
+				return got_error_fmt(GOT_ERR_IO,
+				    "short write to %s", path);
+			}
+
+			RB_FOREACH(pe, got_pathlist_head, &srv->websites) {
+				struct gotsys_website *site = pe->data;
+
+				err = write_website(fd, path, site,
+				    srv_cfg->auth_config);
+				if (err)
+					return err;
+			}
+		}
+
+		ret = dprintf(fd, "}\n");
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		if (ret != 2) {
+			return got_error_fmt(GOT_ERR_IO, "short write to %s",
+			    path);
+		}
+	}
+
+	if (webcfg.prefork != 0 && webcfg.prefork <= PROC_MAX_INSTANCES) {
+		char buf[8];
+
+		ret = snprintf(buf, sizeof(buf), "%d", webcfg.prefork);
+		if (ret == -1) 
+			return got_error_from_errno2("snprintf", path);
+		if ((size_t)ret >= sizeof(buf))
+			return got_error(GOT_ERR_NO_SPACE);
+
+		ret = dprintf(fd, "prefork %s\n", buf);
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		if (ret != 8 + strlen(buf) + 1) {
+			return got_error_fmt(GOT_ERR_IO, "short write to %s",
+			    path);
+		}
+	}
+
+	if (fchmod(gotwebd_conf_tmpfd, 0644) == -1) {
+		return got_error_from_errno_fmt("chmod 0644 %s",
+		    gotwebd_conf_tmppath);
+	}
+		
+	if (rename(gotwebd_conf_tmppath, GOTWEBD_CONF) == -1) {
+		return got_error_from_errno_fmt("rename %s to %s",
+		    gotwebd_conf_tmppath, GOTWEBD_CONF);
+	}
+
+
+	free(gotwebd_conf_tmppath);
+	gotwebd_conf_tmppath = NULL;
+
+	return NULL;
+}
+
 static void
 dispatch_event(int fd, short event, void *arg)
 {
@@ -839,6 +1461,82 @@ dispatch_event(int fd, short event, void *arg)
 			break;
 
 		switch (imsg.hdr.type) {
+		case GOTSYSD_IMSG_SYSCONF_GOTWEB_CFG:
+			if (writeconf_state !=
+			    WRITECONF_STATE_EXPECT_GOTWEB_CFG) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+			err = gotsys_imsg_recv_web_cfg(&webcfg, &imsg);
+			if (err)
+				break;
+			writeconf_state = WRITECONF_STATE_EXPECT_GOTWEB_ADDRS;
+			break;
+		case GOTSYSD_IMSG_SYSCONF_GOTWEB_ADDR: {
+			struct gotsysd_web_address *addr;
+			const struct got_error *err;
+
+			if (writeconf_state !=
+			    WRITECONF_STATE_EXPECT_GOTWEB_ADDRS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+
+			err = gotsys_imsg_recv_webaddr(&addr, &imsg);
+			if (err)
+				break;
+			TAILQ_INSERT_TAIL(&webcfg.listen_addrs, addr, entry);
+			break;
+		}
+		case GOTSYSD_IMSG_SYSCONF_GOTWEB_ADDRS_DONE:
+			if (writeconf_state !=
+			    WRITECONF_STATE_EXPECT_GOTWEB_ADDRS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+			writeconf_state = WRITECONF_STATE_EXPECT_GOTWEB_SERVERS;
+			break;
+		case GOTSYSD_IMSG_SYSCONF_GOTWEB_SERVER: {
+			const struct got_error *err;
+			struct gotsysd_web_server *srv;
+
+			if (writeconf_state !=
+			    WRITECONF_STATE_EXPECT_GOTWEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+
+			err = gotsys_imsg_recv_gotweb_server(&srv, &imsg);
+			if (err)
+				break;
+			STAILQ_INSERT_TAIL(&webcfg.servers, srv, entry);
+			break;
+		}
+		case GOTSYSD_IMSG_SYSCONF_GOTWEB_SERVERS_DONE:
+			if (writeconf_state !=
+			    WRITECONF_STATE_EXPECT_GOTWEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+			break;
+		case GOTSYSD_IMSG_SYSCONF_GOTWEB_CFG_DONE:
+			writeconf_state = WRITECONF_STATE_EXPECT_USERS;
+			break;
 		case GOTSYSD_IMSG_SYSCONF_WRITE_CONF_USERS:
 			if (writeconf_state != WRITECONF_STATE_EXPECT_USERS) {
 				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
@@ -906,6 +1604,38 @@ dispatch_event(int fd, short event, void *arg)
 				    writeconf_state);
 				break;
 			}
+			writeconf_state =
+			    WRITECONF_STATE_EXPECT_GLOBAL_ACCESS_RULES;
+			break;
+		case GOTSYSD_IMSG_SYSCONF_GLOBAL_ACCESS_RULE: {
+			struct gotsys_access_rule_list *rules;
+			struct gotsys_access_rule *rule;
+
+			if (writeconf_state !=
+			    WRITECONF_STATE_EXPECT_GLOBAL_ACCESS_RULES) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+			err = gotsys_imsg_recv_access_rule(&rule, &imsg,
+			    NULL, NULL);
+			if (err)
+				break;
+			rules = &global_repo_access_rules;
+			STAILQ_INSERT_TAIL(rules, rule, entry);
+			break;
+		}
+		case GOTSYSD_IMSG_SYSCONF_GLOBAL_ACCESS_RULES_DONE:
+			if (writeconf_state !=
+			    WRITECONF_STATE_EXPECT_GLOBAL_ACCESS_RULES) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
 			writeconf_state = WRITECONF_STATE_EXPECT_REPOS;
 			break;
 		case GOTSYSD_IMSG_SYSCONF_REPO: {
@@ -923,34 +1653,9 @@ dispatch_event(int fd, short event, void *arg)
 				break;
 			TAILQ_INSERT_TAIL(&gotsysconf.repos, repo, entry);
 			repo_cur = repo;
+			site_cur = NULL;
 			break;
 		}
-		case GOTSYSD_IMSG_SYSCONF_GLOBAL_ACCESS_RULE: {
-			struct gotsys_access_rule *rule;
-			if (writeconf_state != WRITECONF_STATE_EXPECT_REPOS) {
-				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
-				    "received unexpected imsg %d while in "
-				    "state %d\n", imsg.hdr.type,
-				    writeconf_state);
-				break;
-			}
-			err = gotsys_imsg_recv_access_rule(&rule, &imsg,
-			    NULL, NULL);
-			if (err)
-				break;
-			STAILQ_INSERT_TAIL(&global_repo_access_rules, rule,
-			    entry);
-			break;
-		}
-		case GOTSYSD_IMSG_SYSCONF_GLOBAL_ACCESS_RULES_DONE:
-			if (writeconf_state != WRITECONF_STATE_EXPECT_REPOS) {
-				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
-				    "received unexpected imsg %d while in "
-				    "state %d\n", imsg.hdr.type,
-				    writeconf_state);
-				break;
-			}
-			break;
 		case GOTSYSD_IMSG_SYSCONF_ACCESS_RULE: {
 			struct gotsys_access_rule_list *rules;
 			struct gotsys_access_rule *rule;
@@ -1188,7 +1893,19 @@ dispatch_event(int fd, short event, void *arg)
 			break;
 		}
 		case GOTSYSD_IMSG_SYSCONF_NOTIFICATION_TARGETS_DONE:
-			break;
+			if (repo_cur == NULL ||
+			    num_notif_refs_needed != 0 ||
+			    writeconf_state != WRITECONF_STATE_EXPECT_REPOS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+
+			num_notif_refs_needed = 0;
+			notif_refs_cur = NULL;
+ 			break;
 		case GOTSYSD_IMSG_SYSCONF_REPOS_DONE:
 			if (writeconf_state != WRITECONF_STATE_EXPECT_REPOS) {
 				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
@@ -1198,7 +1915,377 @@ dispatch_event(int fd, short event, void *arg)
 				break;
 			}
 			repo_cur = NULL;
+			writeconf_state = WRITECONF_STATE_EXPECT_MEDIA_TYPES;
+			break;
+		case GOTSYSD_IMSG_SYSCONF_GLOBAL_MEDIA_TYPE: {
+			struct media_type media;
+
+			if (writeconf_state !=
+			    WRITECONF_STATE_EXPECT_MEDIA_TYPES) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+			err = gotsys_imsg_recv_media_type(&media, &imsg);
+			if (err)
+				break;
+			if (media_add(&gotsysconf.mediatypes, &media) == NULL)
+				err = got_error_from_errno("media_add");
+			break;
+		}
+		case GOTSYSD_IMSG_SYSCONF_GLOBAL_MEDIA_TYPES_DONE:
+			if (writeconf_state !=
+			    WRITECONF_STATE_EXPECT_MEDIA_TYPES) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+			writeconf_state = WRITECONF_STATE_EXPECT_WEB_SERVERS;
+			break;
+
+		case GOTSYSD_IMSG_SYSCONF_WEB_SERVER: {
+			struct gotsys_webserver *srv;
+
+			if (writeconf_state !=
+			    WRITECONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+
+			srv = calloc(1, sizeof(*srv));
+			if (srv == NULL) {
+				err = got_error_from_errno("calloc");
+				break;
+			}
+			err = gotsys_imsg_recv_web_server(srv, &imsg);
+			if (err) {
+				free(srv);
+				break;
+			}
+			STAILQ_INSERT_TAIL(&gotsysconf.webservers, srv, entry);
+			break;
+		}
+		case GOTSYSD_IMSG_SYSCONF_WEB_ACCESS_RULE: {
+			struct gotsys_webserver *srv;
+			struct gotsys_access_rule *rule;
+
+			if (writeconf_state !=
+			    WRITECONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+
+			srv = STAILQ_LAST(&gotsysconf.webservers,
+			    gotsys_webserver, entry);
+			if (srv == NULL) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+
+			err = gotsys_imsg_recv_access_rule(&rule, &imsg,
+			    &gotsysconf.users, &gotsysconf.groups);
+			if (err)
+				break;
+			STAILQ_INSERT_TAIL(&srv->access_rules, rule, entry);
+			break;
+		}
+		case GOTSYSD_IMSG_SYSCONF_WEB_ACCESS_RULES_DONE:
+			if (writeconf_state !=
+			    WRITECONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+			break;
+		case GOTSYSD_IMSG_SYSCONF_WEBREPO: {
+			struct gotsys_webserver *srv;
+			struct gotsys_webrepo *webrepo;
+			struct gotsys_repo *repo;
+
+			if (writeconf_state !=
+			    WRITECONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+
+			srv = STAILQ_LAST(&gotsysconf.webservers,
+			    gotsys_webserver, entry);
+			if (srv == NULL) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+
+			webrepo = calloc(1, sizeof(*webrepo));
+			if (webrepo == NULL) {
+				err = got_error_from_errno("calloc");
+				break;
+			}
+
+			err = gotsys_imsg_recv_webrepo(webrepo, &imsg);
+			if (err)
+				break;
+
+			TAILQ_FOREACH(repo, &gotsysconf.repos, entry) {
+				if (strcmp(repo->name, webrepo->repo_name) == 0)
+					break;
+			}
+			if (repo == NULL) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "web repository refers to nonexistent "
+				    "repository %s while in state %d\n",
+				    webrepo->repo_name, writeconf_state);
+				break;
+			}
+			STAILQ_INSERT_TAIL(&srv->repos, webrepo, entry);
+			break;
+		}
+		case GOTSYSD_IMSG_SYSCONF_WEBREPO_ACCESS_RULE: {
+			struct gotsys_webserver *srv;
+			struct gotsys_webrepo *webrepo;
+			struct gotsys_access_rule *rule;
+
+			if (writeconf_state !=
+			    WRITECONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+
+			srv = STAILQ_LAST(&gotsysconf.webservers,
+			    gotsys_webserver, entry);
+			if (srv == NULL) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+
+			webrepo = STAILQ_LAST(&srv->repos, gotsys_webrepo,
+			    entry);
+			if (webrepo == NULL) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+
+			err = gotsys_imsg_recv_access_rule(&rule, &imsg,
+			    &gotsysconf.users, &gotsysconf.groups);
+			if (err)
+				break;
+			STAILQ_INSERT_TAIL(&webrepo->access_rules, rule, entry);
+			break;
+		}
+		case GOTSYSD_IMSG_SYSCONF_WEBREPO_ACCESS_RULES_DONE:
+			if (writeconf_state !=
+			    WRITECONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+			break;
+		case GOTSYSD_IMSG_SYSCONF_WEBREPOS_DONE:
+			if (writeconf_state !=
+			    WRITECONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+			break;
+		case GOTSYSD_IMSG_SYSCONF_WEBSITE_PATH: {
+			struct gotsys_webserver *srv;
+			struct gotsys_website *site;
+			struct got_pathlist_entry *new;
+
+			if (writeconf_state !=
+			    WRITECONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+
+			srv = STAILQ_LAST(&gotsysconf.webservers,
+			    gotsys_webserver, entry);
+			if (srv == NULL) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+
+			err = gotsys_imsg_recv_website_path(&site, &imsg);
+			if (err)
+				break;
+			err = got_pathlist_insert(&new, &srv->websites,
+			    site->url_path, site);
+			if (err)
+				break;
+			if (new == NULL) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "duplicate web site '%s' in "
+				    "repository '%s'", site->url_path,
+				    repo_cur->name);
+				free(site);
+				break;
+			}
+			site_cur = site;
+			break;
+		}
+		case GOTSYSD_IMSG_SYSCONF_WEBSITE: {
+			struct gotsys_repo *repo;
+
+			if (site_cur == NULL ||
+			    writeconf_state !=
+			    WRITECONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+
+			err = gotsys_imsg_recv_website(site_cur, &imsg);
+			if (err)
+				break;
+
+			TAILQ_FOREACH(repo, &gotsysconf.repos, entry) {
+				if (strcmp(repo->name,
+				    site_cur->repo_name) == 0)
+					break;
+			}
+			if (repo == NULL) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "web repository refers to nonexistent "
+				    "repository %s while in state %d\n",
+				    site_cur->repo_name,
+				    writeconf_state);
+				break;
+			}
+			break;
+		}
+		case GOTSYSD_IMSG_SYSCONF_WEBSITE_ACCESS_RULE: {
+			struct gotsys_access_rule_list *rules;
+			struct gotsys_access_rule *rule;
+
+			if (site_cur == NULL ||
+			    writeconf_state !=
+			    WRITECONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+			err = gotsys_imsg_recv_access_rule(&rule, &imsg,
+			    &gotsysconf.users, &gotsysconf.groups);
+			if (err)
+				break;
+			rules = &site_cur->access_rules;
+			STAILQ_INSERT_TAIL(rules, rule, entry);
+			break;
+		}
+		case GOTSYSD_IMSG_SYSCONF_WEBSITE_ACCESS_RULES_DONE:
+			if (site_cur == NULL ||
+			    writeconf_state !=
+			    WRITECONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+			site_cur = NULL;
+			break;
+		case GOTSYSD_IMSG_SYSCONF_WEBSITES_DONE:
+			if (site_cur != NULL ||
+			    writeconf_state !=
+			    WRITECONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+			break;
+		case GOTSYSD_IMSG_SYSCONF_MEDIA_TYPE: {
+			struct gotsys_webserver *srv;
+			struct media_type media;
+
+			if (writeconf_state !=
+			    WRITECONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+
+			srv = STAILQ_LAST(&gotsysconf.webservers,
+			    gotsys_webserver, entry);
+			if (srv == NULL) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+
+			err = gotsys_imsg_recv_media_type(&media, &imsg);
+			if (err)
+				break;
+			if (media_add(&srv->mediatypes, &media) == NULL)
+				err = got_error_from_errno("media_add");
+			break;
+		}
+		case GOTSYSD_IMSG_SYSCONF_MEDIA_TYPES_DONE:
+			if (writeconf_state !=
+			    WRITECONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    writeconf_state);
+				break;
+			}
+			break;
+		case GOTSYSD_IMSG_SYSCONF_WEB_SERVERS_DONE:
 			writeconf_state = WRITECONF_STATE_WRITE_CONF;
+			if (!STAILQ_EMPTY(&webcfg.servers)) {
+				err = write_gotwebd_conf();
+				if (err)
+					break;
+			}
 			auth_idx = 0;
 			err = prepare_gotd_secrets(&auth_idx);
 			if (err)
@@ -1250,6 +2337,7 @@ main(int argc, char *argv[])
 #endif
 	STAILQ_INIT(&global_repo_access_rules);
 	gotsys_conf_init(&gotsysconf);
+	gotsysd_web_config_init(&webcfg);
 
 	event_init();
 
@@ -1278,6 +2366,10 @@ main(int argc, char *argv[])
 	    GOTD_CONF_PATH, "");
 	if (err)
 		goto done;
+	err = got_opentemp_named_fd(&gotwebd_conf_tmppath, &gotwebd_conf_tmpfd,
+	    GOTWEBD_CONF, "");
+	if (err)
+		goto done;
 #ifndef PROFILE
 	if (pledge("stdio rpath wpath cpath fattr chown unveil", NULL) == -1) {
 		err = got_error_from_errno("pledge");
@@ -1294,6 +2386,11 @@ main(int argc, char *argv[])
 		goto done;
 	}
 
+	if (unveil(gotwebd_conf_tmppath, "rwc") == -1) {
+		err = got_error_from_errno2("unveil rwc", gotwebd_conf_tmppath);
+		goto done;
+	}
+
 	if (unveil(GOTD_CONF_PATH, "rwc") == -1) {
 		err = got_error_from_errno2("unveil rwc", GOTD_CONF_PATH);
 		goto done;
@@ -1301,6 +2398,11 @@ main(int argc, char *argv[])
 
 	if (unveil(GOTD_SECRETS_PATH, "rwc") == -1) {
 		err = got_error_from_errno2("unveil rwc", GOTD_SECRETS_PATH);
+		goto done;
+	}
+
+	if (unveil(GOTWEBD_CONF, "rwc") == -1) {
+		err = got_error_from_errno2("unveil rwc", GOTWEBD_CONF);
 		goto done;
 	}
 
@@ -1333,6 +2435,9 @@ done:
 	    err == NULL)
 		err = got_error_from_errno("close");
 	if (gotd_secrets_tmpfd != -1 && close(gotd_secrets_tmpfd) == -1 &&
+	    err == NULL)
+		err = got_error_from_errno("close");
+	if (gotwebd_conf_tmpfd != -1 && close(gotwebd_conf_tmpfd) == -1 &&
 	    err == NULL)
 		err = got_error_from_errno("close");
 	if (err)

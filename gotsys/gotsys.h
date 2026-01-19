@@ -90,10 +90,62 @@ struct gotsys_access_rule {
 };
 STAILQ_HEAD(gotsys_access_rule_list, gotsys_access_rule);
 
+enum gotsys_auth_config {
+	GOTSYS_AUTH_UNSET	= 0,
+	GOTSYS_AUTH_DISABLED	= 0xf00000ff,
+	GOTSYS_AUTH_ENABLED	= 0x00808000,
+};
+
+struct gotsys_webrepo {
+	STAILQ_ENTRY(gotsys_webrepo) entry;
+
+	char repo_name[NAME_MAX];
+
+	enum gotsys_auth_config auth_config;
+	struct gotsys_access_rule_list access_rules;
+	int hidden;
+};
+STAILQ_HEAD(gotsys_webrepolist, gotsys_webrepo);
+
+struct gotsys_webserver {
+	STAILQ_ENTRY(gotsys_webserver) entry;
+
+	char server_name[MAX_SERVER_NAME];
+
+	enum gotsys_auth_config auth_config;
+	struct gotsys_access_rule_list access_rules;
+	int hide_repositories;
+
+	char css[PATH_MAX];
+	char logo[PATH_MAX];
+	char logo_url[GOTWEBD_MAXTEXT];
+	char site_owner[GOTWEBD_MAXNAME];
+	char repos_url_path[MAX_DOCUMENT_URI];
+
+	struct mediatypes mediatypes;
+
+	struct gotsys_webrepolist repos;
+	struct got_pathlist_head websites;
+};
+STAILQ_HEAD(gotsys_webserverlist, gotsys_webserver);
+
+struct gotsys_website {
+	char repo_name[NAME_MAX];
+
+	enum gotsys_auth_config auth_config;
+	struct gotsys_access_rule_list access_rules;
+
+	char url_path[MAX_DOCUMENT_URI];
+	char branch_name[MAX_BRANCH_NAME];
+	char path[PATH_MAX];
+};
+
 struct gotsys_repo {
 	TAILQ_ENTRY(gotsys_repo) entry;
 
 	char name[NAME_MAX];
+	char *headref;
+	char description[GOTWEBD_MAXDESCRSZ];
 
 	struct gotsys_access_rule_list access_rules;
 
@@ -117,9 +169,16 @@ struct gotsys_conf {
 	struct gotsys_grouplist groups;
 	struct gotsys_repolist repos;
 	int nrepos;
+	struct gotsys_webserverlist webservers;
+	struct mediatypes mediatypes;
 };
 
 void gotsys_conf_init(struct gotsys_conf *);
+const struct got_error *gotsys_conf_new_webserver(struct gotsys_webserver **,
+    const char *);
+const struct got_error *gotsys_conf_new_webrepo(struct gotsys_webrepo **,
+    const char *);
+const struct got_error *gotsys_conf_init_media_types(struct mediatypes *);
 const struct got_error *gotsys_conf_parse(const char *, struct gotsys_conf *,
     int *);
 int gotsys_ref_name_is_valid(char *);
@@ -129,6 +188,8 @@ void gotsys_user_free(struct gotsys_user *);
 void gotsys_userlist_purge(struct gotsys_userlist *);
 void gotsys_group_free(struct gotsys_group *);
 void gotsys_grouplist_purge(struct gotsys_grouplist *);
+void gotsys_webrepo_free(struct gotsys_webrepo *);
+void gotsys_webserver_free(struct gotsys_webserver *);
 void gotsys_access_rule_free(struct gotsys_access_rule *);
 void gotsys_notification_target_free(struct gotsys_notification_target *);
 void gotsys_repo_free(struct gotsys_repo *);
@@ -143,9 +204,18 @@ const struct got_error *gotsys_conf_new_group_member(struct gotsys_grouplist *,
     const char *, const char *);
 const struct got_error *gotsys_conf_new_repo(struct gotsys_repo **,
     const char *);
+const struct got_error *gotsys_conf_new_website(struct gotsys_website **,
+    const char *);
 const struct got_error *gotsys_conf_validate_name(const char *, const char *);
 const struct got_error *gotsys_conf_validate_repo_name(const char *);
 const struct got_error *gotsys_conf_validate_password(const char *, const char *);
+const struct got_error *gotsys_conf_validate_path(const char *);
+const struct got_error *gotsys_conf_validate_hostname(const char *);
+const struct got_error *gotsys_conf_validate_url(const char *);
+const struct got_error *gotsys_conf_parse_url(char **, char **, char **,
+    char **, const char *);
+const struct got_error *gotsys_conf_validate_mediatype(const char *);
+const struct got_error *gotsys_conf_validate_string(const char *);
 const struct got_error *gotsys_conf_new_access_rule(
     struct gotsys_access_rule **, enum gotsys_access, int, const char *,
     struct gotsys_userlist *, struct gotsys_grouplist *);

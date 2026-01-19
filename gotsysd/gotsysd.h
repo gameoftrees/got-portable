@@ -100,6 +100,80 @@ struct gotsysd_pending_sysconf_cmd {
 STAILQ_HEAD(gotsysd_pending_sysconf_cmd_list,
     gotsysd_pending_sysconf_cmd);
 
+enum gotsysd_web_auth_config {
+	GOTSYSD_WEB_AUTH_UNSET		= 0x0,
+	GOTSYSD_WEB_AUTH_DISABLED	= 0xf00000ff,
+	GOTSYSD_WEB_AUTH_SECURE		= 0x00808000,
+	GOTSYSD_WEB_AUTH_INSECURE	= 0x0f7f7f00
+};
+
+enum gotsysd_web_address_family {
+	GOTSYSD_LISTEN_ADDR_UNIX = 0,
+	GOTSYSD_LISTEN_ADDR_INET,
+};
+
+struct gotsysd_web_inet_addr {
+	char address[48];
+	char port[8];
+	char reserved[8];
+};
+
+struct gotsysd_web_address {
+	TAILQ_ENTRY(gotsysd_web_address) entry;
+
+	enum gotsysd_web_address_family family;
+	union {
+		char unix_socket_path[PATH_MAX];
+		struct gotsysd_web_inet_addr inet;
+		
+	} addr;
+};
+TAILQ_HEAD(gotsysd_web_addresslist, gotsysd_web_address);
+
+/* XXX redundant definitions, see gotwebd.h */
+#ifndef MAX_DOCUMENT_URI
+#define MAX_DOCUMENT_URI	 255
+#endif
+#ifndef MAX_IDENTIFIER_SIZE
+#define MAX_IDENTIFIER_SIZE	 32
+#endif
+#ifndef MAX_SERVER_NAME
+#define MAX_SERVER_NAME		 255
+#endif
+
+struct gotsysd_web_server {
+	STAILQ_ENTRY(gotsysd_web_server) entry;
+
+	char server_name[MAX_SERVER_NAME];
+
+	char gotweb_url_root[MAX_DOCUMENT_URI];
+	char htdocs_path[PATH_MAX];
+
+	enum gotsysd_web_auth_config auth_config;
+	int hide_repositories;
+};
+STAILQ_HEAD(gotsysd_web_serverlist, gotsysd_web_server);
+
+struct gotsysd_web_config {
+	char control_socket[PATH_MAX];
+
+	char httpd_chroot[PATH_MAX];
+	char htdocs_path[PATH_MAX];
+	char repos_path[PATH_MAX];
+
+	char gotwebd_user[MAX_IDENTIFIER_SIZE];
+	char www_user[MAX_IDENTIFIER_SIZE];
+
+	char login_hint_user[MAX_IDENTIFIER_SIZE];
+	char login_hint_port[8];
+
+	enum gotsysd_web_auth_config auth_config;
+	struct gotsysd_web_addresslist listen_addrs;
+	struct gotsysd_web_serverlist servers;
+
+	uint16_t prefork;
+};
+
 struct gotsysd {
 	pid_t pid;
 	char unix_socket_path[_POSIX_PATH_MAX];
@@ -127,6 +201,8 @@ struct gotsysd {
 	const char *confpath;
 	int daemonize;
 	int verbosity;
+
+	struct gotsysd_web_config web;
 };
 
 enum gotsysd_imsg_type {
@@ -166,6 +242,7 @@ enum gotsysd_imsg_type {
 	GOTSYSD_IMSG_START_PROG_READ_CONF,
 	GOTSYSD_IMSG_START_PROG_WRITE_CONF,
 	GOTSYSD_IMSG_START_PROG_APPLY_CONF,
+	GOTSYSD_IMSG_START_PROG_APPLY_WEBCONF,
 	GOTSYSD_IMSG_START_PROG_SSHDCONFIG,
 	GOTSYSD_IMSG_PROG_READY,
 
@@ -181,12 +258,31 @@ enum gotsysd_imsg_type {
 	GOTSYSD_IMSG_SYSCONF_AUTHORIZED_KEYS_USER,
 	GOTSYSD_IMSG_SYSCONF_AUTHORIZED_KEYS,
 	GOTSYSD_IMSG_SYSCONF_AUTHORIZED_KEYS_DONE,
+	GOTSYSD_IMSG_SYSCONF_WEB_SERVER,
+	GOTSYSD_IMSG_SYSCONF_WEBREPO,
+	GOTSYSD_IMSG_SYSCONF_WEBREPO_ACCESS_RULE,
+	GOTSYSD_IMSG_SYSCONF_WEBREPO_ACCESS_RULES_DONE,
+	GOTSYSD_IMSG_SYSCONF_WEBREPOS_DONE,
+	GOTSYSD_IMSG_SYSCONF_WEBSITE_PATH,
+	GOTSYSD_IMSG_SYSCONF_WEBSITE,
+	GOTSYSD_IMSG_SYSCONF_WEBSITE_ACCESS_RULE,
+	GOTSYSD_IMSG_SYSCONF_WEBSITE_ACCESS_RULES_DONE,
+	GOTSYSD_IMSG_SYSCONF_WEBSITES_DONE,
+	GOTSYSD_IMSG_SYSCONF_WEB_SERVERS_DONE,
 	GOTSYSD_IMSG_SYSCONF_REPO,
 	GOTSYSD_IMSG_SYSCONF_REPOS_DONE,
 	GOTSYSD_IMSG_SYSCONF_GLOBAL_ACCESS_RULE,
 	GOTSYSD_IMSG_SYSCONF_GLOBAL_ACCESS_RULES_DONE,
 	GOTSYSD_IMSG_SYSCONF_ACCESS_RULE,
 	GOTSYSD_IMSG_SYSCONF_ACCESS_RULES_DONE,
+	GOTSYSD_IMSG_SYSCONF_WEB_ACCESS_RULE,
+	GOTSYSD_IMSG_SYSCONF_WEB_ACCESS_RULES_DONE,
+	GOTSYSD_IMSG_SYSCONF_MEDIA_TYPE,
+	GOTSYSD_IMSG_SYSCONF_MEDIA_TYPES_DONE,
+	GOTSYSD_IMSG_SYSCONF_WEB_REPOS,
+	GOTSYSD_IMSG_SYSCONF_WEB_REPOS_DONE,
+	GOTSYSD_IMSG_SYSCONF_GLOBAL_MEDIA_TYPE,
+	GOTSYSD_IMSG_SYSCONF_GLOBAL_MEDIA_TYPES_DONE,
 	GOTSYSD_IMSG_SYSCONF_PROTECTED_TAG_NAMESPACES,
 	GOTSYSD_IMSG_SYSCONF_PROTECTED_TAG_NAMESPACES_ELEM,
 	GOTSYSD_IMSG_SYSCONF_PROTECTED_BRANCH_NAMESPACES,
@@ -249,6 +345,18 @@ enum gotsysd_imsg_type {
 	/* Apply gotd configuration. */
 	GOTSYSD_IMSG_SYSCONF_APPLY_CONF_READY,
 	GOTSYSD_IMSG_SYSCONF_APPLY_CONF_DONE,
+
+	/* gotwebd.conf creation. */
+	GOTSYSD_IMSG_SYSCONF_GOTWEB_CFG,
+	GOTSYSD_IMSG_SYSCONF_GOTWEB_ADDR,
+	GOTSYSD_IMSG_SYSCONF_GOTWEB_ADDRS_DONE,
+	GOTSYSD_IMSG_SYSCONF_GOTWEB_SERVER,
+	GOTSYSD_IMSG_SYSCONF_GOTWEB_SERVERS_DONE,
+	GOTSYSD_IMSG_SYSCONF_GOTWEB_CFG_DONE,
+
+	/* Apply gotwebd configuration. */
+	GOTSYSD_IMSG_SYSCONF_APPLY_WEBCONF_READY,
+	GOTSYSD_IMSG_SYSCONF_APPLY_WEBCONF_DONE,
 
 	/* sshd configuration. */
 	GOTSYSD_IMSG_SYSCONF_SSHDCONFIG_READY,
@@ -398,8 +506,10 @@ struct gotsysd_imsg_sysconf_authorized_key {
 /* Structure for GOTSYSD_IMSG_SYSCONF_REPO, */
 struct gotsysd_imsg_sysconf_repo {
 	size_t name_len;
+	size_t headref_len;
+	size_t description_len;
 
-	/* Followed by name_len bytes. */
+	/* Followed by name_len + headref_len + description_len bytes. */
 
 	/*
 	 * Followed by GOTSYSD_IMSG_SYSCONF_ACCESS_RULE for access rules,
@@ -503,8 +613,10 @@ struct gotsysd_imsg_notitfication_target_http {
 #define GOTSYSD_PROG_READ_CONF		gotsys-read-conf
 #define GOTSYSD_PROG_WRITE_CONF		gotsys-write-conf
 #define GOTSYSD_PROG_APPLY_CONF		gotsys-apply-conf
+#define GOTSYSD_PROG_APPLY_WEBCONF	gotsys-apply-webconf
 #define GOTSYSD_PROG_SSHDCONFIG		gotsys-sshdconfig
 #define GOTSYSD_PROG_GOTD		gotd
+#define GOTSYSD_PROG_GOTWEBD		gotwebd
 
 #define GOTSYSD_PATH_PROG_REPO_CREATE \
 	GOTSYSD_STRINGVAL(GOT_LIBEXECDIR) "/" \
@@ -533,12 +645,18 @@ struct gotsysd_imsg_notitfication_target_http {
 #define GOTSYSD_PATH_PROG_APPLY_CONF \
 	GOTSYSD_STRINGVAL(GOT_LIBEXECDIR) "/" \
 	GOTSYSD_STRINGVAL(GOTSYSD_PROG_APPLY_CONF)
+#define GOTSYSD_PATH_PROG_APPLY_WEBCONF \
+	GOTSYSD_STRINGVAL(GOT_LIBEXECDIR) "/" \
+	GOTSYSD_STRINGVAL(GOTSYSD_PROG_APPLY_WEBCONF)
 #define GOTSYSD_PATH_PROG_SSHDCONFIG \
 	GOTSYSD_STRINGVAL(GOT_LIBEXECDIR) "/" \
 	GOTSYSD_STRINGVAL(GOTSYSD_PROG_SSHDCONFIG)
 #define GOTSYSD_PATH_PROG_GOTD \
 	GOTSYSD_STRINGVAL(GOT_SBINDIR) "/" \
 	GOTSYSD_STRINGVAL(GOTSYSD_PROG_GOTD)
+#define GOTSYSD_PATH_PROG_GOTWEBD \
+	GOTSYSD_STRINGVAL(GOT_SBINDIR) "/" \
+	GOTSYSD_STRINGVAL(GOTSYSD_PROG_GOTWEBD)
 
 extern const char *gotsysd_priv_helpers[];
 extern const size_t gotsysd_num_priv_helpers;
@@ -577,6 +695,12 @@ struct gotsys_repolist;
 struct gotsys_repo;
 struct gotsys_access_rule;
 struct gotsys_notification_target;
+struct gotsys_webserverlist;
+struct gotsys_webserver;
+struct gotsys_website;
+struct gotsys_webrepo;
+struct media_type;
+struct mediatypes;
 struct got_pathlist_head;
 
 const struct got_error *gotsys_imsg_send_users(struct gotsysd_imsgev *,
@@ -597,6 +721,22 @@ const struct got_error *gotsys_imsg_recv_authorized_keys(struct imsg *,
     struct gotsys_authorized_keys_list *); 
 const struct got_error *gotsys_imsg_send_access_rule(struct gotsysd_imsgev *,
     struct gotsys_access_rule *, int);
+const struct got_error *gotsys_imsg_recv_media_type(struct media_type *,
+    struct imsg *);
+const struct got_error *gotsys_imsg_send_webservers(struct gotsysd_imsgev *,
+    struct gotsys_webserverlist *);
+const struct got_error *gotsys_imsg_send_mediatypes(struct gotsysd_imsgev *,
+    struct mediatypes *, int, int);
+const struct got_error *gotsys_imsg_recv_web_cfg(struct gotsysd_web_config *,
+    struct imsg *);
+const struct got_error *gotsysd_conf_validate_inet_addr(const char *,
+    const char *);
+const struct got_error *gotsys_imsg_recv_webaddr(struct gotsysd_web_address **,
+    struct imsg *);
+const struct got_error *gotsys_imsg_recv_gotweb_server(
+    struct gotsysd_web_server **, struct imsg *);
+const struct got_error *gotsys_imsg_recv_web_server(
+    struct gotsys_webserver *, struct imsg *);
 const struct got_error *gotsys_imsg_send_repositories(struct gotsysd_imsgev *,
     struct gotsys_repolist *);
 const struct got_error *gotsys_imsg_recv_repository(struct gotsys_repo **,
@@ -604,6 +744,12 @@ const struct got_error *gotsys_imsg_recv_repository(struct gotsys_repo **,
 const struct got_error *gotsys_imsg_recv_access_rule(
     struct gotsys_access_rule **, struct imsg *, struct gotsys_userlist *,
     struct gotsys_grouplist *);
+const struct got_error *gotsys_imsg_recv_webrepo(
+    struct gotsys_webrepo *, struct imsg *);
+const struct got_error *gotsys_imsg_recv_website_path(struct gotsys_website **,
+    struct imsg *);
+const struct got_error *gotsys_imsg_recv_website(struct gotsys_website *,
+    struct imsg *);
 const struct got_error *gotsys_imsg_recv_pathlist(size_t *, struct imsg *);
 const struct got_error *gotsys_imsg_recv_pathlist_elem(struct imsg *,
     struct got_pathlist_head *);
@@ -633,3 +779,4 @@ const struct got_error *gotsys_uidset_for_each_element(struct gotsys_uidset *,
     void *);
 void gotsys_uidset_remove_element(struct gotsys_uidset *,
     struct gotsys_uidset_element *);
+void gotsysd_web_config_init(struct gotsysd_web_config *);

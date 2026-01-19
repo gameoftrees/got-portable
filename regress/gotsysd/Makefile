@@ -11,7 +11,7 @@ CLEANFILES= SHA256.sig bsd.rd bsd.rd.fs bsd.rd.decomp ${AUTOINSTALL_CONF} \
 	${GOTSYSD_BSD_RD} ${GOTSYSD_SSH_KEY} ${GOTSYSD_SSH_PUBKEY} \
 	${GOTSYSD_TEST_VM_BASE_IMAGE} ${GOTSYSD_VM_PASSWD_FILE} ${GOTD_CONF} \
 	${GOTSYSD_CONF} ${GOTSYS_CONF} ${GOT_CONF} ${INSTALL_SITE} \
-	${HTTPD_CONF} ${GOTWEBD_CONF} ${GOTWEBD_WWW_CONF}
+	${HTTPD_CONF}
 
 .PHONY: ensure_root vm start_test_vm build_got
 
@@ -40,9 +40,6 @@ GOTSYSD_TEST_SMTP_PORT=2525
 GOTSYSD_TEST_HTTP_PORT=8000
 GOTSYSD_TEST_HMAC_SECRET!=openssl rand -base64 32
 HTTPD_CONF=httpd.conf
-GOTWEBD_CONF=gotwebd.conf
-GOTWEBD_WWW_CONF=gotwebd-www.conf
-GOTWEBD_REPOS_WWW_CONF=gotwebd-repos-www.conf
 
 GOTSYSD_TEST_USER?=${DOAS_USER}
 .if empty(GOTSYSD_TEST_USER)
@@ -199,7 +196,13 @@ ${GOTD_CONF}:
 ${GOTSYSD_CONF}:
 	@${UNPRIV} "echo permit root > $@"
 	@${UNPRIV} "echo permit _gotd >> $@"
-	@${UNPRIV} "echo listen on \\'${GOTSYSD_UNIX_SOCKET}\\' >> $@"
+	@${UNPRIV} "echo listen on \\\"${GOTSYSD_UNIX_SOCKET}\\\" >> $@"
+	@${UNPRIV} "echo 'gotweb {' >> $@"
+	@${UNPRIV} "printf '\tprefork 1\n'  >> $@"
+	@${UNPRIV} "printf '\tenable authentication insecure\n' >> $@"
+	@${UNPRIV} "printf '\tlogin hint user \"${GOTSYSD_TEST_USER}\"\n' >> $@"
+	@${UNPRIV} "echo '}' >> $@"
+	@${UNPRIV} "echo 'web server \"VMIP\"' >> $@"
 
 ${GOTSYS_CONF}: ${GOTSYSD_SSH_PUBKEY}
 	@${UNPRIV} "echo user ${GOTSYSD_TEST_USER} { >> $@"
@@ -220,85 +223,6 @@ $(HTTPD_CONF):
 	@${UNPRIV} 'echo \ \ listen on VMIP port http >> $@'
 	@${UNPRIV} 'echo \ \ root \"/htdocs/gotwebd\" >> $@'
 	@${UNPRIV} 'echo \ \ fastcgi socket \"/run/gotweb.sock\" >> $@'
-	@${UNPRIV} 'echo } >> $@'
-
-$(GOTWEBD_CONF):
-	@${UNPRIV} 'echo prefork 1 > $@'
-	@${UNPRIV} 'echo enable authentication insecure >> $@'
-	@${UNPRIV} 'echo permit ${GOTSYSD_TEST_USER} >> $@'
-	@${UNPRIV} 'echo deny ${GOTSYSD_DEV_USER} >> $@'
-	@${UNPRIV} 'echo server \"VMIP\" { >> $@'
-	@${UNPRIV} 'echo \ \ repos_path \"/git\" >> $@'
-	@${UNPRIV} 'echo \ \ hide repositories on >> $@'
-	@${UNPRIV} 'echo \ \ login hint user ${GOTSYSD_TEST_USER} >> $@'
-	@${UNPRIV} 'echo \ \ show_repo_age off >> $@'
-	@${UNPRIV} 'echo \ \ show_repo_description off >> $@'
-	@${UNPRIV} 'echo \ \ show_repo_owner off >> $@'
-	@${UNPRIV} 'echo \ \ show_site_owner off >> $@'
-	@${UNPRIV} 'echo \ \ repository \"public\" { >> $@'
-	@${UNPRIV} 'echo \ \ \ \ disable authentication >> $@'
-	@${UNPRIV} 'echo \ \ \ \ hide repository off >> $@'
-	@${UNPRIV} 'echo \ \ } >> $@'
-	@${UNPRIV} 'echo \ \ repository \"gotdev\" { >> $@'
-	@${UNPRIV} 'echo \ \ \ \ permit ${GOTSYSD_DEV_USER} >> $@'
-	@${UNPRIV} 'echo \ \ \ \ deny ${GOTSYSD_TEST_USER} >> $@'
-	@${UNPRIV} 'echo \ \ \ \ hide repository off >> $@'
-	@${UNPRIV} 'echo \ \ } >> $@'
-	@${UNPRIV} 'echo \ \ repository \"gottest\" { >> $@'
-	@${UNPRIV} 'echo \ \ \ \ permit ${GOTSYSD_TEST_USER} >> $@'
-	@${UNPRIV} 'echo \ \ \ \ deny ${GOTSYSD_DEV_USER} >> $@'
-	@${UNPRIV} 'echo \ \ \ \ hide repository off >> $@'
-	@${UNPRIV} 'echo \ \ } >> $@'
-	@${UNPRIV} 'echo \ \ repository \"hidden\" { >> $@'
-	@${UNPRIV} 'echo \ \ \ \ permit ${GOTSYSD_TEST_USER} >> $@'
-	@${UNPRIV} 'echo \ \ \ \ deny ${GOTSYSD_DEV_USER} >> $@'
-	@${UNPRIV} 'echo \ \ } >> $@'
-	@${UNPRIV} 'echo \ \ repository \"gotsys\" { >> $@'
-	@${UNPRIV} 'echo \ \ \ \ hide repository off >> $@'
-	@${UNPRIV} 'echo \ \ } >> $@'
-	@${UNPRIV} 'echo } >> $@'
-
-
-$(GOTWEBD_WWW_CONF):
-	@${UNPRIV} 'echo prefork 1 > $@'
-	@${UNPRIV} 'echo enable authentication insecure >> $@'
-	@${UNPRIV} 'echo permit ${GOTSYSD_TEST_USER} >> $@'
-	@${UNPRIV} 'echo deny ${GOTSYSD_DEV_USER} >> $@'
-	@${UNPRIV} 'echo server \"VMIP\" { >> $@'
-	@${UNPRIV} 'echo \ \ repos_path \"/git\" >> $@'
-	@${UNPRIV} 'echo \ \ hide repositories on >> $@'
-	@${UNPRIV} 'echo \ \ login hint user ${GOTSYSD_TEST_USER} >> $@'
-	@${UNPRIV} 'echo \ \ show_repo_age off >> $@'
-	@${UNPRIV} 'echo \ \ show_repo_description off >> $@'
-	@${UNPRIV} 'echo \ \ show_repo_owner off >> $@'
-	@${UNPRIV} 'echo \ \ show_site_owner off >> $@'
-	@${UNPRIV} 'echo \ \ repos_url_path \"/repos\" >> $@'
-	@${UNPRIV} 'echo \ \ website \"/\" { >> $@'
-	@${UNPRIV} 'echo \ \ \ \ repository \"www\" >> $@'
-	@${UNPRIV} 'echo \ \ \ \ disable authentication >> $@'
-	@${UNPRIV} 'echo \ \ } >> $@'
-	@${UNPRIV} 'echo } >> $@'
-
-$(GOTWEBD_REPOS_WWW_CONF):
-	@${UNPRIV} 'echo prefork 1 > $@'
-	@${UNPRIV} 'echo enable authentication insecure >> $@'
-	@${UNPRIV} 'echo permit ${GOTSYSD_TEST_USER} >> $@'
-	@${UNPRIV} 'echo deny ${GOTSYSD_DEV_USER} >> $@'
-	@${UNPRIV} 'echo server \"VMIP\" { >> $@'
-	@${UNPRIV} 'echo \ \ repos_path \"/git\" >> $@'
-	@${UNPRIV} 'echo \ \ repository \"gotsys\" { >> $@'
-	@${UNPRIV} 'echo \ \ \ \ hide repository on >> $@'
-	@${UNPRIV} 'echo \ \ } >> $@'
-	@${UNPRIV} 'echo \ \ login hint user ${GOTSYSD_TEST_USER} >> $@'
-	@${UNPRIV} 'echo \ \ show_repo_age off >> $@'
-	@${UNPRIV} 'echo \ \ show_repo_description off >> $@'
-	@${UNPRIV} 'echo \ \ show_repo_owner off >> $@'
-	@${UNPRIV} 'echo \ \ show_site_owner off >> $@'
-	@${UNPRIV} 'echo \ \ repos_url_path \"/\" >> $@'
-	@${UNPRIV} 'echo \ \ website \"/website\" { >> $@'
-	@${UNPRIV} 'echo \ \ \ \ repository \"www\" >> $@'
-	@${UNPRIV} 'echo \ \ \ \ disable authentication >> $@'
-	@${UNPRIV} 'echo \ \ } >> $@'
 	@${UNPRIV} 'echo } >> $@'
 
 build_got:
@@ -324,7 +248,7 @@ build_got:
 	${UNPRIV} "${GOTSYSD_SSH_CMD} -- root@$${VMIP} \
 		ln -f -s gitwrapper /usr/local/bin/git-receive-pack"
 
-setup_test_vm: start_test_vm build_got ${GOTD_CONF} ${GOTSYSD_CONF} ${GOTSYS_CONF} ${GOT_CONF} ${HTTPD_CONF} ${GOTWEBD_CONF}
+setup_test_vm: start_test_vm build_got ${GOTD_CONF} ${GOTSYSD_CONF} ${GOTSYS_CONF} ${GOT_CONF} ${HTTPD_CONF}
 	@set -e; \
 	VMID=`vmctl status ${GOTSYSD_VM_NAME} | tail -n1 | \
 		awk '{print $$1}'`; \
@@ -371,10 +295,9 @@ setup_test_vm: start_test_vm build_got ${GOTD_CONF} ${GOTSYSD_CONF} ${GOTSYS_CON
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
 		useradd -d /nonexistent -s /sbin/nologin \
 		-u ${GOTWEBD_UID} -g ${GOTWEBD_UID} -G _gotd _gotwebd"; \
-	${UNPRIV} "${GOTSYSD_SCP_CMD} ${GOTWEBD_CONF} root@$${VMIP}:/etc/"; \
 	${UNPRIV} "${GOTSYSD_SCP_CMD} ${HTTPD_CONF} root@$${VMIP}:/etc/"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
-		sed -i s/VMIP/$${VMIP}/ /etc/httpd.conf /etc/gotwebd.conf"; \
+		sed -i s/VMIP/$${VMIP}/ /etc/httpd.conf /etc/gotsysd.conf"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} rcctl -f start httpd"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
 		/usr/local/sbin/gotwebd -v"; \
@@ -418,7 +341,7 @@ test_gotwebd:
 	${UNPRIV} "env ${GOTSYSD_TEST_ENV} VMIP=$${VMIP} GWIP=$${GWIP} \
 		sh ./test_gotwebd.sh"
 
-test_gotwebd_www: ${GOTWEBD_WWW_CONF}
+test_gotwebd_www:
 	@set -e; \
 	VMID=`vmctl status ${GOTSYSD_VM_NAME} | tail -n1 | \
 		awk '{print $$1}'`; \
@@ -441,17 +364,10 @@ test_gotwebd_www: ${GOTWEBD_WWW_CONF}
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} gotctl reload"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
 		gotsys apply -w > /dev/null"; \
-	${UNPRIV} "${GOTSYSD_SCP_CMD} \
-		${GOTWEBD_WWW_CONF} root@$${VMIP}:/etc/gotwebd.conf"; \
-	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
-		sed -i s/VMIP/$${VMIP}/ /etc/httpd.conf /etc/gotwebd.conf"; \
-	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} pkill -x gotwebd || true"; \
-	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
-		/usr/local/sbin/gotwebd -v"; \
 	${UNPRIV} "env ${GOTSYSD_TEST_ENV} VMIP=$${VMIP} GWIP=$${GWIP} \
 		sh ./test_gotwebd_www.sh"
 
-test_gotwebd_repos_www: ${GOTWEBD_REPOS_WWW_CONF}
+test_gotwebd_repos_www:
 	@set -e; \
 	VMID=`vmctl status ${GOTSYSD_VM_NAME} | tail -n1 | \
 		awk '{print $$1}'`; \
@@ -474,13 +390,6 @@ test_gotwebd_repos_www: ${GOTWEBD_REPOS_WWW_CONF}
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} gotctl reload"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
 		gotsys apply -w > /dev/null"; \
-	${UNPRIV} "${GOTSYSD_SCP_CMD} \
-		${GOTWEBD_REPOS_WWW_CONF} root@$${VMIP}:/etc/gotwebd.conf"; \
-	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
-		sed -i s/VMIP/$${VMIP}/ /etc/httpd.conf /etc/gotwebd.conf"; \
-	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} pkill -x gotwebd || true"; \
-	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
-		/usr/local/sbin/gotwebd -v"; \
 	${UNPRIV} "env ${GOTSYSD_TEST_ENV} VMIP=$${VMIP} GWIP=$${GWIP} \
 		sh ./test_gotwebd_repos_www.sh"
 

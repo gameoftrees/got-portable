@@ -26,6 +26,7 @@
 #include <sys/types.h>
 #include <sys/queue.h>
 #include <sys/tree.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 
 #include <ctype.h>
@@ -47,9 +48,12 @@
 #include "got_error.h"
 #include "got_path.h"
 #include "got_object.h"
+#include "got_reference.h"
 
 #include "log.h"
 #include "gotsysd.h"
+#include "media.h"
+#include "gotwebd.h"
 #include "gotsys.h"
 
 #ifndef GOTD_USER
@@ -110,12 +114,16 @@ typedef struct {
 
 %}
 
+%token	AUTHENTICATION CHROOT GOTSYSD_CONTROL GOTWEB_URL_ROOT GOTWEB
+%token	HTDOCS INSECURE PORT PREFORK SERVER NAME SOCKET WWW HINT
 %token	ERROR LISTEN ON USER GOTD DIRECTORY REPOSITORY UID RANGE PERMIT
-%token	DENY RO RW
+%token	DENY RO RW WEB GOTSYSD_LOGIN ENABLE DISABLE HIDE REPOSITORIES
 
 %token	<v.string>	STRING
 %token	<v.number>	NUMBER
 %type	<v.string>	numberstring
+%type	<v.number>	boolean
+%type	<v.string>	listen_addr
 
 %%
 
@@ -150,6 +158,34 @@ numberstring	: STRING
 				YYERROR;
 			}
 		}
+		;
+
+boolean		: STRING {
+			if (strcasecmp($1, "1") == 0 ||
+			    strcasecmp($1, "on") == 0)
+				$$ = 1;
+			else if (strcasecmp($1, "0") == 0 ||
+			    strcasecmp($1, "off") == 0)
+				$$ = 0;
+			else {
+				yyerror("invalid boolean value '%s'", $1);
+				free($1);
+				YYERROR;
+			}
+			free($1);
+		}
+		| ON { $$ = 1; }
+		| NUMBER {
+			if ($1 != 0 && $1 != 1) {
+				yyerror("invalid boolean value '%lld'", $1);
+				YYERROR;
+			}
+			$$ = $1;
+		}
+		;
+
+listen_addr	: '*' { $$ = NULL; }
+		| STRING
 		;
 
 main		: LISTEN ON STRING {
@@ -282,8 +318,397 @@ main		: LISTEN ON STRING {
 			}
 			free($4);
 		}
+		| gotweb
+		| webserver
 		;
 
+gotweb		: GOTWEB '{' optnl webopts2 '}'
+		;
+
+webopts1	: GOTSYSD_CONTROL SOCKET STRING {
+			const struct got_error *err;
+
+			err = gotsys_conf_validate_path($3);
+			if (err) {
+				yyerror("%s", err->msg);
+				free($3);
+				YYERROR;
+			}
+
+			if (strlcpy(gotsysd->web.control_socket, $3,
+			    sizeof(gotsysd->web.control_socket)) >=
+			    sizeof(gotsysd->web.control_socket)) {
+				yyerror("gotwebd control socket path "
+				    "too long: %s", $3);
+				free($3);
+				YYERROR;
+			}
+		}
+		| PREFORK NUMBER {
+			if ($2 <= 0 || $2 > PROC_MAX_INSTANCES) {
+				yyerror("prefork is %s: %lld",
+				    $2 <= 0 ? "too small" : "too large", $2);
+				YYERROR;
+			}
+			gotsysd->web.prefork = $2;
+		}
+		| CHROOT STRING {
+			const struct got_error *err;
+
+			err = gotsys_conf_validate_path($2);
+			if (err) {
+				yyerror("%s", err->msg);
+				free($2);
+				YYERROR;
+			}
+
+			if (strlcpy(gotsysd->web.httpd_chroot, $2,
+			    sizeof(gotsysd->web.httpd_chroot)) >=
+			    sizeof(gotsysd->web.httpd_chroot)) {
+				yyerror("httpd chroot path too long: %s", $2);
+				free($2);
+				YYERROR;
+			}
+		}
+		| HTDOCS STRING {
+			const struct got_error *err;
+
+			err = gotsys_conf_validate_path($2);
+			if (err) {
+				yyerror("%s", err->msg);
+				free($2);
+				YYERROR;
+			}
+
+			if (strlcpy(gotsysd->web.htdocs_path, $2,
+			    sizeof(gotsysd->web.htdocs_path)) >=
+			    sizeof(gotsysd->web.htdocs_path)) {
+				yyerror("htdocs path too long: %s", $2);
+				free($2);
+				YYERROR;
+			}
+		}
+		| GOTSYSD_LOGIN HINT USER STRING {
+			const struct got_error *err;
+
+			err = gotsys_conf_validate_name($4, "user");
+			if (err) {
+				yyerror("%s", err->msg);
+				free($4);
+				YYERROR;
+			}
+
+			if (strlcpy(gotsysd->web.login_hint_user, $4,
+			    sizeof(gotsysd->web.login_hint_user)) >=
+			    sizeof(gotsysd->web.login_hint_user)) {
+				yyerror("login hint user too long: %s", $4);
+				free($4);
+				YYERROR;
+			}
+		}
+		| GOTSYSD_LOGIN HINT PORT NUMBER {
+			int n;
+
+			if ($4 < 1 || $4 > USHRT_MAX) {
+				fatalx("port number invalid: %lld",
+				    (long long)$4);
+			}
+
+			n = snprintf(gotsysd->web.login_hint_port,
+			    sizeof(gotsysd->web.login_hint_port), "%lld",
+			    (long long)$4);
+			if (n < 0) {
+				fatal("snprintf: port number %lld:",
+				    (long long)$4);
+			}
+			if ((size_t)n >= sizeof(gotsysd->web.login_hint_port)) {
+				fatalx("port number too long: %lld",
+				    (long long)$4);
+			}
+		}
+		| USER STRING {
+			const struct got_error *err;
+
+			err = gotsys_conf_validate_name($2, "user");
+			if (err) {
+				yyerror("%s", err->msg);
+				free($2);
+				YYERROR;
+			}
+
+			if (strlcpy(gotsysd->web.gotwebd_user, $2,
+			    sizeof(gotsysd->web.gotwebd_user)) >=
+			    sizeof(gotsysd->web.gotwebd_user)) {
+				yyerror("gotwebd user too long: %s", $2);
+				free($2);
+				YYERROR;
+			}
+		}
+		| WWW USER STRING {
+			const struct got_error *err;
+
+			err = gotsys_conf_validate_name($3, "user");
+			if (err) {
+				yyerror("%s", err->msg);
+				free($3);
+				YYERROR;
+			}
+
+			if (strlcpy(gotsysd->web.www_user, $3,
+			    sizeof(gotsysd->web.www_user)) >=
+			    sizeof(gotsysd->web.www_user)) {
+				yyerror("www user too long: %s", $3);
+				free($3);
+				YYERROR;
+			}
+		}
+		| LISTEN ON listen_addr PORT STRING {
+			const struct got_error *err;
+			struct gotsysd_web_address *addr;
+
+			err = gotsysd_conf_validate_inet_addr($3, $5);
+			if (err) {
+				yyerror("%s", err->msg);
+				free($3);
+				free($5);
+				YYERROR;
+			}
+
+			addr = calloc(1, sizeof(*addr));
+			if (addr == NULL)
+				fatal("calloc");
+
+			addr->family = GOTSYSD_LISTEN_ADDR_INET;
+
+			if (strlcpy(addr->addr.inet.address, $3,
+			    sizeof(addr->addr.inet.address)) >=
+			    sizeof(addr->addr.inet.address)) {
+				yyerror("listen address too long: %s", $3);
+				free($3);
+				free($5);
+				free(addr);
+				YYERROR;
+			}
+			if (strlcpy(addr->addr.inet.port, $5,
+			    sizeof(addr->addr.inet.port)) >=
+			    sizeof(addr->addr.inet.port)) {
+				yyerror("port number too long: %s", $5);
+				free($3);
+				free($5);
+				free(addr);
+				YYERROR;
+			}
+
+			free($3);
+			free($5);
+		}
+		| LISTEN ON listen_addr PORT NUMBER {
+			const struct got_error *err;
+			struct gotsysd_web_address *addr;
+			int n;
+
+			addr = calloc(1, sizeof(*addr));
+			if (addr == NULL)
+				fatal("calloc");
+
+			addr->family = GOTSYSD_LISTEN_ADDR_INET;
+
+			if (strlcpy(addr->addr.inet.address, $3,
+			    sizeof(addr->addr.inet.address)) >=
+			    sizeof(addr->addr.inet.address)) {
+				yyerror("listen address too long: %s", $3);
+				free($3);
+				free(addr);
+				YYERROR;
+			}
+
+			n = snprintf(addr->addr.inet.port,
+			    sizeof(addr->addr.inet.port),
+			    "%lld", (long long)$5);
+			if (n < 0 || (size_t)n >= sizeof(addr->addr.inet.port))
+				fatalx("port number too long: %lld",
+				    (long long)$5);
+
+			err = gotsysd_conf_validate_inet_addr($3,
+			    addr->addr.inet.port);
+			if (err) {
+				yyerror("%s", err->msg);
+				free($3);
+				YYERROR;
+			}
+			free($3);
+		}
+		| LISTEN ON SOCKET STRING {
+			const struct got_error *err;
+			struct gotsysd_web_address *addr;
+
+			err = gotsys_conf_validate_path($4);
+			if (err) {
+				yyerror("%s", err->msg);
+				free($4);
+				YYERROR;
+			}
+
+			addr = calloc(1, sizeof(*addr));
+			if (addr == NULL)
+				fatal("calloc");
+
+			addr->family = GOTSYSD_LISTEN_ADDR_UNIX;
+
+			if (strlcpy(addr->addr.unix_socket_path, $4,
+			    sizeof(addr->addr.unix_socket_path)) >=
+			    sizeof(addr->addr.unix_socket_path)) {
+				yyerror("unix socket path too long: %s", $4);
+				free($4);
+				free(addr);
+				YYERROR;
+			}
+
+			TAILQ_INSERT_TAIL(&gotsysd->web.listen_addrs, addr,
+			    entry);
+		}
+		| DISABLE AUTHENTICATION {
+			if (gotsysd->web.auth_config != 0) {
+				yyerror("ambiguous global web authentication "
+				    "setting");
+				YYERROR;
+			}
+			gotsysd->web.auth_config = GOTSYSD_WEB_AUTH_DISABLED;
+		}
+		| ENABLE AUTHENTICATION {
+			if (gotsysd->web.auth_config != 0) {
+				yyerror("ambiguous global web authentication "
+				    "setting");
+				YYERROR;
+			}
+			gotsysd->web.auth_config = GOTSYSD_WEB_AUTH_SECURE;
+		}
+		| ENABLE AUTHENTICATION INSECURE {
+			if (gotsysd->web.auth_config != 0) {
+				yyerror("ambiguous global web authentication "
+				    "setting");
+				YYERROR;
+			}
+			gotsysd->web.auth_config = GOTSYSD_WEB_AUTH_INSECURE;
+		}
+		;
+
+webopts2	: webopts2 webopts1 nl
+		| webopts1 optnl
+		;
+
+webserver	: WEB SERVER STRING {
+			const struct got_error *err;
+
+			err = conf_new_web_server($3);
+			if (err) {
+				yyerror("%s", err->msg);
+				free($3);
+				YYERROR;
+			}
+			free($3);
+		} '{' optnl webserveropts2 '}' {
+		}
+		| WEB SERVER STRING {
+			const struct got_error *err;
+
+			err = conf_new_web_server($3);
+			if (err) {
+				yyerror("%s", err->msg);
+				free($3);
+				YYERROR;
+			}
+			free($3);
+		}
+		;
+	
+webserveropts1	: GOTWEB_URL_ROOT STRING {
+			struct gotsysd_web_server *srv;
+
+			srv = STAILQ_LAST(&gotsysd->web.servers,
+			    gotsysd_web_server, entry);
+
+			if (strlcpy(srv->gotweb_url_root, $2,
+			    sizeof(srv->gotweb_url_root)) >=
+			    sizeof(srv->gotweb_url_root)) {
+				yyerror("gotweb URL root too long: %s", $2);
+				free($2);
+				YYERROR;
+			}
+		}
+		| HTDOCS STRING {
+			struct gotsysd_web_server *srv;
+
+			srv = STAILQ_LAST(&gotsysd->web.servers,
+			    gotsysd_web_server, entry);
+
+			if (strlcpy(srv->htdocs_path, $2,
+			    sizeof(srv->htdocs_path)) >=
+			    sizeof(srv->htdocs_path)) {
+				yyerror("htdocs path too long: %s", $2);
+				free($2);
+				YYERROR;
+			}
+		}
+		| DISABLE AUTHENTICATION {
+			struct gotsysd_web_server *srv;
+
+			srv = STAILQ_LAST(&gotsysd->web.servers,
+			    gotsysd_web_server, entry);
+
+			if (srv->auth_config != 0) {
+				yyerror("web server %s: ambiguous "
+				    "authentication setting", srv->server_name);
+				YYERROR;
+			}
+			srv->auth_config = GOTSYSD_WEB_AUTH_DISABLED;
+		}
+		| ENABLE AUTHENTICATION {
+			struct gotsysd_web_server *srv;
+
+			srv = STAILQ_LAST(&gotsysd->web.servers,
+			    gotsysd_web_server, entry);
+
+			if (srv->auth_config != 0) {
+				yyerror("web server %s: ambiguous "
+				    "authentication setting", srv->server_name);
+				YYERROR;
+			}
+			srv->auth_config = GOTSYSD_WEB_AUTH_SECURE;
+		}
+		| ENABLE AUTHENTICATION INSECURE {
+			struct gotsysd_web_server *srv;
+
+			srv = STAILQ_LAST(&gotsysd->web.servers,
+			    gotsysd_web_server, entry);
+
+			if (srv->auth_config != 0) {
+				yyerror("web server %s: ambiguous "
+				    "authentication setting", srv->server_name);
+				YYERROR;
+			}
+			srv->auth_config = GOTSYSD_WEB_AUTH_INSECURE;
+		}
+		| HIDE REPOSITORIES boolean {
+			struct gotsysd_web_server *srv;
+
+			srv = STAILQ_LAST(&gotsysd->web.servers,
+			    gotsysd_web_server, entry);
+
+			srv->hide_repositories = $3;
+		}
+		;
+
+webserveropts2	: webserveropts2 webserveropts1 nl
+		| webserveropts1 optnl
+		;
+
+optnl		: '\n' optnl		/* zero or more newlines */
+		| /* empty */
+		;
+
+nl		: '\n' optnl
+		;
 %%
 
 struct keywords {
@@ -318,18 +743,38 @@ lookup(char *s)
 {
 	/* This has to be sorted always. */
 	static const struct keywords keywords[] = {
+		{ "authentication",		AUTHENTICATION },
+		{ "chroot",			CHROOT },
+		{ "control",			GOTSYSD_CONTROL },
 		{ "deny",			DENY },
 		{ "directory",			DIRECTORY },
+		{ "disable",			DISABLE },
+		{ "enable",			ENABLE },
 		{ "gotd",			GOTD },
+		{ "gotweb",			GOTWEB },
+		{ "gotweb_url_root",		GOTWEB_URL_ROOT },
+		{ "hide",			HIDE },
+		{ "hint",			HINT },
+		{ "htdocs",			HTDOCS },
+		{ "insecure",			INSECURE },
 		{ "listen",			LISTEN },
+		{ "login",			GOTSYSD_LOGIN },
+		{ "name",			NAME },
 		{ "on",				ON },
 		{ "permit",			PERMIT },
+		{ "port",			PORT },
+		{ "prefork",			PREFORK },
 		{ "range",			RANGE },
+		{ "repositories",		REPOSITORIES },
 		{ "repository",			REPOSITORY },
 		{ "ro",				RO },
 		{ "rw",				RW },
+		{ "server",			SERVER },
+		{ "socket",			SOCKET },
 		{ "uid",			UID },
 		{ "user",			USER },
+		{ "web",			WEB },
+		{ "www",			WWW },
 	};
 	const struct keywords *p;
 
@@ -651,6 +1096,8 @@ gotsysd_parse_config(const char *filename, enum gotsysd_procid proc_id,
 	STAILQ_INIT(gotsysd->global_repo_access_rules);
 	global_repo_access_rules = NULL;
 
+	gotsysd_web_config_init(&gotsysd->web);
+
 	/* Apply default values. */
 	if (strlcpy(gotsysd->unix_socket_path, GOTSYSD_UNIX_SOCKET,
 	    sizeof(gotsysd->unix_socket_path)) >=
@@ -701,6 +1148,13 @@ gotsysd_parse_config(const char *filename, enum gotsysd_procid proc_id,
 
 		if (errors)
 			return (-1);
+	}
+
+	if (strlcpy(gotsysd->web.repos_path, gotsysd->repos_path,
+	    sizeof(gotsysd->web.repos_path)) >=
+	    sizeof(gotsysd->web.repos_path)) {
+		fprintf(stderr, "%s: repos path too long", __func__);
+		return -1;
 	}
 
 	if (proc_id == GOTSYSD_PROC_AUTH &&
@@ -834,5 +1288,32 @@ conf_new_repo_access_rule(enum gotsys_access access, int authorization,
 		return err;
 
 	STAILQ_INSERT_TAIL(gotsysd->global_repo_access_rules, rule, entry);
+	return NULL;
+}
+
+static const struct got_error *
+conf_new_web_server(const char *name)
+{
+	struct gotsysd_web_server *srv;
+
+	STAILQ_FOREACH(srv, &gotsysd->web.servers, entry) {
+		if (strcmp(srv->server_name, name) == 0) {
+			return got_error_fmt(GOT_ERR_PARSE_CONFIG,
+			    "duplicate web server: %s", name);
+		}
+	}
+
+	srv = calloc(1, sizeof(*srv));
+	if (srv == NULL)
+		fatal("calloc");
+
+	if (strlcpy(srv->server_name, name, sizeof(srv->server_name)) >=
+	    sizeof(srv->server_name)) {
+		return got_error_fmt(GOT_ERR_NO_SPACE,
+		    "server name too long: %s", name);
+	}
+
+	srv->hide_repositories = -1;
+	STAILQ_INSERT_TAIL(&gotsysd->web.servers, srv, entry);
 	return NULL;
 }

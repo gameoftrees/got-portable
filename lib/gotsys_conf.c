@@ -19,16 +19,23 @@
 #include <sys/queue.h>
 
 #include <ctype.h>
+#include <event.h>
 #include <imsg.h>
 #include <limits.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sha1.h>
+#include <sha2.h>
 
 #include "got_error.h"
 #include "got_path.h"
+#include "got_object.h"
+#include "got_reference.h"
 
+#include "media.h"
+#include "gotwebd.h"
 #include "gotsys.h"
 
 #ifndef nitems
@@ -43,6 +50,156 @@ gotsys_conf_init(struct gotsys_conf *gotsysconf)
 	STAILQ_INIT(&gotsysconf->users);
 	STAILQ_INIT(&gotsysconf->groups);
 	TAILQ_INIT(&gotsysconf->repos);
+	STAILQ_INIT(&gotsysconf->webservers);
+	RB_INIT(&gotsysconf->mediatypes);
+}
+
+const struct got_error *
+gotsys_conf_new_webserver(struct gotsys_webserver **new, const char *name)
+{
+	const struct got_error *err;
+	struct gotsys_webserver *srv;
+
+	*new = NULL;
+
+	err = gotsys_conf_validate_hostname(name);
+	if (err)
+		return err;
+
+	srv = calloc(1, sizeof(*srv));
+	if (srv == NULL)
+		return got_error_from_errno("calloc");
+
+	if (strlcpy(srv->server_name, name,
+	    sizeof(srv->server_name)) >= sizeof(srv->server_name)) {
+		err = got_error_fmt(GOT_ERR_PARSE_CONFIG,
+		    "web server name '%s' too long, exceeds %zd bytes",
+		    name, sizeof(srv->server_name) - 1);
+		free(srv);
+		return err;
+	}
+
+	RB_INIT(&srv->mediatypes);
+	err = gotsys_conf_init_media_types(&srv->mediatypes);
+	if (err) {
+		free(srv);
+		return err;
+	}
+
+	STAILQ_INIT(&srv->access_rules);
+	STAILQ_INIT(&srv->repos);
+	RB_INIT(&srv->websites);
+	srv->hide_repositories = -1;
+
+	*new = srv;
+	return NULL;
+}
+
+const struct got_error *
+gotsys_conf_new_webrepo(struct gotsys_webrepo **new, const char *name)
+{
+	const struct got_error *err;
+	struct gotsys_webrepo *repo;
+
+	*new = NULL;
+
+	err = gotsys_conf_validate_repo_name(name);
+	if (err)
+		return err;
+
+	repo = calloc(1, sizeof(*repo));
+	if (repo == NULL)
+		return got_error_from_errno("calloc");
+
+	if (strlcpy(repo->repo_name, name,
+	    sizeof(repo->repo_name)) >= sizeof(repo->repo_name)) {
+		err = got_error_fmt(GOT_ERR_PARSE_CONFIG,
+		    "repository name '%s' too long, exceeds %zd bytes",
+		    name, sizeof(repo->repo_name) - 1);
+		free(repo);
+		return err;
+	}
+
+	STAILQ_INIT(&repo->access_rules);
+	repo->hidden = -1;
+
+	*new = repo;
+	return NULL;
+}
+
+const struct got_error *
+gotsys_conf_init_media_types(struct mediatypes *mediatypes)
+{
+	struct media_type defaults[] = {
+		{
+			.media_name = "css",
+			.media_type = "text",
+			.media_subtype = "css",
+		},
+		{
+			.media_name = "gif",
+			.media_type = "image",
+			.media_subtype = "gif",
+		},
+		{
+			.media_name = "html",
+			.media_type = "text",
+			.media_subtype = "html",
+		},
+		{
+			.media_name = "ico",
+			.media_type = "image",
+			.media_subtype = "x-icon",
+		},
+		{
+			.media_name = "png",
+			.media_type = "image",
+			.media_subtype = "png",
+		},
+		{
+			.media_name = "jpeg",
+			.media_type = "image",
+			.media_subtype = "jpeg",
+		},
+		{
+			.media_name = "jpg",
+			.media_type = "image",
+			.media_subtype = "jpeg",
+		},
+		{
+			.media_name = "js",
+			.media_type = "application",
+			.media_subtype = "javascript",
+		},
+		{
+			.media_name = "svg",
+			.media_type = "image",
+			.media_subtype = "svg+xml",
+		},
+		{
+			.media_name = "txt",
+			.media_type = "text",
+			.media_subtype = "plain",
+		},
+		{
+			.media_name = "webmanifest",
+			.media_type = "application",
+			.media_subtype = "manifest+json",
+		},
+		{
+			.media_name = "xml",
+			.media_type = "text",
+			.media_subtype = "xml",
+		},
+	};
+	size_t i;
+
+	for (i = 0; i < nitems(defaults); ++i) {
+		if (media_add(mediatypes, &defaults[i]) == NULL)
+			return got_error_from_errno("media_add");
+	}
+
+	return NULL;
 }
 
 void
@@ -200,6 +357,66 @@ gotsys_grouplist_purge(struct gotsys_grouplist *groups)
 }
 
 void
+gotsys_webrepo_free(struct gotsys_webrepo *webrepo)
+{
+	if (webrepo == NULL)
+		return;
+
+	while (!STAILQ_EMPTY(&webrepo->access_rules)) {
+		struct gotsys_access_rule *rule;
+
+		rule = STAILQ_FIRST(&webrepo->access_rules);
+		STAILQ_REMOVE_HEAD(&webrepo->access_rules, entry);
+		gotsys_access_rule_free(rule);
+	}
+
+	free(webrepo);
+}
+
+void
+gotsys_webserver_free(struct gotsys_webserver *srv)
+{
+	struct got_pathlist_entry *pe;
+
+	if (srv == NULL)
+		return;
+
+	while (!STAILQ_EMPTY(&srv->access_rules)) {
+		struct gotsys_access_rule *rule;
+
+		rule = STAILQ_FIRST(&srv->access_rules);
+		STAILQ_REMOVE_HEAD(&srv->access_rules, entry);
+		gotsys_access_rule_free(rule);
+	}
+
+	media_purge(&srv->mediatypes);
+
+	while (!STAILQ_EMPTY(&srv->repos)) {
+		struct gotsys_webrepo *webrepo;
+
+		webrepo = STAILQ_FIRST(&srv->repos);
+		STAILQ_REMOVE_HEAD(&srv->repos, entry);
+		gotsys_webrepo_free(webrepo);
+	}
+
+	RB_FOREACH(pe, got_pathlist_head, &srv->websites) {
+		struct gotsys_website *site = pe->data;
+
+		while (!STAILQ_EMPTY(&site->access_rules)) {
+			struct gotsys_access_rule *rule;
+
+			rule = STAILQ_FIRST(&srv->access_rules);
+			STAILQ_REMOVE_HEAD(&srv->access_rules, entry);
+			gotsys_access_rule_free(rule);
+		}
+	}
+	got_pathlist_free(&srv->websites,
+	    GOT_PATHLIST_FREE_PATH | GOT_PATHLIST_FREE_DATA);
+
+	free(srv);
+}
+
+void
 gotsys_conf_clear(struct gotsys_conf *gotsysconf)
 {
 	gotsys_userlist_purge(&gotsysconf->users);
@@ -213,6 +430,16 @@ gotsys_conf_clear(struct gotsys_conf *gotsysconf)
 		TAILQ_REMOVE(&gotsysconf->repos, repo, entry);
 		gotsys_repo_free(repo);
 	}
+
+	while (!STAILQ_EMPTY(&gotsysconf->webservers)) {
+		struct gotsys_webserver *srv;
+
+		srv = STAILQ_FIRST(&gotsysconf->webservers);
+		STAILQ_REMOVE_HEAD(&gotsysconf->webservers, entry);
+		gotsys_webserver_free(srv);
+	}
+
+	media_purge(&gotsysconf->mediatypes);
 }
 
 static const char *wellknown_users[] = {
@@ -767,4 +994,354 @@ gotsys_conf_new_access_rule(struct gotsys_access_rule **rule,
 	}
 
 	return err;
+}
+
+const struct got_error *
+gotsys_conf_new_website(struct gotsys_website **site, const char *url_path)
+{
+	const struct got_error *err = NULL;
+	int i;
+
+	*site = NULL;
+
+	if (url_path[0] == '\0') {
+		return got_error_msg(GOT_ERR_PARSE_CONFIG,
+		    "empty URL path in configuration file");
+	}
+
+	for (i = 0; i < strlen(url_path); i++) {
+		if (isalnum((unsigned char)url_path[i]) ||
+		    url_path[i] == '-' || url_path[i] == '_' ||
+		    url_path[i] == '/')
+			continue;
+
+		return got_error_fmt(GOT_ERR_PARSE_CONFIG,
+		    "URL paths may only contain alphanumeric ASCII characters, "
+		    "hyphens, underscores, and slashes: %s", url_path);
+	}
+	
+	*site = calloc(1, sizeof(**site));
+	if (*site == NULL)
+		return got_error_from_errno("calloc");
+
+	STAILQ_INIT(&(*site)->access_rules);
+
+	if (!got_path_is_absolute(url_path)) {
+		int ret;
+
+		ret = snprintf((*site)->url_path, sizeof((*site)->url_path),
+		    "/%s", url_path);
+		if (ret == -1) {
+			err = got_error_from_errno("snprintf");
+			goto done;
+		}
+		if ((size_t)ret >= sizeof((*site)->url_path)) {
+			err = got_error_fmt(GOT_ERR_PARSE_CONFIG,
+			    "URL path too long (exceeds %zd bytes): %s",
+			    sizeof((*site)->url_path) - 1, url_path);
+			goto done;
+		}
+	} else {
+		if (strlcpy((*site)->url_path, url_path,
+		    sizeof((*site)->url_path)) >=
+		    sizeof((*site)->url_path)) {
+			err = got_error_fmt(GOT_ERR_PARSE_CONFIG,
+			    "URL path too long (exceeds %zd bytes): %s",
+			    sizeof((*site)->url_path) - 1, url_path);
+			goto done;
+		}
+	}
+
+done:
+	if (err) {
+		free(*site);
+		*site = NULL;
+	}
+
+	return err;
+}
+
+
+const struct got_error *
+gotsys_conf_validate_path(const char *path)
+{
+	size_t i;
+
+	for (i = 0; i < strlen(path); i++) {
+		if (isalnum((unsigned char)path[i]) ||
+		    path[i] == '.' ||
+		    path[i] == '-' ||
+		    path[i] == '_' ||
+		    path[i] == '/')
+			continue;
+
+		return got_error_fmt(GOT_ERR_PARSE_CONFIG,
+		    "paths may only contain alphanumeric characters, dots, "
+		    "hyphens, underscores, and slashes; bad path %s", path);
+	}
+
+	return NULL;
+}
+
+const struct got_error *
+gotsys_conf_validate_hostname(const char *host)
+{
+	size_t i, len;
+
+	len = strlen(host);
+	if (len == 0) {
+		return got_error_msg(GOT_ERR_PARSE_URI,
+		    "hostname cannot be empty");
+	}
+
+	for (i = 0; i < len; i++) {
+		if (isalnum((unsigned char)host[i]) ||
+		    host[i] == '.' || host[i] == '-')
+			continue;
+
+		return got_error_fmt(GOT_ERR_PARSE_URI,
+		    "hostnames may only contain alphanumeric characters, "
+		    "dots, and hyphens; bad hostname %s", host);
+	}
+
+	return NULL;
+}
+
+static inline int
+should_urlencode(int c)
+{
+	if (c <= ' ' || c >= 127)
+		return 1;
+
+	switch (c) {
+		/* gen-delim */
+	case ':':
+	case '/':
+	case '?':
+	case '#':
+	case '[':
+	case ']':
+	case '@':
+		/* sub-delims */
+	case '!':
+	case '$':
+	case '&':
+	case '\'':
+	case '(':
+	case ')':
+	case '*':
+	case '+':
+	case ',':
+	case ';':
+	case '=':
+		/* needed because the URLs are embedded into gotd.conf */
+	case '\"':
+		return 1;
+	default:
+		return 0;
+	}
+}
+
+static char *
+urlencode(const char *str)
+{
+	const char *s;
+	char *escaped;
+	size_t i, len;
+	int a, b;
+
+	len = 0;
+	for (s = str; *s; ++s) {
+		len++;
+		if (len == 1 && *s == '/')
+			continue;
+		if (should_urlencode(*s))
+			len += 2;
+	}
+
+	escaped = calloc(1, len + 1);
+	if (escaped == NULL)
+		return NULL;
+
+	i = 0;
+	for (s = str; *s; ++s) {
+		if (i == 0 && *s == '/') {
+			escaped[i++] = *s;
+			continue;
+		}
+		if (should_urlencode(*s)) {
+			a = (*s & 0xF0) >> 4;
+			b = (*s & 0x0F);
+
+			escaped[i++] = '%';
+			escaped[i++] = a <= 9 ? ('0' + a) : ('7' + a);
+			escaped[i++] = b <= 9 ? ('0' + b) : ('7' + b);
+		} else
+			escaped[i++] = *s;
+	}
+
+	return escaped;
+}
+
+const struct got_error *
+gotsys_conf_parse_url(char **proto, char **host, char **port,
+    char **request_path, const char *url)
+{
+	const struct got_error *err = NULL;
+	char *s, *p, *q;
+
+	*proto = *host = *port = *request_path = NULL;
+
+	p = strstr(url, "://");
+	if (!p) {
+		return got_error_msg(GOT_ERR_PARSE_URI,
+		    "no protocol specified");
+	}
+
+	*proto = strndup(url, p - url);
+	if (*proto == NULL) {
+		err = got_error_from_errno("strndup");
+		goto done;
+	}
+	s = p + 3;
+
+	p = strstr(s, "/");
+	if (p == NULL)
+		p = strchr(s, '\0');
+
+	q = memchr(s, ':', p - s);
+	if (q) {
+		*host = strndup(s, q - s);
+		if (*host == NULL) {
+			err = got_error_from_errno("strndup");
+			goto done;
+		}
+		if ((*host)[0] == '\0') {
+			err = got_error(GOT_ERR_PARSE_URI);
+			goto done;
+		}
+		*port = strndup(q + 1, p - (q + 1));
+		if (*port == NULL) {
+			err = got_error_from_errno("strndup");
+			goto done;
+		}
+		if ((*port)[0] == '\0') {
+			err = got_error(GOT_ERR_PARSE_URI);
+			goto done;
+		}
+		if (strcmp(*port, "http") != 0 &&
+		    strcmp(*port, "https") != 0) {
+			const char *errstr;
+
+			(void)strtonum(*port, 1, USHRT_MAX, &errstr);
+			if (errstr != NULL) {
+				err = got_error_fmt(GOT_ERR_PARSE_URI,
+				    "port number '%s' is %s", *port, errstr);
+				goto done;
+			}
+		}
+	} else {
+		*host = strndup(s, p - s);
+		if (*host == NULL) {
+			err = got_error_from_errno("strndup");
+			goto done;
+		}
+	}
+
+	err = gotsys_conf_validate_hostname(*host);
+	if (err)
+		goto done;
+
+	while (p[0] == '/' && p[1] == '/')
+		p++;
+	if (p[0] == '\0') {
+		*request_path = strdup("/");
+		if (*request_path == NULL) {
+			err = got_error_from_errno("strdup");
+		}
+	} else {
+		*request_path = urlencode(p);
+		if (*request_path == NULL)
+			err = got_error_from_errno("calloc");
+	}
+done:
+	if (err) {
+		free(*proto);
+		*proto = NULL;
+		free(*host);
+		*host = NULL;
+		free(*port);
+		*port = NULL;
+		free(*request_path);
+		*request_path = NULL;
+	}
+	return err;
+}
+
+const struct got_error *
+gotsys_conf_validate_url(const char *url)
+{
+	const struct got_error *err;
+	char *proto, *hostname, *port, *path;
+
+	err = gotsys_conf_parse_url(&proto, &hostname, &port, &path, url);
+	if (err)
+		return err;
+
+	if (strcmp(proto, "http") != 0 &&
+	    strcmp(proto, "https") != 0) {
+		err = got_error_fmt(GOT_ERR_PARSE_CONFIG,
+		    "invalid protocol %s", proto);
+		goto done;
+	}
+
+	err = gotsys_conf_validate_hostname(hostname);
+	if (err)
+		goto done;
+
+	err = gotsys_conf_validate_path(path);
+	if (err)
+		goto done;
+done:
+	free(proto);
+	free(hostname);
+	free(port);
+	free(path);
+	return err;
+}
+
+const struct got_error *
+gotsys_conf_validate_mediatype(const char *s)
+{
+	size_t i;
+
+	for (i = 0; s[i] != '\0'; ++i) {
+		if (!isalnum((unsigned char)s[i]) &&
+		    s[i] != '-' && s[i] != '+' && s[i] != '.')
+			return got_error_path(s, GOT_ERR_MEDIA_TYPE);
+	}
+	return (0);
+}
+
+const struct got_error *
+gotsys_conf_validate_string(const char *s)
+{
+	int i;
+
+	for (i = 0; s[i] != '\0'; ++i) {
+		char x = s[i];
+
+		/* keep in sync with gotwebd/parse.y allowed_in_string() */
+		if (isalnum((unsigned char)x) ||
+		    (ispunct((unsigned char)x) && x != '(' && x != ')' &&
+		    x != '{' && x != '}' &&
+		    x != '!' && x != '=' && x != '#' &&
+		    x != ',' && x != '/'))
+			continue;
+
+		return got_error_fmt(GOT_ERR_PARSE_CONFIG,
+		    "character '%c' (0x%.2x) is not allowed in %s", x, x, s);
+	}
+
+	return NULL;
 }

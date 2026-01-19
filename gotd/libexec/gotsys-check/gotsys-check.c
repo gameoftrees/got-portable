@@ -44,8 +44,10 @@
 
 #include "got_lib_poll.h"
 
-#include "gotsys.h"
 #include "gotsysd.h"
+#include "media.h"
+#include "gotwebd.h"
+#include "gotsys.h"
 #include "gotd.h"
 
 #ifndef nitems

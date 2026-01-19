@@ -10,14 +10,15 @@ BINDIR ?=	${PREFIX}/sbin
 
 PROG=		gotsysd
 SRCS=		gotsysd.c log.c error.c pollfd.c hash.c imsg.c parse.y path.c \
-		listen.c auth.c helpers.c sysconf.c gotsys_conf.c gotsys_imsg.c
+		listen.c auth.c helpers.c sysconf.c media.c gotsys_conf.c \
+		gotsys_imsg.c reference_parse.c
 
 CLEANFILES = parse.h
 
 MAN =		${PROG}.conf.5 ${PROG}.8
 
 CPPFLAGS = -I${.CURDIR}/../include -I${.CURDIR}/../lib -I${.CURDIR}/../gotsys \
-	-I${.CURDIR}
+	-I${.CURDIR}/../gotwebd -I${.CURDIR}
 YFLAGS =
 
 .if defined(PROFILE)

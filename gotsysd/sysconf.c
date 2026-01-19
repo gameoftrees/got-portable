@@ -34,12 +34,13 @@
 #include "got_error.h"
 #include "got_path.h"
 #include "got_object.h"
+#include "got_reference.h"
 
 #include "gotsysd.h"
+#include "media.h"
+#include "gotwebd.h"
 #include "gotsys.h"
 #include "log.h"
-#include "sysconf.h"
-
 
 #include "sysconf.h"
 
@@ -49,14 +50,17 @@ enum gotsysd_sysconf_state {
 	SYSCONF_STATE_EXPECT_AUTHORIZED_KEYS,
 	SYSCONF_STATE_EXPECT_GROUPS,
 	SYSCONF_STATE_EXPECT_REPOS,
+	SYSCONF_STATE_EXPECT_MEDIA_TYPES,
+	SYSCONF_STATE_EXPECT_WEB_SERVERS,
 	SYSCONF_STATE_ADD_USERS,
 	SYSCONF_STATE_CREATE_HOMEDIRS,
 	SYSCONF_STATE_INSTALL_AUTHORIZED_KEYS,
 	SYSCONF_STATE_REMOVE_AUTHORIZED_KEYS,
 	SYSCONF_STATE_ADD_GROUPS,
 	SYSCONF_STATE_CREATE_REPOS,
-	SYSCONF_STATE_CREATE_GOTD_CONF,
+	SYSCONF_STATE_CREATE_CONF_FILES,
 	SYSCONF_STATE_RESTART_GOTD,
+	SYSCONF_STATE_RESTART_GOTWEBD,
 	SYSCONF_STATE_CONFIGURE_SSHD,
 	SYSCONF_STATE_DONE,
 };
@@ -84,6 +88,8 @@ static struct gotsysd_sysconf {
 	size_t *num_notif_refs_cur;
 	size_t num_notif_refs_needed;
 	size_t num_notif_refs_received;
+	struct gotsys_website *site_cur;
+	struct gotsysd_web_config *web;
 } gotsysd_sysconf;
 
 static struct gotsys_conf gotsysconf;
@@ -358,6 +364,7 @@ sysconf_dispatch_libexec(int fd, short event, void *arg)
 			log_debug("received repository %s", repo->name);
 			TAILQ_INSERT_TAIL(&gotsysconf.repos, repo, entry);
 			gotsysd_sysconf.repo_cur = repo;
+			gotsysd_sysconf.site_cur = NULL;
 			break;
 		}
 		case GOTSYSD_IMSG_SYSCONF_ACCESS_RULE: {
@@ -639,6 +646,19 @@ sysconf_dispatch_libexec(int fd, short event, void *arg)
 			break;
 		}
 		case GOTSYSD_IMSG_SYSCONF_NOTIFICATION_TARGETS_DONE:
+			if (gotsysd_sysconf.repo_cur == NULL ||
+			    gotsysd_sysconf.num_notif_refs_needed != 0 ||
+			    gotsysd_sysconf.state !=
+			    SYSCONF_STATE_EXPECT_REPOS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+
+			gotsysd_sysconf.num_notif_refs_needed = 0;
+			gotsysd_sysconf.notif_refs_cur = NULL;
 			break;
 		case GOTSYSD_IMSG_SYSCONF_REPOS_DONE:
 			if (gotsysd_sysconf.state !=
@@ -651,15 +671,415 @@ sysconf_dispatch_libexec(int fd, short event, void *arg)
 			}
 			log_debug("done receiving repositories");
 			gotsysd_sysconf.repo_cur = NULL;
-			gotsysd_sysconf.state = SYSCONF_STATE_ADD_USERS;
 			gotsysd_sysconf.users_cur = NULL;
+			gotsysd_sysconf.state =
+			    SYSCONF_STATE_EXPECT_MEDIA_TYPES;
+			break;
+		case GOTSYSD_IMSG_SYSCONF_GLOBAL_MEDIA_TYPE: {
+			struct media_type media;
+
+			if (gotsysd_sysconf.state !=
+			    SYSCONF_STATE_EXPECT_MEDIA_TYPES) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+			err = gotsys_imsg_recv_media_type(&media, &imsg);
+			if (err)
+				break;
+			if (media_add(&gotsysconf.mediatypes, &media) == NULL)
+				err = got_error_from_errno("media_add");
+			break;
+		}
+		case GOTSYSD_IMSG_SYSCONF_GLOBAL_MEDIA_TYPES_DONE:
+			if (gotsysd_sysconf.state !=
+			    SYSCONF_STATE_EXPECT_MEDIA_TYPES) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+			gotsysd_sysconf.state =
+			    SYSCONF_STATE_EXPECT_WEB_SERVERS;
+			break;
+		case GOTSYSD_IMSG_SYSCONF_WEB_SERVER: {
+			struct gotsys_webserver *srv;
+
+			if (gotsysd_sysconf.state !=
+			    SYSCONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+
+			srv = calloc(1, sizeof(*srv));
+			if (srv == NULL) {
+				err = got_error_from_errno("calloc");
+				break;
+			}
+			err = gotsys_imsg_recv_web_server(srv, &imsg);
+			if (err) {
+				free(srv);
+				break;
+			}
+			log_debug("received web server");
+			STAILQ_INSERT_TAIL(&gotsysconf.webservers, srv, entry);
+			break;
+		}
+		case GOTSYSD_IMSG_SYSCONF_WEB_ACCESS_RULE: {
+			struct gotsys_webserver *srv;
+			struct gotsys_access_rule *rule;
+
+			if (gotsysd_sysconf.state !=
+			    SYSCONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+
+			srv = STAILQ_LAST(&gotsysconf.webservers,
+			    gotsys_webserver, entry);
+			if (srv == NULL) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+
+			log_debug("receiving web access rule");
+			err = gotsys_imsg_recv_access_rule(&rule, &imsg,
+			    &gotsysconf.users, &gotsysconf.groups);
+			if (err)
+				break;
+			if (!gotsysd_sysconf.have_anonymous_user &&
+			    strcmp(rule->identifier, "anonymous") == 0) {
+				err = add_anonymous_user(&gotsysconf.users);
+				if (err)
+					break;
+				gotsysd_sysconf.have_anonymous_user = 1;
+			}
+
+			STAILQ_INSERT_TAIL(&srv->access_rules, rule, entry);
+			break;
+		}
+		case GOTSYSD_IMSG_SYSCONF_WEB_ACCESS_RULES_DONE:
+			if (gotsysd_sysconf.state !=
+			    SYSCONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+			log_debug("done receiving web access rules");
+			break;
+		case GOTSYSD_IMSG_SYSCONF_WEBREPO: {
+			struct gotsys_webserver *srv;
+			struct gotsys_webrepo *webrepo;
+			struct gotsys_repo *repo;
+
+			if (gotsysd_sysconf.state !=
+			    SYSCONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+
+			srv = STAILQ_LAST(&gotsysconf.webservers,
+			    gotsys_webserver, entry);
+			if (srv == NULL) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+
+			webrepo = calloc(1, sizeof(*webrepo));
+			if (webrepo == NULL) {
+				err = got_error_from_errno("calloc");
+				break;
+			}
+
+			err = gotsys_imsg_recv_webrepo(webrepo, &imsg);
+			if (err)
+				break;
+
+			TAILQ_FOREACH(repo, &gotsysconf.repos, entry) {
+				if (strcmp(repo->name, webrepo->repo_name) == 0)
+					break;
+			}
+			if (repo == NULL) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "web repository refers to nonexistent "
+				    "repository %s while in state %d\n",
+				    webrepo->repo_name, gotsysd_sysconf.state);
+				break;
+			}
+			log_debug("received web server %s repo %s",
+			    srv->server_name, webrepo->repo_name);
+			STAILQ_INSERT_TAIL(&srv->repos, webrepo, entry);
+			break;
+		}
+		case GOTSYSD_IMSG_SYSCONF_WEBREPO_ACCESS_RULE: {
+			struct gotsys_webserver *srv;
+			struct gotsys_webrepo *webrepo;
+			struct gotsys_access_rule *rule;
+
+			if (gotsysd_sysconf.state !=
+			    SYSCONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+
+			srv = STAILQ_LAST(&gotsysconf.webservers,
+			    gotsys_webserver, entry);
+			if (srv == NULL) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+
+			webrepo = STAILQ_LAST(&srv->repos, gotsys_webrepo,
+			    entry);
+			if (webrepo == NULL) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+			log_debug("receiving webrepo access rule");
+
+			err = gotsys_imsg_recv_access_rule(&rule, &imsg,
+			    &gotsysconf.users, &gotsysconf.groups);
+			if (err)
+				break;
+			if (!gotsysd_sysconf.have_anonymous_user &&
+			    strcmp(rule->identifier, "anonymous") == 0) {
+				err = add_anonymous_user(&gotsysconf.users);
+				if (err)
+					break;
+				gotsysd_sysconf.have_anonymous_user = 1;
+			}
+			STAILQ_INSERT_TAIL(&webrepo->access_rules, rule, entry);
+			break;
+		}
+		case GOTSYSD_IMSG_SYSCONF_WEBREPO_ACCESS_RULES_DONE:
+			if (gotsysd_sysconf.state !=
+			    SYSCONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+			log_debug("done receiving webrepo access rules");
+			break;
+		case GOTSYSD_IMSG_SYSCONF_WEBREPOS_DONE:
+			if (gotsysd_sysconf.state !=
+			    SYSCONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+			log_debug("done receiving webrepos");
+			break;
+		case GOTSYSD_IMSG_SYSCONF_WEBSITE_PATH: {
+			struct gotsys_webserver *srv;
+			struct gotsys_website *site;
+			struct got_pathlist_entry *new;
+
+			if (gotsysd_sysconf.state !=
+			    SYSCONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+
+			srv = STAILQ_LAST(&gotsysconf.webservers,
+			    gotsys_webserver, entry);
+			if (srv == NULL) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+
+			err = gotsys_imsg_recv_website_path(&site, &imsg);
+			if (err)
+				break;
+			err = got_pathlist_insert(&new, &srv->websites,
+			    site->url_path, site);
+			if (err)
+				break;
+			if (new == NULL) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "duplicate web site '%s' in "
+				    "repository '%s'", site->url_path,
+				    gotsysd_sysconf.repo_cur->name);
+				free(site);
+				break;
+			}
+			gotsysd_sysconf.site_cur = site;
+			break;
+		}
+		case GOTSYSD_IMSG_SYSCONF_WEBSITE: {
+			struct gotsys_repo *repo;
+
+			if (gotsysd_sysconf.site_cur == NULL ||
+			    gotsysd_sysconf.state !=
+			    SYSCONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+
+			err = gotsys_imsg_recv_website(
+			    gotsysd_sysconf.site_cur, &imsg);
+			if (err)
+				break;
+
+			TAILQ_FOREACH(repo, &gotsysconf.repos, entry) {
+				if (strcmp(repo->name,
+				    gotsysd_sysconf.site_cur->repo_name) == 0)
+					break;
+			}
+			if (repo == NULL) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "web repository refers to nonexistent "
+				    "repository %s while in state %d\n",
+				    gotsysd_sysconf.site_cur->repo_name,
+				    gotsysd_sysconf.state);
+				break;
+			}
+			break;
+		}
+		case GOTSYSD_IMSG_SYSCONF_WEBSITE_ACCESS_RULE: {
+			struct gotsys_access_rule_list *rules;
+			struct gotsys_access_rule *rule;
+
+			if (gotsysd_sysconf.site_cur == NULL ||
+			    gotsysd_sysconf.state !=
+			    SYSCONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+			log_debug("receiving website access rule");
+			err = gotsys_imsg_recv_access_rule(&rule, &imsg,
+			    &gotsysconf.users, &gotsysconf.groups);
+			if (err)
+				break;
+			if (!gotsysd_sysconf.have_anonymous_user &&
+			    strcmp(rule->identifier, "anonymous") == 0) {
+				err = add_anonymous_user(&gotsysconf.users);
+				if (err)
+					break;
+				gotsysd_sysconf.have_anonymous_user = 1;
+			}
+			rules = &gotsysd_sysconf.site_cur->access_rules;
+			STAILQ_INSERT_TAIL(rules, rule, entry);
+			break;
+		}
+		case GOTSYSD_IMSG_SYSCONF_WEBSITE_ACCESS_RULES_DONE:
+			if (gotsysd_sysconf.site_cur == NULL ||
+			    gotsysd_sysconf.state !=
+			    SYSCONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+			log_debug("done receiving website access rules");
+			gotsysd_sysconf.site_cur = NULL;
+			break;
+		case GOTSYSD_IMSG_SYSCONF_WEBSITES_DONE:
+			if (gotsysd_sysconf.site_cur != NULL ||
+			    gotsysd_sysconf.state !=
+			    SYSCONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+			log_debug("done receiving websites");
+			break;
+		case GOTSYSD_IMSG_SYSCONF_MEDIA_TYPE: {
+			struct gotsys_webserver *srv;
+			struct media_type media;
+
+			if (gotsysd_sysconf.state !=
+			    SYSCONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+
+			srv = STAILQ_LAST(&gotsysconf.webservers,
+			    gotsys_webserver, entry);
+			if (srv == NULL) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+
+			err = gotsys_imsg_recv_media_type(&media, &imsg);
+			if (err)
+				break;
+			if (media_add(&srv->mediatypes, &media) == NULL)
+				err = got_error_from_errno("media_add");
+			break;
+		}
+		case GOTSYSD_IMSG_SYSCONF_MEDIA_TYPES_DONE:
+			if (gotsysd_sysconf.state !=
+			    SYSCONF_STATE_EXPECT_WEB_SERVERS) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+				break;
+			}
+			break;
+		case GOTSYSD_IMSG_SYSCONF_WEB_SERVERS_DONE:
+			log_debug("done receiving web servers");
+			gotsysd_sysconf.state = SYSCONF_STATE_ADD_USERS;
 			err = start_useradd();
 			break;
 		default:
 			log_debug("unexpected imsg %d", imsg.hdr.type);
 			break;
 		}
-
 
 		if (err)
 			fatalx("imsg %d: %s", imsg.hdr.type, err->msg);
@@ -846,6 +1266,67 @@ start_write_conf(struct gotsysd_imsgev *iev)
 }
 
 static const struct got_error *
+send_webaddr(struct gotsysd_imsgev *iev, struct gotsysd_web_address *addr)
+{
+	if (gotsysd_imsg_compose_event(iev,
+	    GOTSYSD_IMSG_SYSCONF_GOTWEB_ADDR, GOTSYSD_PROC_SYSCONF,
+	    -1, addr, sizeof(*addr)) == -1)
+		return got_error_from_errno("imsg compose SYSCONF_GOTWEB_ADDR");
+
+	return NULL;
+}
+
+static const struct got_error *
+send_webserver(struct gotsysd_imsgev *iev, struct gotsysd_web_server *srv)
+{
+	if (gotsysd_imsg_compose_event(iev,
+	    GOTSYSD_IMSG_SYSCONF_GOTWEB_SERVER, GOTSYSD_PROC_SYSCONF,
+	    -1, srv, sizeof(*srv)) == -1)
+		return got_error_from_errno("imsg compose SYSCONF_GOTWEB_ADDR");
+
+	return NULL;
+}
+
+static const struct got_error *
+send_web_config(struct gotsysd_imsgev *iev)
+{
+	const struct got_error *err;
+	struct gotsysd_web_address *addr;
+	struct gotsysd_web_server *srv;
+	
+	if (gotsysd_imsg_compose_event(iev,
+	    GOTSYSD_IMSG_SYSCONF_GOTWEB_CFG, 0, -1,
+	    gotsysd_sysconf.web, sizeof(*gotsysd_sysconf.web)) == -1)
+		return got_error_from_errno("gotsysd_imsg_compose_event");
+
+	TAILQ_FOREACH(addr, &gotsysd_sysconf.web->listen_addrs, entry) {
+		err = send_webaddr(iev, addr);
+		if (err)
+			return err;
+	}
+
+	if (gotsysd_imsg_compose_event(iev,
+	    GOTSYSD_IMSG_SYSCONF_GOTWEB_ADDRS_DONE, 0, -1, NULL, 0) == -1)
+		return got_error_from_errno("gotsysd_imsg_compose_event");
+
+	STAILQ_FOREACH(srv, &gotsysd_sysconf.web->servers, entry) {
+		err = send_webserver(iev, srv);
+		if (err)
+			return err;
+	}
+
+	if (gotsysd_imsg_compose_event(iev,
+	    GOTSYSD_IMSG_SYSCONF_GOTWEB_SERVERS_DONE, 0, -1, NULL, 0) == -1)
+		return got_error_from_errno("gotsysd_imsg_compose_event");
+
+	if (gotsysd_imsg_compose_event(iev,
+	    GOTSYSD_IMSG_SYSCONF_GOTWEB_CFG_DONE, 0, -1, NULL, 0) == -1)
+		return got_error_from_errno("gotsysd_imsg_compose_event");
+
+	return NULL;
+}
+
+static const struct got_error *
 send_gotsysconf(struct gotsysd_imsgev *iev)
 {
 	const struct got_error *err;
@@ -880,7 +1361,17 @@ send_gotsysconf(struct gotsysd_imsgev *iev)
 	err = gotsys_imsg_send_repositories(iev, &gotsysconf.repos);
 	if (err)
 		return err;
+
+	err = gotsys_imsg_send_mediatypes(iev, &gotsysconf.mediatypes,
+	    GOTSYSD_IMSG_SYSCONF_GLOBAL_MEDIA_TYPE,
+	    GOTSYSD_IMSG_SYSCONF_GLOBAL_MEDIA_TYPES_DONE);
+	if (err)
+		return err;
 	
+	err = gotsys_imsg_send_webservers(iev, &gotsysconf.webservers);
+	if (err)
+		return err;
+
 	return NULL;
 }
 
@@ -889,6 +1380,17 @@ start_apply_conf(struct gotsysd_imsgev *iev)
 {
 	if (gotsysd_imsg_compose_event(iev,
 	    GOTSYSD_IMSG_START_PROG_APPLY_CONF, GOTSYSD_PROC_SYSCONF,
+	    -1, NULL, 0) == -1)
+		return got_error_from_errno("imsg compose START_APPLY_CONF");
+
+	return NULL;
+}
+
+static const struct got_error *
+start_apply_webconf(struct gotsysd_imsgev *iev)
+{
+	if (gotsysd_imsg_compose_event(iev,
+	    GOTSYSD_IMSG_START_PROG_APPLY_WEBCONF, GOTSYSD_PROC_SYSCONF,
 	    -1, NULL, 0) == -1)
 		return got_error_from_errno("imsg compose START_APPLY_CONF");
 
@@ -1114,23 +1616,26 @@ sysconf_dispatch_priv(int fd, short event, void *arg)
 				    gotsysd_sysconf.state);
 				break;
 			}
-			gotsysd_sysconf.state = SYSCONF_STATE_CREATE_GOTD_CONF;
+			gotsysd_sysconf.state = SYSCONF_STATE_CREATE_CONF_FILES;
 			err = start_write_conf(iev);
 			break;
 		case GOTSYSD_IMSG_SYSCONF_WRITE_CONF_READY:
 			if (gotsysd_sysconf.state !=
-			    SYSCONF_STATE_CREATE_GOTD_CONF) {
+			    SYSCONF_STATE_CREATE_CONF_FILES) {
 				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
 				    "received unexpected imsg %d while in "
 				    "state %d\n", imsg.hdr.type,
 				    gotsysd_sysconf.state);
 				break;
 			}
+			err = send_web_config(iev);
+			if (err)
+				break;
 			err = send_gotsysconf(iev);
 			break;
 		case GOTSYSD_IMSG_SYSCONF_WRITE_CONF_DONE:
 			if (gotsysd_sysconf.state !=
-			    SYSCONF_STATE_CREATE_GOTD_CONF) {
+			    SYSCONF_STATE_CREATE_CONF_FILES) {
 				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
 				    "received unexpected imsg %d while in "
 				    "state %d\n", imsg.hdr.type,
@@ -1157,6 +1662,35 @@ sysconf_dispatch_priv(int fd, short event, void *arg)
 				    "state %d\n", imsg.hdr.type,
 				    gotsysd_sysconf.state);
 			}
+			if (!STAILQ_EMPTY(&gotsysd_sysconf.web->servers)) {
+				gotsysd_sysconf.state =
+				    SYSCONF_STATE_RESTART_GOTWEBD;
+				err = start_apply_webconf(iev);
+			} else {
+				gotsysd_sysconf.state =
+				    SYSCONF_STATE_CONFIGURE_SSHD;
+				err = start_sshdconf(iev);
+			}
+			break;
+		case GOTSYSD_IMSG_SYSCONF_APPLY_WEBCONF_READY:
+			if (gotsysd_sysconf.state !=
+			    SYSCONF_STATE_RESTART_GOTWEBD) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+			}
+			log_debug("webconf ready received");
+			break;
+		case GOTSYSD_IMSG_SYSCONF_APPLY_WEBCONF_DONE:
+			if (gotsysd_sysconf.state !=
+			    SYSCONF_STATE_RESTART_GOTWEBD) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "received unexpected imsg %d while in "
+				    "state %d\n", imsg.hdr.type,
+				    gotsysd_sysconf.state);
+			}
+			log_debug("webconf done received");
 			gotsysd_sysconf.state = SYSCONF_STATE_CONFIGURE_SSHD;
 			err = start_sshdconf(iev);
 			break;
@@ -1368,7 +1902,8 @@ sysconf_dispatch(int fd, short event, void *arg)
 
 void
 sysconf_main(const char *title, uid_t uid_start, uid_t uid_end,
-    struct gotsys_access_rule_list *global_repo_access_rules)
+    struct gotsys_access_rule_list *global_repo_access_rules,
+    struct gotsysd_web_config *web)
 {
 	struct event evsigint, evsigterm, evsighup, evsigusr1;
 	struct gotsysd_imsgev *iev = &gotsysd_sysconf.parent_iev;
@@ -1384,6 +1919,7 @@ sysconf_main(const char *title, uid_t uid_start, uid_t uid_end,
 	gotsysd_sysconf.uid_start = uid_start;
 	gotsysd_sysconf.uid_end = uid_end;
 	gotsysd_sysconf.global_repo_access_rules = global_repo_access_rules;
+	gotsysd_sysconf.web = web;
 
 	signal_set(&evsigint, SIGINT, sysconf_sighdlr, NULL);
 	signal_set(&evsigterm, SIGTERM, sysconf_sighdlr, NULL);

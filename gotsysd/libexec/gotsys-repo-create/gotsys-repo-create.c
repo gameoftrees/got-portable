@@ -42,6 +42,8 @@
 #include "got_repository.h"
 
 #include "gotsysd.h"
+#include "media.h"
+#include "gotwebd.h"
 #include "gotsys.h"
 
 static struct gotsys_conf gotsysconf;

@@ -20,6 +20,89 @@
 test_login() {
 	local testroot=`test_init login 1`
 
+	got checkout -q $testroot/${GOTSYS_REPO} $testroot/wt >/dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got checkout failed unexpectedly" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	crypted_vm_pw=`echo ${GOTSYSD_VM_PASSWORD} | encrypt | tr -d '\n'`
+	crypted_pw=`echo ${GOTSYSD_DEV_PASSWORD} | encrypt | tr -d '\n'`
+	sshkey=`cat ${GOTSYSD_SSH_PUBKEY}`
+	cat > ${testroot}/wt/gotsys.conf <<EOF
+user ${GOTSYSD_TEST_USER} {
+	password "${crypted_vm_pw}" 
+	authorized key ${sshkey}
+}
+user ${GOTSYSD_DEV_USER} {
+	password "${crypted_pw}" 
+	authorized key ${sshkey}
+}
+repository gotsys.git {
+	permit rw ${GOTSYSD_TEST_USER}
+	permit rw ${GOTSYSD_DEV_USER}
+}
+repository gotdev.git {
+	permit rw ${GOTSYSD_DEV_USER}
+}
+repository hidden.git {
+	permit rw ${GOTSYSD_TEST_USER}
+}
+web server "${VMIP}" {
+	repository gotsys.git {
+		permit ${GOTSYSD_TEST_USER}
+	}
+	repository gotdev.git {
+		permit ${GOTSYSD_DEV_USER}
+		deny ${GOTSYSD_TEST_USER}
+	}
+	repository hidden.git {
+		permit ${GOTSYSD_TEST_USER}
+		deny ${GOTSYSD_DEV_USER}
+		hide repository on
+	}
+}
+EOF
+	(cd ${testroot}/wt && gotsys check -q)
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "bad gotsys.conf written by test" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	(cd ${testroot}/wt && got commit -m "configure web server" >/dev/null)
+	local commit_id=`git_show_head $testroot/${GOTSYS_REPO}`
+
+	got send -q -i ${GOTSYSD_SSH_KEY} -r ${testroot}/${GOTSYS_REPO}
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got send failed unexpectedly" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	# Wait for gotsysd to apply the new configuration.
+	echo "$commit_id" > $testroot/stdout.expected
+	for i in 1 2 3 4 5; do
+		sleep 1
+		ssh -i ${GOTSYSD_SSH_KEY} root@${VMIP} \
+			cat /var/db/gotsysd/commit > $testroot/stdout
+		if cmp -s $testroot/stdout.expected $testroot/stdout; then
+			break;
+		fi
+	done
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "gotsysd failed to apply configuration" >&2
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
 	# Attempt unauthorized access.
 	w3m "http://${VMIP}/" -dump > $testroot/stdout
 	cat > $testroot/stdout.expected <<EOF
@@ -90,7 +173,7 @@ Tree:
 Date:
     $d
 Message:
-    init
+    configure web server
 
 -------------------------------------------------------------------------------
 
@@ -191,9 +274,40 @@ repository gotdev.git {
 repository gottest.git {
 	permit rw ${GOTSYSD_TEST_USER}
 }
+repository hidden.git {
+	permit rw ${GOTSYSD_TEST_USER}
+}
+web server "${VMIP}" {
+	repository gotsys.git {
+		permit ${GOTSYSD_TEST_USER}
+	}
+	repository public.git {
+		disable authentication
+	}
+	repository gotdev.git {
+		permit ${GOTSYSD_DEV_USER}
+		deny ${GOTSYSD_TEST_USER}
+	}
+	repository gottest.git {
+		permit ${GOTSYSD_TEST_USER}
+	}
+	repository hidden.git {
+		permit ${GOTSYSD_TEST_USER}
+		deny ${GOTSYSD_DEV_USER}
+		hide repository on
+	}
+}
 EOF
+	(cd ${testroot}/wt && gotsys check -q)
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "bad gotsys.conf written by test" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
 	(cd ${testroot}/wt && got commit \
-		-m "create user ${GOTSYSD_DEV_USER}" >/dev/null)
+		-m "add public and gottest repositories" >/dev/null)
 	local commit_id=`git_show_head $testroot/${GOTSYS_REPO}`
 
 	got send -q -i ${GOTSYSD_SSH_KEY} -r ${testroot}/${GOTSYS_REPO}
@@ -311,6 +425,102 @@ EOF
 
 test_access_rules_tree_page() {
 	local testroot=`test_init access_rules_tree_page 1`
+
+	got checkout -q $testroot/${GOTSYS_REPO} $testroot/wt >/dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got checkout failed unexpectedly" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	crypted_vm_pw=`echo ${GOTSYSD_VM_PASSWORD} | encrypt | tr -d '\n'`
+	crypted_pw=`echo ${GOTSYSD_DEV_PASSWORD} | encrypt | tr -d '\n'`
+	sshkey=`cat ${GOTSYSD_SSH_PUBKEY}`
+	cat > ${testroot}/wt/gotsys.conf <<EOF
+user ${GOTSYSD_TEST_USER} {
+	password "${crypted_vm_pw}" 
+	authorized key ${sshkey}
+}
+user ${GOTSYSD_DEV_USER} {
+	password "${crypted_pw}" 
+	authorized key ${sshkey}
+}
+repository gotsys.git {
+	permit rw ${GOTSYSD_TEST_USER}
+	permit rw ${GOTSYSD_DEV_USER}
+}
+repository public.git {
+	permit rw ${GOTSYSD_TEST_USER}
+	permit rw ${GOTSYSD_DEV_USER}
+}
+repository gotdev.git {
+	permit rw ${GOTSYSD_DEV_USER}
+}
+repository gottest.git {
+	permit rw ${GOTSYSD_TEST_USER}
+}
+repository hidden.git {
+	permit rw ${GOTSYSD_TEST_USER}
+}
+web server "${VMIP}" {
+	repository gotsys.git {
+		permit ${GOTSYSD_TEST_USER}
+	}
+	repository public.git {
+		disable authentication
+	}
+	repository gotdev.git {
+		permit ${GOTSYSD_DEV_USER}
+		deny ${GOTSYSD_TEST_USER}
+	}
+	repository gottest.git {
+		permit ${GOTSYSD_TEST_USER}
+	}
+	repository hidden.git {
+		permit ${GOTSYSD_TEST_USER}
+		deny ${GOTSYSD_DEV_USER}
+		hide repository on
+	}
+}
+EOF
+	(cd ${testroot}/wt && gotsys check -q)
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "bad gotsys.conf written by test" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	(cd ${testroot}/wt && got commit -m "no-op update" >/dev/null)
+	local commit_id=`git_show_head $testroot/${GOTSYS_REPO}`
+
+	got send -q -i ${GOTSYSD_SSH_KEY} -r ${testroot}/${GOTSYS_REPO}
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got send failed unexpectedly" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	# Wait for gotsysd to apply the new configuration.
+	echo "$commit_id" > $testroot/stdout.expected
+	for i in 1 2 3 4 5; do
+		sleep 1
+		ssh -i ${GOTSYSD_SSH_KEY} root@${VMIP} \
+			cat /var/db/gotsysd/commit > $testroot/stdout
+		if cmp -s $testroot/stdout.expected $testroot/stdout; then
+			break;
+		fi
+	done
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "gotsysd failed to apply configuration" >&2
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
 
 	# Attempt to access a public repository's tree
 	w3m "http://${VMIP}/?action=tree&path=public.git" -dump \

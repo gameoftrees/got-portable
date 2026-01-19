@@ -1468,6 +1468,7 @@ apply_unveil_priv_helpers(void)
 	    GOTSYSD_PATH_PROG_GROUPADD,
 	    GOTSYSD_PATH_PROG_WRITE_CONF,
 	    GOTSYSD_PATH_PROG_APPLY_CONF,
+	    GOTSYSD_PATH_PROG_APPLY_WEBCONF,
 	    GOTSYSD_PATH_PROG_SSHDCONFIG,
 	};
 	size_t i;
@@ -1933,7 +1934,7 @@ main(int argc, char **argv)
 		apply_unveil_none();
 
 		sysconf_main(title, gotsysd.uid_start, gotsysd.uid_end,
-		    gotsysd.global_repo_access_rules);
+		    gotsysd.global_repo_access_rules, &gotsysd.web);
 		/* NOTREACHED */
 		break;
 	default:
