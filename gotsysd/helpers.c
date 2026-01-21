@@ -179,8 +179,6 @@ get_helper_prog_name(int imsg_type)
 		return GOTSYSD_PATH_PROG_APPLY_CONF;
 	case GOTSYSD_IMSG_START_PROG_APPLY_WEBCONF:
 		return GOTSYSD_PATH_PROG_APPLY_WEBCONF;
-	case GOTSYSD_IMSG_START_PROG_SSHDCONFIG:
-		return GOTSYSD_PATH_PROG_SSHDCONFIG;
 	default:
 		return NULL;
 	}
@@ -456,18 +454,6 @@ send_apply_webconf_ready(struct gotsysd_imsgev *iev)
 	return NULL;
 }
 
-
-static const struct got_error *
-send_sshdconfig_ready(struct gotsysd_imsgev *iev)
-{
-	if (gotsysd_imsg_compose_event(iev,
-	    GOTSYSD_IMSG_SYSCONF_SSHDCONFIG_READY, gotsysd_helpers.proc_id,
-	    -1, NULL, 0) == -1)
-		return got_error_from_errno("imsg_compose SSHDCONFIG_READY");
-	
-	return NULL;
-}
-
 static const struct got_error *
 proc_ready(struct gotsysd_helper_proc *proc)
 {
@@ -509,9 +495,6 @@ proc_ready(struct gotsysd_helper_proc *proc)
 		break;
 	case GOTSYSD_IMSG_START_PROG_APPLY_WEBCONF:
 		err = send_apply_webconf_ready(sysconf_iev);
-		break;
-	case GOTSYSD_IMSG_START_PROG_SSHDCONFIG:
-		err = send_sshdconfig_ready(sysconf_iev);
 		break;
 	default:
 		err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
@@ -761,19 +744,6 @@ dispatch_helper_child(int fd, short event, void *arg)
 				err = got_error_from_errno("imsg_forward");
 			shut = 1;
 			break;
-		case GOTSYSD_IMSG_SYSCONF_INSTALL_SSHD_CONFIG_DONE:
-			if (proc->type !=
-			    GOTSYSD_IMSG_START_PROG_SSHDCONFIG) {
-				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
-				    "unexpected message type %d from helper "
-				        "process type %d pid %u\n",
-				    imsg.hdr.type, proc->type, proc->pid);
-				break;
-			}
-			if (gotsysd_imsg_forward(sysconf_iev, &imsg, -1) == -1)
-				err = got_error_from_errno("imsg_forward");
-			shut = 1;
-			break;
 		default:
 			log_debug("unexpected imsg %d", imsg.hdr.type);
 			err = got_error(GOT_ERR_PRIVSEP_MSG);
@@ -962,7 +932,6 @@ helpers_dispatch_sysconf(int fd, short event, void *arg)
 		case GOTSYSD_IMSG_START_PROG_WRITE_CONF:
 		case GOTSYSD_IMSG_START_PROG_APPLY_CONF:
 		case GOTSYSD_IMSG_START_PROG_APPLY_WEBCONF:
-		case GOTSYSD_IMSG_START_PROG_SSHDCONFIG:
 			prog = get_helper_prog_name(imsg.hdr.type);
 			if (prog == NULL)
 				fatalx("no helper defined for imsg %d",
@@ -1121,13 +1090,6 @@ helpers_dispatch_sysconf(int fd, short event, void *arg)
 		case GOTSYSD_IMSG_SYSCONF_WEB_SERVERS_DONE:
 			proc = find_proc(GOTSYSD_IMSG_START_PROG_WRITE_CONF,
 			    1);
-			if (proc == NULL)
-				break;
-			if (gotsysd_imsg_forward(&proc->iev, &imsg, -1) == -1)
-				err = got_error_from_errno("imsg_forward");
-			break;
-		case GOTSYSD_IMSG_SYSCONF_INSTALL_SSHD_CONFIG:
-			proc = find_proc(GOTSYSD_IMSG_START_PROG_SSHDCONFIG, 1);
 			if (proc == NULL)
 				break;
 			if (gotsysd_imsg_forward(&proc->iev, &imsg, -1) == -1)
