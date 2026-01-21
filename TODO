@@ -94,5 +94,4 @@ gotadmin:
 gotsysd:
 - add required notifications settings to gotsysd.conf (e.g. an smtp smarthost)
 - send notifications config from gotsys-read-conf and apply them during sysconf
-- add 'publish' support; can a chroot-less gotwebd serve gotd's repositories?
 - for -portable users, add 'gotsys encrypt' command, equivalent to encrypt(1)
