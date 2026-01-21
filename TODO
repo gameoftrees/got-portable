@@ -94,6 +94,9 @@ gotadmin:
 gotsysd:
 - gotsys.conf web server "repository 'foo'" should equal "repository 'foo.git'"
 - make sure that gotsys.git cannot be published via [unauthenticated] gotwebd
+- complete the WIP implementation of mime-types support in gotsys.conf
+- complete the WIP implementation of custom css/logo/url support in gotsys.conf
+- set foo.git/description file from gotsys.conf for multi-line/utf8 description
 - add required notifications settings to gotsysd.conf (e.g. an smtp smarthost)
 - send notifications config from gotsys-read-conf and apply them during sysconf
 - for -portable users, add 'gotsys encrypt' command, equivalent to encrypt(1)
