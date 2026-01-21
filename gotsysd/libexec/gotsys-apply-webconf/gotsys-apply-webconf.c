@@ -311,7 +311,7 @@ loopexit:
 __dead static void
 usage(void)
 {
-	fprintf(stderr, "usage: %s [-c config-file] [-f socket]\n",
+	fprintf(stderr, "usage: %s [-s socket]\n",
 	    getprogname());
 	exit(1);
 }
