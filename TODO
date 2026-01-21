@@ -48,6 +48,7 @@ tog:
 - make it possible to toggle the parent to diff against in merge commits
 
 gotwebd:
+- show ssh server fingerprints on index and login pages
 - fix COMMITS page for paths that were deleted and/or re-added to the
   repository. One way would be not to let the commit graph filter paths.
   As an additional optimization we could keep a tailq or the object-id
