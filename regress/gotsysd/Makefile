@@ -11,7 +11,7 @@ CLEANFILES= SHA256.sig bsd.rd bsd.rd.fs bsd.rd.decomp ${AUTOINSTALL_CONF} \
 	${GOTSYSD_BSD_RD} ${GOTSYSD_SSH_KEY} ${GOTSYSD_SSH_PUBKEY} \
 	${GOTSYSD_TEST_VM_BASE_IMAGE} ${GOTSYSD_VM_PASSWD_FILE} ${GOTD_CONF} \
 	${GOTSYSD_CONF} ${GOTSYS_CONF} ${GOT_CONF} ${INSTALL_SITE} \
-	${HTTPD_CONF}
+	${HTTPD_CONF} ${SSHD_CONF}
 
 .PHONY: ensure_root vm start_test_vm build_got
 
@@ -40,6 +40,7 @@ GOTSYSD_TEST_SMTP_PORT=2525
 GOTSYSD_TEST_HTTP_PORT=8000
 GOTSYSD_TEST_HMAC_SECRET!=openssl rand -base64 32
 HTTPD_CONF=httpd.conf
+SSHD_CONF=sshd_config
 
 GOTSYSD_TEST_USER?=${DOAS_USER}
 .if empty(GOTSYSD_TEST_USER)
@@ -225,6 +226,16 @@ $(HTTPD_CONF):
 	@${UNPRIV} 'echo \ \ fastcgi socket \"/run/gotweb.sock\" >> $@'
 	@${UNPRIV} 'echo } >> $@'
 
+${SSHD_CONF}:
+	@${UNPRIV} "echo AuthorizedKeysFile .ssh/authorized_keys" > $@
+	@${UNPRIV} "echo DisableForwarding yes" >> $@
+	@${UNPRIV} "echo PermitTTY no" >> $@
+	@${UNPRIV} "echo Subsystem sftp /usr/libexec/sftp-server" >> $@
+	@${UNPRIV} "echo Match Group wheel" >> $@
+	@${UNPRIV} "printf '\tPermitTTY yes\n'" >> $@
+	@${UNPRIV} "echo Match User anonymous" >> $@
+	@${UNPRIV} "printf '\tPermitEmptyPasswords yes\n'" >> $@
+
 build_got:
 	@set -e; \
 	VMID=`vmctl status ${GOTSYSD_VM_NAME} | tail -n1 | \
@@ -248,7 +259,7 @@ build_got:
 	${UNPRIV} "${GOTSYSD_SSH_CMD} -- root@$${VMIP} \
 		ln -f -s gitwrapper /usr/local/bin/git-receive-pack"
 
-setup_test_vm: start_test_vm build_got ${GOTD_CONF} ${GOTSYSD_CONF} ${GOTSYS_CONF} ${GOT_CONF} ${HTTPD_CONF}
+setup_test_vm: start_test_vm build_got ${GOTD_CONF} ${GOTSYSD_CONF} ${GOTSYS_CONF} ${GOT_CONF} ${HTTPD_CONF} ${SSHD_CONF}
 	@set -e; \
 	VMID=`vmctl status ${GOTSYSD_VM_NAME} | tail -n1 | \
 		awk '{print $$1}'`; \
@@ -301,6 +312,8 @@ setup_test_vm: start_test_vm build_got ${GOTD_CONF} ${GOTSYSD_CONF} ${GOTSYS_CON
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} rcctl -f start httpd"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
 		/usr/local/sbin/gotwebd -v"; \
+	${UNPRIV} "${GOTSYSD_SCP_CMD} ${SSHD_CONF} root@$${VMIP}:/etc/ssh/sshd_config"; \
+ 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} rcctl reload sshd";
 	
 stop_test_vm: ensure_root
 	@vmctl stop ${GOTSYSD_VM_NAME}
