@@ -148,6 +148,12 @@ can be used when public read-only access to repositories over SSH is desired.
 The anonymous user has an empty password, cannot use an SSH public key, and
 can only be granted read-only access.
 .Pp
+See
+.Xr gotsh 1
+for important hints about how to configure
+.Xr sshd 8
+to prevent abuse of certain SSH features by anonymous users.
+.Pp
 The special user
 .Ar identity
 .Dq *
@@ -172,6 +178,12 @@ of this range must be greater than 1000 and must be smaller than the
 .Ar end .
 .Pp
 The default range is 5000 to 5999.
+.Pp
+User accounts created by
+.Xr gotsysd 8
+will use the
+.Xr gotsh 1
+shell.
 .It Ic user Ar user
 Set the
 .Ar user
@@ -573,8 +585,10 @@ gotweb {
 .Ed
 .Sh SEE ALSO
 .Xr got 1 ,
+.Xr gotsh 1 ,
 .Xr gotwebd.conf 5 ,
 .Xr gotd 8 ,
 .Xr gotsysd 8 ,
 .Xr gotwebd 8 ,
-.Xr httpd 8
+.Xr httpd 8 ,
+.Xr sshd 8 .
