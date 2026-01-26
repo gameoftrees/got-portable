@@ -233,9 +233,12 @@ main		: LISTEN ON STRING {
 			free($3);
 		}
 		| REPOSITORY DIRECTORY STRING {
-			if (!got_path_is_absolute($3))
+			if (!got_path_is_absolute($3)) {
 				yyerror("bad path \"%s\": "
 				    "must be an absolute path", $3);
+				free($3);
+				YYERROR;
+			}
 
 			if (realpath($3, gotsysd->repos_path) == NULL) {
 				yyerror("realpath %s: %s", $3, strerror(errno));
