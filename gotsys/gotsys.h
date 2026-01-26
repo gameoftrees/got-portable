@@ -219,3 +219,7 @@ const struct got_error *gotsys_conf_validate_string(const char *);
 const struct got_error *gotsys_conf_new_access_rule(
     struct gotsys_access_rule **, enum gotsys_access, int, const char *,
     struct gotsys_userlist *, struct gotsys_grouplist *);
+struct gotsys_repo *gotsys_find_repo_by_name(const char *,
+    struct gotsys_repolist *);
+struct gotsys_webrepo *gotsys_find_webrepo_by_name(const char *,
+    struct gotsys_webrepolist *);

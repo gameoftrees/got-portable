@@ -934,11 +934,6 @@ write_webrepo(int *show_repo_description, int fd, const char *path,
 	struct gotsys_repo *repo;
 	int ret;
 
-	TAILQ_FOREACH(repo, &gotsysconf.repos, entry) {
-		if (strcmp(repo->name, webrepo->repo_name) == 0)
-			break;
-	}
-
 	ret = dprintf(fd, "\trepository \"%s\" {\n", webrepo->repo_name);
 	if (ret == -1) 
 		return got_error_from_errno2("dprintf", path);
@@ -967,6 +962,7 @@ write_webrepo(int *show_repo_description, int fd, const char *path,
 		}
 	}
 
+	repo = gotsys_find_repo_by_name(webrepo->repo_name, &gotsysconf.repos);
 	if (repo && repo->description[0] != '\0') {
 		ret = dprintf(fd, "\t\tdescription \"%s\"\n", repo->description);
 		if (ret == -1) 
@@ -2046,10 +2042,8 @@ dispatch_event(int fd, short event, void *arg)
 			if (err)
 				break;
 
-			TAILQ_FOREACH(repo, &gotsysconf.repos, entry) {
-				if (strcmp(repo->name, webrepo->repo_name) == 0)
-					break;
-			}
+			repo = gotsys_find_repo_by_name(webrepo->repo_name,
+			    &gotsysconf.repos);
 			if (repo == NULL) {
 				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
 				    "web repository refers to nonexistent "
@@ -2180,11 +2174,8 @@ dispatch_event(int fd, short event, void *arg)
 			if (err)
 				break;
 
-			TAILQ_FOREACH(repo, &gotsysconf.repos, entry) {
-				if (strcmp(repo->name,
-				    site_cur->repo_name) == 0)
-					break;
-			}
+			repo = gotsys_find_repo_by_name(site_cur->repo_name,
+			    &gotsysconf.repos);
 			if (repo == NULL) {
 				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
 				    "web repository refers to nonexistent "
