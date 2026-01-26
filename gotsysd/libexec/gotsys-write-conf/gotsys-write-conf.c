@@ -2074,6 +2074,7 @@ dispatch_event(int fd, short event, void *arg)
 				    "web repository refers to nonexistent "
 				    "repository %s while in state %d\n",
 				    webrepo->repo_name, writeconf_state);
+				free(webrepo);
 				break;
 			}
 			STAILQ_INSERT_TAIL(&srv->repos, webrepo, entry);
