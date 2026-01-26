@@ -467,7 +467,7 @@ web server "${VMIP}" {
 	repository gotsys.git {
 		permit ${GOTSYSD_TEST_USER}
 	}
-	repository public.git {
+	repository public {
 		disable authentication
 	}
 	repository gotdev.git {
@@ -477,7 +477,7 @@ web server "${VMIP}" {
 	repository gottest.git {
 		permit ${GOTSYSD_TEST_USER}
 	}
-	repository hidden.git {
+	repository hidden {
 		permit ${GOTSYSD_TEST_USER}
 		deny ${GOTSYSD_DEV_USER}
 		hide repository on
