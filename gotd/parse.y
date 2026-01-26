@@ -54,6 +54,10 @@
 #include "listen.h"
 #include "secrets.h"
 
+#ifndef MINIMUM
+#define MINIMUM(a, b)	((a) < (b) ? (a) : (b))
+#endif
+
 TAILQ_HEAD(files, file)		 files = TAILQ_HEAD_INITIALIZER(files);
 static struct file {
 	TAILQ_ENTRY(file)	 entry;
@@ -1746,14 +1750,27 @@ struct gotd_repo *
 gotd_find_repo_by_name(const char *repo_name, struct gotd_repolist *repos)
 {
 	struct gotd_repo *repo;
-	size_t namelen;
+	size_t needle_len = strlen(repo_name);
 
 	TAILQ_FOREACH(repo, repos, entry) {
-		namelen = strlen(repo->name);
-		if (strncmp(repo->name, repo_name, namelen) != 0)
+		size_t haystack_len = strlen(repo->name);
+
+		if (strncmp(repo->name, repo_name,
+		    MINIMUM(needle_len, haystack_len)) != 0)
 			continue;
-		if (repo_name[namelen] == '\0' ||
-		    strcmp(&repo_name[namelen], ".git") == 0)
+
+		if (repo_name[needle_len] == '\0' &&
+		    repo->name[haystack_len] == '\0')
+			return repo;
+
+		if (repo_name[needle_len] == '\0' &&
+		    haystack_len > 4 &&
+		    strcmp(&repo->name[haystack_len], ".git") == 0)
+			return repo;
+
+		if (repo->name[haystack_len] == '\0' &&
+		    needle_len > 4 && 
+		    strcmp(&repo_name[needle_len], ".git") == 0)
 			return repo;
 	}
 
