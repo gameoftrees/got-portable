@@ -1513,6 +1513,9 @@ parse_config(const char *filename, struct gotwebd *env)
 			;
 	}
 
+	if (errors)
+		return -1;
+
 	/* Free macros and check which have not been used. */
 	TAILQ_FOREACH_SAFE(sym, &symhead, entry, next) {
 		if ((gotwebd->gotwebd_verbose > 1) && !sym->used)
@@ -1600,8 +1603,7 @@ parse_config(const char *filename, struct gotwebd *env)
 			if (media_add(&gotwebd->mediatypes, &defaults[i]) == NULL) {
 				fprintf(stderr, "failed to load default"
 				    " MIME types\n");
-				errors++;
-				break;
+				return -1;
 			}
 		}
 	}
@@ -1613,24 +1615,24 @@ parse_config(const char *filename, struct gotwebd *env)
 
 		if (strlcpy(path, gotwebd->httpd_chroot, sizeof(path))
 		    >= sizeof(path)) {
-			yyerror("chroot path too long: %s",
+			fprintf(stderr, "chroot path too long: %s",
 			    gotwebd->httpd_chroot);
+			return -1;
 		}
 		if (strlcat(path, D_UNIX_SOCKET, sizeof(path))
 		    >= sizeof(path)) {
-			yyerror("chroot path too long: %s",
+			fprintf(stderr, "chroot path too long: %s",
 			    gotwebd->httpd_chroot);
+			return -1;
 		}
 		h = get_unix_addr(path);
-		if (h == NULL)
-			yyerror("can't listen on %s", path);
-		else
+		if (h == NULL) {
+			fprintf(stderr, "can't listen on %s", path);
+			return -1;
+		} else
 			add_addr(h);
 	}
 
-	if (errors) {
-		return (-1);
-	}
 
 	/* setup our listening sockets */
 	sockets_parse_sockets(env);
@@ -1691,9 +1693,10 @@ parse_config(const char *filename, struct gotwebd *env)
 			if (strlcpy(srv->login_hint_user, env->login_hint_user,
 			    sizeof(srv->login_hint_user)) >=
 			    sizeof(srv->login_hint_user)) {
-				yyerror("login hint user name too long, "
-				    "exceeds %zd bytes",
+				fprintf(stderr, "login hint user name too "
+				    "long, exceeds %zd bytes",
 				    sizeof(srv->login_hint_user) - 1);
+				return -1;
 			}
 		}
 
@@ -1701,9 +1704,10 @@ parse_config(const char *filename, struct gotwebd *env)
 			if (strlcpy(srv->login_hint_port, env->login_hint_port,
 			    sizeof(srv->login_hint_port)) >=
 			    sizeof(srv->login_hint_port)) {
-				yyerror("login hint port number too long, "
-				    "exceeds %zd bytes",
+				fprintf(stderr, "login hint port number too "
+				    "long, exceeds %zd bytes",
 				    sizeof(srv->login_hint_port) - 1);
+				return -1;
 			}
 		}
 
@@ -1712,9 +1716,10 @@ parse_config(const char *filename, struct gotwebd *env)
 			    env->gotweb_url_root,
 			    sizeof(srv->gotweb_url_root)) >=
 			    sizeof(srv->gotweb_url_root)) {
-				yyerror("gotweb_url_root too long, "
+				fprintf(stderr, "gotweb_url_root too long, "
 				    "exceeds %zd bytes",
 				    sizeof(srv->gotweb_url_root) - 1);
+				return -1;
 			}
 		}
 
@@ -1723,9 +1728,10 @@ parse_config(const char *filename, struct gotwebd *env)
 			    env->repos_url_path,
 			    sizeof(srv->repos_url_path)) >=
 			    sizeof(srv->repos_url_path)) {
-				yyerror("repos_url_path too long, "
+				fprintf(stderr, "repos_url_path too long, "
 				    "exceeds %zd bytes",
 				    sizeof(srv->repos_url_path) - 1);
+				return -1;
 			}
 		}
 	}
@@ -1751,13 +1757,13 @@ parse_config(const char *filename, struct gotwebd *env)
 			    "/%s%s%s", gotweb_url_root,
 			    gotweb_url_root[0] ? "/" : "",
 			    repos_url_path);
-			if (ret == -1) {
-				yyerror("snprintf");
-			}
+			if (ret == -1)
+				fatal("snprintf");
 			if ((size_t)ret >= sizeof(srv->full_repos_url_path)) {
-				yyerror("gotweb_url_root and "
+				fprintf(stderr, "gotweb_url_root and "
 				"repos_url_path too long, exceed %zd bytes",
 				    sizeof(srv->full_repos_url_path) - 1);
+				return -1;
 			}
 		}
 
@@ -1774,8 +1780,10 @@ parse_config(const char *filename, struct gotwebd *env)
 				site->auth_config = srv->auth_config;
 
 			if (site->repo_name[0] == '\0') {
-				yyerror("no repository defined for website "
-				    "'%s' on server %s", url_path, srv->name);
+				fprintf(stderr, "no repository defined for "
+				    "website %s' on server %s", url_path,
+				    srv->name);
+				return -1;
 			}
 		}
 	}
