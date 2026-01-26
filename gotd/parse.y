@@ -232,9 +232,12 @@ timeout		: NUMBER {
 		;
 
 main		: LISTEN ON STRING {
-			if (!got_path_is_absolute($3))
+			if (!got_path_is_absolute($3)) {
 				yyerror("bad unix socket path \"%s\": "
 				    "must be an absolute path", $3);
+				free($3);
+				YYERROR;
+			}
 
 			if (gotd_proc_id == GOTD_PROC_GOTD) {
 				if (strlcpy(gotd->unix_socket_path, $3,
@@ -702,8 +705,10 @@ repoopts1	: PATH STRING {
 
 					if (strlcpy(new_repo->path, $2,
 					    sizeof(new_repo->path)) >=
-					    sizeof(new_repo->path))
+					    sizeof(new_repo->path)) {
 						yyerror("path too long");
+						YYERROR;
+					}
 				}
 			}
 			free($2);
