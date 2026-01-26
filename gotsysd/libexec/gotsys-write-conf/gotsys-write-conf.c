@@ -933,11 +933,23 @@ write_webrepo(int *show_repo_description, int fd, const char *path,
 	const struct got_error *err;
 	struct gotsys_repo *repo;
 	int ret;
+	char repo_name[_POSIX_PATH_MAX];
+	size_t namelen;
 
-	ret = dprintf(fd, "\trepository \"%s\" {\n", webrepo->repo_name);
+	namelen = strlcpy(repo_name, webrepo->repo_name, sizeof(repo_name));
+	if (namelen >= sizeof(repo_name)) {
+		return got_error_msg(GOT_ERR_NO_SPACE,
+		    "repository name too long");
+	}
+
+	if (namelen > 4 &&
+	    strcmp(&repo_name[namelen - 4], GOTWEB_GIT_DIR) == 0)
+		repo_name[namelen - 4] = '\0';
+
+	ret = dprintf(fd, "\trepository \"%s\" {\n", repo_name);
 	if (ret == -1) 
 		return got_error_from_errno2("dprintf", path);
-	if (ret != 16 + strlen(webrepo->repo_name) + 1)
+	if (ret != 16 + strlen(repo_name) + 1)
 		return got_error_fmt(GOT_ERR_IO, "short write to %s", path);
 
 	err = write_gotsys_auth_config(fd, path, "\t\t", webrepo->auth_config,
@@ -990,6 +1002,8 @@ write_website(int fd, const char *path, struct gotsys_website *site,
 {
 	const struct got_error *err;
 	int ret;
+	char repo_name[_POSIX_PATH_MAX];
+	size_t namelen;
 
 	ret = dprintf(fd, "\twebsite \"%s\" {\n", site->url_path);
 	if (ret == -1) 
@@ -997,10 +1011,21 @@ write_website(int fd, const char *path, struct gotsys_website *site,
 	if (ret != 13 + strlen(site->url_path) + 1)
 		return got_error_fmt(GOT_ERR_IO, "short write to %s", path);
 
-	ret = dprintf(fd, "\t\trepository \"%s\"\n", site->repo_name);
+
+	namelen = strlcpy(repo_name, site->repo_name, sizeof(repo_name));
+	if (namelen >= sizeof(repo_name)) {
+		return got_error_msg(GOT_ERR_NO_SPACE,
+		    "repository name too long");
+	}
+
+	if (namelen > 4 &&
+	    strcmp(&repo_name[namelen - 4], GOTWEB_GIT_DIR) == 0)
+		repo_name[namelen - 4] = '\0';
+
+	ret = dprintf(fd, "\t\trepository \"%s\"\n", repo_name);
 	if (ret == -1) 
 		return got_error_from_errno2("dprintf", path);
-	if (ret != 15 + strlen(site->repo_name) + 1)
+	if (ret != 15 + strlen(repo_name) + 1)
 		return got_error_fmt(GOT_ERR_IO, "short write to %s", path);
 
 	if (site->branch_name[0] != '\0') {
