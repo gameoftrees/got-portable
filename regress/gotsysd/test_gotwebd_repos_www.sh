@@ -50,10 +50,6 @@ repository www {
 	permit rw ${GOTSYSD_DEV_USER}
 }
 web server "${VMIP}" {
-	repository gotsys {
-		hide repository on
-	}
-
 	repositories url path "/"
 
 	website "/website" {
