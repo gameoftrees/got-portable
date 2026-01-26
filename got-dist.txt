@@ -105,6 +105,9 @@
 /gotsysd/libexec/gotsys-apply-conf
 /gotsysd/libexec/gotsys-apply-conf/Makefile
 /gotsysd/libexec/gotsys-apply-conf/gotsys-apply-conf.c
+/gotsysd/libexec/gotsys-apply-webconf
+/gotsysd/libexec/gotsys-apply-webconf/Makefile
+/gotsysd/libexec/gotsys-apply-webconf/gotsys-apply-webconf.c
 /gotsysd/libexec/gotsys-groupadd
 /gotsysd/libexec/gotsys-groupadd/Makefile
 /gotsysd/libexec/gotsys-groupadd/gotsys-groupadd.c
@@ -117,9 +120,6 @@
 /gotsysd/libexec/gotsys-rmkeys
 /gotsysd/libexec/gotsys-rmkeys/Makefile
 /gotsysd/libexec/gotsys-rmkeys/gotsys-rmkeys.c
-/gotsysd/libexec/gotsys-sshdconfig
-/gotsysd/libexec/gotsys-sshdconfig/Makefile
-/gotsysd/libexec/gotsys-sshdconfig/gotsys-sshdconfig.c
 /gotsysd/libexec/gotsys-useradd
 /gotsysd/libexec/gotsys-useradd/Makefile
 /gotsysd/libexec/gotsys-useradd/gotsys-useradd.c
@@ -139,6 +139,10 @@
 /gotsysd/parse.y
 /gotsysd/sysconf.c
 /gotsysd/sysconf.h
+/gotwebctl
+/gotwebctl/Makefile
+/gotwebctl/gotwebctl.8
+/gotwebctl/gotwebctl.c
 /gotwebd
 /gotwebd/Makefile
 /gotwebd/Makefile.inc
@@ -279,6 +283,8 @@
 /lib/lockfile.c
 /lib/log.c
 /lib/log.h
+/lib/media.c
+/lib/media.h
 /lib/murmurhash2.c
 /lib/murmurhash2.h
 /lib/object.c
@@ -442,9 +448,14 @@
 /regress/gotsysd/README
 /regress/gotsysd/build-got.sh
 /regress/gotsysd/common.sh
+/regress/gotsysd/gotwebd-repos-www.conf
+/regress/gotsysd/gotwebd-www.conf
+/regress/gotsysd/gotwebd.conf
 /regress/gotsysd/http-server
 /regress/gotsysd/test_gotsysd.sh
 /regress/gotsysd/test_gotwebd.sh
+/regress/gotsysd/test_gotwebd_repos_www.sh
+/regress/gotsysd/test_gotwebd_www.sh
 /regress/gotwebd
 /regress/gotwebd/Makefile
 /regress/gotwebd/action_blame.html
