@@ -42,6 +42,10 @@
 #define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0]))
 #endif
 
+#ifndef MINIMUM
+#define MINIMUM(a, b)	((a) < (b) ? (a) : (b))
+#endif
+
 void
 gotsys_conf_init(struct gotsys_conf *gotsysconf)
 {
@@ -1341,6 +1345,69 @@ gotsys_conf_validate_string(const char *s)
 
 		return got_error_fmt(GOT_ERR_PARSE_CONFIG,
 		    "character '%c' (0x%.2x) is not allowed in %s", x, x, s);
+	}
+
+	return NULL;
+}
+
+struct gotsys_repo *
+gotsys_find_repo_by_name(const char *repo_name, struct gotsys_repolist *repos)
+{
+	struct gotsys_repo *repo;
+	size_t needle_len = strlen(repo_name);
+
+	TAILQ_FOREACH(repo, repos, entry) {
+		size_t haystack_len = strlen(repo->name);
+
+		if (strncmp(repo->name, repo_name,
+		    MINIMUM(needle_len, haystack_len)) != 0)
+			continue;
+
+		if (repo_name[needle_len] == '\0' &&
+		    repo->name[haystack_len] == '\0')
+			return repo;
+
+		if (repo_name[needle_len] == '\0' &&
+		    haystack_len > 4 &&
+		    strcmp(&repo->name[haystack_len], ".git") == 0)
+			return repo;
+
+		if (repo->name[haystack_len] == '\0' &&
+		    needle_len > 4 && 
+		    strcmp(&repo_name[needle_len], ".git") == 0)
+			return repo;
+	}
+
+	return NULL;
+}
+
+struct gotsys_webrepo *
+gotsys_find_webrepo_by_name(const char *repo_name,
+    struct gotsys_webrepolist *repos)
+{
+	struct gotsys_webrepo *webrepo;
+	size_t needle_len = strlen(repo_name);
+
+	STAILQ_FOREACH(webrepo, repos, entry) {
+		size_t haystack_len = strlen(webrepo->repo_name);
+
+		if (strncmp(webrepo->repo_name, repo_name,
+		    MINIMUM(needle_len, haystack_len)) != 0)
+			continue;
+
+		if (repo_name[needle_len] == '\0' &&
+		    webrepo->repo_name[haystack_len] == '\0')
+			return webrepo;
+
+		if (repo_name[needle_len] == '\0' &&
+		    haystack_len > 4 &&
+		    strcmp(&webrepo->repo_name[haystack_len - 4], ".git") == 0)
+			return webrepo;
+
+		if (webrepo->repo_name[haystack_len] == '\0' &&
+		    needle_len > 4 && 
+		    strcmp(&repo_name[needle_len - 4], ".git") == 0)
+			return webrepo;
 	}
 
 	return NULL;

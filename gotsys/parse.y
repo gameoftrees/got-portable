@@ -461,12 +461,11 @@ repository	: REPOSITORY STRING {
 			const struct got_error *err;
 			struct gotsys_repo *repo;
 
-			TAILQ_FOREACH(repo, &gotsysconf->repos, entry) {
-				if (strcmp(repo->name, $2) == 0) {
-					yyerror("duplicate repository '%s'", $2);
-					free($2);
-					YYERROR;
-				}
+			repo = gotsys_find_repo_by_name($2, &gotsysconf->repos);
+			if (repo) {
+				yyerror("duplicate repository '%s'", $2);
+				free($2);
+				YYERROR;
 			}
 
 			err = conf_new_repo(&new_repo, $2);
@@ -628,19 +627,17 @@ webrepo		: REPOSITORY STRING {
 				YYERROR;
 			}
 
-			STAILQ_FOREACH(webrepo, &new_webserver->repos, entry) {
-				if (strcmp(webrepo->repo_name,
-				    new_webrepo->repo_name) == 0) {
-					err = got_error_fmt(
-					    GOT_ERR_PARSE_CONFIG,
-					    "duplicate repository '%s' for "
-					    "server '%s'",
-					    new_webrepo->repo_name,
-					    new_webserver->server_name);
-					yyerror("%s", err->msg);
-					free($2);
-					YYERROR;
-				}
+			webrepo = gotsys_find_webrepo_by_name(
+			    new_webrepo->repo_name,
+			    &new_webserver->repos);
+			if (webrepo != NULL) {
+				err = got_error_fmt(GOT_ERR_PARSE_CONFIG,
+				    "duplicate repository '%s' for server %s",
+				    new_webrepo->repo_name,
+				    new_webserver->server_name);
+				yyerror("%s", err->msg);
+				free($2);
+				YYERROR;
 			}
 
 			STAILQ_INSERT_TAIL(&new_webserver->repos, new_webrepo,
@@ -1634,10 +1631,8 @@ gotsys_conf_parse(const char *filename, struct gotsys_conf *pgotsysconf,
 			    srv->hide_repositories != -1)
 				webrepo->hidden = srv->hide_repositories;
 
-			TAILQ_FOREACH(repo, &gotsysconf->repos, entry) {
-				if (strcmp(repo->name, webrepo->repo_name) == 0)
-					break;
-			}
+			repo = gotsys_find_repo_by_name(webrepo->repo_name,
+			    &gotsysconf->repos);
 			if (repo == NULL) {
 				return got_error_fmt(GOT_ERR_PARSE_CONFIG,
 				    "unknown repository '%s' used on "
@@ -1653,19 +1648,15 @@ gotsys_conf_parse(const char *filename, struct gotsys_conf *pgotsysconf,
 			    srv->auth_config != GOTSYS_AUTH_UNSET)
 				site->auth_config = srv->auth_config;
 
-			TAILQ_FOREACH(repo, &gotsysconf->repos, entry) {
-				if (site->repo_name[0] == '\0') {
-					return got_error_fmt(
-					    GOT_ERR_PARSE_CONFIG, "no "
-					    "repository defined for website "
-					    "'%s' on server %s", pe->path,
-					    srv->server_name);
-				}
-
-				if (strcmp(repo->name, site->repo_name) == 0)
-					break;
+			if (site->repo_name[0] == '\0') {
+				return got_error_fmt(GOT_ERR_PARSE_CONFIG,
+				    "no repository defined for website '%s' "
+				    "on server %s", pe->path,
+				    srv->server_name);
 			}
 
+			repo = gotsys_find_repo_by_name(site->repo_name,
+			    &gotsysconf->repos);
 			if (repo == NULL) {
 				return got_error_fmt(GOT_ERR_PARSE_CONFIG,
 				    "unknown repository '%s' used for "

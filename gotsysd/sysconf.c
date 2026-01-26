@@ -814,10 +814,8 @@ sysconf_dispatch_libexec(int fd, short event, void *arg)
 			if (err)
 				break;
 
-			TAILQ_FOREACH(repo, &gotsysconf.repos, entry) {
-				if (strcmp(repo->name, webrepo->repo_name) == 0)
-					break;
-			}
+			repo = gotsys_find_repo_by_name(webrepo->repo_name,
+			    &gotsysconf.repos);
 			if (repo == NULL) {
 				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
 				    "web repository refers to nonexistent "
@@ -961,11 +959,9 @@ sysconf_dispatch_libexec(int fd, short event, void *arg)
 			if (err)
 				break;
 
-			TAILQ_FOREACH(repo, &gotsysconf.repos, entry) {
-				if (strcmp(repo->name,
-				    gotsysd_sysconf.site_cur->repo_name) == 0)
-					break;
-			}
+			repo = gotsys_find_repo_by_name(
+			    gotsysd_sysconf.site_cur->repo_name,
+			    &gotsysconf.repos);
 			if (repo == NULL) {
 				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
 				    "web repository refers to nonexistent "
