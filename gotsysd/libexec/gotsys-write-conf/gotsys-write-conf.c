@@ -926,6 +926,24 @@ write_gotd_conf(int *auth_idx)
 }
 
 static const struct got_error *
+hide_gotsys_repo(int fd, const char *path)
+{
+	int ret;
+
+	ret = dprintf(fd,
+	    "\trepository \"gotsys\" {\n"
+	    "\t\thide repository on\n"
+	    "\t\tenable authentication\n"
+	    "\t}\n");
+	if (ret == -1) 
+		return got_error_from_errno2("dprintf", path);
+	if (ret != 23 + 21 + 24 + 3)
+		return got_error_fmt(GOT_ERR_IO, "short write to %s", path);
+
+	return NULL;
+}
+
+static const struct got_error *
 write_webrepo(int *show_repo_description, int fd, const char *path,
     struct gotsys_webrepo *webrepo,
     enum gotsysd_web_auth_config webd_auth_config)
@@ -1348,6 +1366,10 @@ write_gotwebd_conf(void)
 			}
 
 			/* TODO mediatypes */
+
+			err = hide_gotsys_repo(fd, path);
+			if (err)
+				return err;
 
 			STAILQ_FOREACH(webrepo, &srv->repos, entry) {
 				err = write_webrepo(&show_repo_description,
@@ -2077,6 +2099,15 @@ dispatch_event(int fd, short event, void *arg)
 				free(webrepo);
 				break;
 			}
+			if (strcmp(repo->name, "gotsys") == 0 ||
+			    strcmp(repo->name, "gotsys.git") == 0) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "gotsys repository cannot be used on "
+				    "the web");
+				free(webrepo);
+				break;
+			}
+
 			STAILQ_INSERT_TAIL(&srv->repos, webrepo, entry);
 			break;
 		}
@@ -2208,6 +2239,13 @@ dispatch_event(int fd, short event, void *arg)
 				    "repository %s while in state %d\n",
 				    site_cur->repo_name,
 				    writeconf_state);
+				break;
+			}
+			if (strcmp(repo->name, "gotsys") == 0 ||
+			    strcmp(repo->name, "gotsys.git") == 0) {
+				err = got_error_fmt(GOT_ERR_PRIVSEP_MSG,
+				    "gotsys repository cannot be used for "
+				    "web sites");
 				break;
 			}
 			break;

@@ -44,6 +44,9 @@ repository gotsys.git {
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
+repository testrepo.git {
+	permit rw ${GOTSYSD_TEST_USER}
+}
 repository gotdev.git {
 	permit rw ${GOTSYSD_DEV_USER}
 }
@@ -51,7 +54,7 @@ repository hidden.git {
 	permit rw ${GOTSYSD_TEST_USER}
 }
 web server "${VMIP}" {
-	repository gotsys.git {
+	repository testrepo {
 		permit ${GOTSYSD_TEST_USER}
 	}
 	repository gotdev.git {
@@ -119,6 +122,41 @@ EOF
 		return 1
 	fi
 
+	got init $testroot/testrepo.git
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		"got init failed unexpectedly"
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	mkdir $testroot/import
+	echo "my plans are: ..." > $testroot/import/myplans.txt
+
+	got import -m init -r $testroot/testrepo.git $testroot/import > /dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		"got import failed unexpectedly"
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	cat >> $testroot/testrepo.git/got.conf <<EOF
+remote "origin" {
+	server ${GOTSYSD_TEST_USER}@${VMIP}
+	protocol ssh
+	repository testrepo
+}
+EOF
+
+	got send -q -f -i ${GOTSYSD_SSH_KEY} -r $testroot/testrepo.git
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		"got send failed unexpectedly"
+		test_done "$testroot" 1
+		return 1
+	fi
+
 	# Obtain a login token over ssh.
 	ssh -q -i ${GOTSYSD_SSH_KEY} ${GOTSYSD_TEST_USER}@${VMIP} \
 		'gotsh -c weblogin' > $testroot/stdout
@@ -137,7 +175,7 @@ EOF
 [got]
 Repos
 Project
-gotsys.git
+testrepo.git
 summary | briefs | commits | tags | tree | rss
 -------------------------------------------------------------------------------
 
@@ -152,19 +190,19 @@ EOF
 
 	# Request a tree page using the stored cookie.
 	w3m -cookie-jar "$testroot/cookies" \
-		"http://${VMIP}/?action=tree&path=gotsys.git" -dump \
+		"http://${VMIP}/?action=tree&path=testrepo.git" -dump \
 		> $testroot/stdout
 
-	local commit_id=`git_show_head $testroot/${GOTSYS_REPO}`
-	local commit_time=`git_show_author_time $testroot/${GOTSYS_REPO} $commit_id`
+	local commit_id=`git_show_head $testroot/testrepo.git`
+	local commit_time=`git_show_author_time $testroot/testrepo.git $commit_id`
 	local d=$(env LC_ALL=C date -u -r "$commit_time" \
 		+"%a %b %e %H:%M:%S %Y UTC" | sed -e 's/  / /')
-	local tree_id=$(got cat -r $testroot/${GOTSYS_REPO} $commit_id | \
+	local tree_id=$(got cat -r $testroot/testrepo.git $commit_id | \
 		grep 'tree ' | cut -d ' ' -f2)
 
 	cat > $testroot/stdout.expected <<EOF
 [got]
-Repos / gotsys.git / tree /
+Repos / testrepo.git / tree /
 
 Tree
 
@@ -173,11 +211,11 @@ Tree:
 Date:
     $d
 Message:
-    configure web server
+    init
 
 -------------------------------------------------------------------------------
 
-gotsys.conf commits | blame
+myplans.txt commits | blame
 
 EOF
 	cmp -s $testroot/stdout.expected $testroot/stdout
@@ -189,7 +227,7 @@ EOF
 	fi
 
 	# Attempt to access the same page again without the cookie.
-	w3m "http://${VMIP}/?action=tree&path=gotsys.git" -dump \
+	w3m "http://${VMIP}/?action=tree&path=testrepo.git" -dump \
 		> $testroot/stdout
 
 	local commit_id=`git_show_head $testroot/${GOTSYS_REPO}`
@@ -198,7 +236,7 @@ EOF
 
 	cat > $testroot/stdout.expected <<EOF
 [got]
-Repos / gotsys.git / tree /
+Repos / testrepo.git / tree /
 Log in by running: ssh ${GOTSYSD_TEST_USER}@${VMIP} "weblogin ${VMIP}"
 
 EOF
@@ -278,9 +316,6 @@ repository hidden.git {
 	permit rw ${GOTSYSD_TEST_USER}
 }
 web server "${VMIP}" {
-	repository gotsys.git {
-		permit ${GOTSYSD_TEST_USER}
-	}
 	repository public.git {
 		disable authentication
 	}
@@ -368,9 +403,6 @@ EOF
 [got]
 Repos
 Project
-gotsys.git
-summary | briefs | commits | tags | tree | rss
--------------------------------------------------------------------------------
 gottest.git
 summary | briefs | commits | tags | tree | rss
 -------------------------------------------------------------------------------
@@ -464,9 +496,6 @@ repository hidden.git {
 	permit rw ${GOTSYSD_TEST_USER}
 }
 web server "${VMIP}" {
-	repository gotsys.git {
-		permit ${GOTSYSD_TEST_USER}
-	}
 	repository public {
 		disable authentication
 	}
@@ -574,9 +603,6 @@ EOF
 [got]
 Repos
 Project
-gotsys.git
-summary | briefs | commits | tags | tree | rss
--------------------------------------------------------------------------------
 gottest.git
 summary | briefs | commits | tags | tree | rss
 -------------------------------------------------------------------------------

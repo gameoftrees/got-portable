@@ -51,10 +51,6 @@ repository www {
 }
 
 web server "${VMIP}" {
-	repository gotsys {
-		hide repository on
-	}
-
 	repositories url path "/repos"
 
 	website "/" {

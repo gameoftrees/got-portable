@@ -627,6 +627,16 @@ webrepo		: REPOSITORY STRING {
 				YYERROR;
 			}
 
+			if (strcmp(new_webrepo->repo_name, "gotsys") == 0 ||
+			    strcmp(new_webrepo->repo_name, "gotsys.git") == 0) {
+				err = got_error_msg(GOT_ERR_PARSE_CONFIG,
+				    "\"gotsys\" repository cannot be used "
+				    "on the web");
+				yyerror("%s", err->msg);
+				free($2);
+				YYERROR;
+			}
+
 			webrepo = gotsys_find_webrepo_by_name(
 			    new_webrepo->repo_name,
 			    &new_webserver->repos);
@@ -745,6 +755,16 @@ websiteopts1	: PATH STRING {
 			err = gotsys_conf_validate_repo_name($2);
 			if (err) {
 				yyerror("repository name %s: %s", $2, err->msg);
+				free($2);
+				YYERROR;
+			}
+
+			if (strcmp($2, "gotsys") == 0 ||
+			    strcmp($2, "gotsys.git") == 0) {
+				err = got_error_msg(GOT_ERR_PARSE_CONFIG,
+				    "\"gotsys\" repository cannot be used "
+				    "for web sites");
+				yyerror("%s", err->msg);
 				free($2);
 				YYERROR;
 			}
