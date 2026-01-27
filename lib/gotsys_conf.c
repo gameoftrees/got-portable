@@ -1363,18 +1363,19 @@ gotsys_find_repo_by_name(const char *repo_name, struct gotsys_repolist *repos)
 		    MINIMUM(needle_len, haystack_len)) != 0)
 			continue;
 
-		if (repo_name[needle_len] == '\0' &&
+		if (needle_len == haystack_len &&
+		    repo_name[needle_len] == '\0' &&
 		    repo->name[haystack_len] == '\0')
 			return repo;
 
 		if (repo_name[needle_len] == '\0' &&
-		    haystack_len > 4 &&
-		    strcmp(&repo->name[haystack_len], ".git") == 0)
+		    haystack_len == needle_len + 4 &&
+		    strcmp(&repo->name[haystack_len - 4], ".git") == 0)
 			return repo;
 
 		if (repo->name[haystack_len] == '\0' &&
-		    needle_len > 4 && 
-		    strcmp(&repo_name[needle_len], ".git") == 0)
+		    needle_len == haystack_len + 4 && 
+		    strcmp(&repo_name[needle_len - 4], ".git") == 0)
 			return repo;
 	}
 
@@ -1395,17 +1396,18 @@ gotsys_find_webrepo_by_name(const char *repo_name,
 		    MINIMUM(needle_len, haystack_len)) != 0)
 			continue;
 
-		if (repo_name[needle_len] == '\0' &&
+		if (needle_len == haystack_len &&
+		    repo_name[needle_len] == '\0' &&
 		    webrepo->repo_name[haystack_len] == '\0')
 			return webrepo;
 
 		if (repo_name[needle_len] == '\0' &&
-		    haystack_len > 4 &&
+		    haystack_len == needle_len + 4 &&
 		    strcmp(&webrepo->repo_name[haystack_len - 4], ".git") == 0)
 			return webrepo;
 
 		if (webrepo->repo_name[haystack_len] == '\0' &&
-		    needle_len > 4 && 
+		    needle_len == haystack_len + 4 && 
 		    strcmp(&repo_name[needle_len - 4], ".git") == 0)
 			return webrepo;
 	}
