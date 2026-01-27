@@ -572,6 +572,7 @@ webopts1	: GOTSYSD_CONTROL SOCKET STRING {
 				free(addr);
 				YYERROR;
 			}
+			free($4);
 
 			TAILQ_INSERT_TAIL(&gotsysd->web.listen_addrs, addr,
 			    entry);
