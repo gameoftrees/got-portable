@@ -47,7 +47,7 @@ repository gotsys.git {
 repository testrepo.git {
 	permit rw ${GOTSYSD_TEST_USER}
 }
-repository gotdev.git {
+repository gottestdev.git {
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository hidden.git {
@@ -57,7 +57,7 @@ web server "${VMIP}" {
 	repository testrepo {
 		permit ${GOTSYSD_TEST_USER}
 	}
-	repository gotdev.git {
+	repository gottestdev {
 		permit ${GOTSYSD_DEV_USER}
 		deny ${GOTSYSD_TEST_USER}
 	}
@@ -306,10 +306,10 @@ repository public.git {
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
-repository gotdev.git {
+repository gottestdev.git {
 	permit rw ${GOTSYSD_DEV_USER}
 }
-repository gottest.git {
+repository gottest {
 	permit rw ${GOTSYSD_TEST_USER}
 }
 repository hidden.git {
@@ -319,7 +319,7 @@ web server "${VMIP}" {
 	repository public.git {
 		disable authentication
 	}
-	repository gotdev.git {
+	repository gottestdev.git {
 		permit ${GOTSYSD_DEV_USER}
 		deny ${GOTSYSD_TEST_USER}
 	}
@@ -437,7 +437,7 @@ EOF
 [got]
 Repos
 Project
-gotdev.git
+gottestdev.git
 summary | briefs | commits | tags | tree | rss
 -------------------------------------------------------------------------------
 public.git
@@ -486,7 +486,7 @@ repository public.git {
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
-repository gotdev.git {
+repository gottestdev.git {
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository gottest.git {
@@ -499,7 +499,7 @@ web server "${VMIP}" {
 	repository public {
 		disable authentication
 	}
-	repository gotdev.git {
+	repository gottestdev.git {
 		permit ${GOTSYSD_DEV_USER}
 		deny ${GOTSYSD_TEST_USER}
 	}
