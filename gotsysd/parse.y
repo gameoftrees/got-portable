@@ -504,6 +504,9 @@ webopts1	: GOTSYSD_CONTROL SOCKET STRING {
 
 			free($3);
 			free($5);
+
+			TAILQ_INSERT_TAIL(&gotsysd->web.listen_addrs, addr,
+			    entry);
 		}
 		| LISTEN ON listen_addr PORT NUMBER {
 			const struct got_error *err;
@@ -540,6 +543,9 @@ webopts1	: GOTSYSD_CONTROL SOCKET STRING {
 				YYERROR;
 			}
 			free($3);
+
+			TAILQ_INSERT_TAIL(&gotsysd->web.listen_addrs, addr,
+			    entry);
 		}
 		| LISTEN ON SOCKET STRING {
 			const struct got_error *err;
