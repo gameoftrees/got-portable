@@ -37,6 +37,7 @@ gotd/libexec/got-notify-email/got-notify-email
 gotd/libexec/got-notify-http/got-notify-http
 gotd/parse.c
 gotsh/gotsh
+gotwebctl/gotwebctl
 gotwebd/gotwebd
 gotwebd/pages.c
 gotwebd/parse.c
