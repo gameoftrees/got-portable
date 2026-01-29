@@ -202,6 +202,9 @@ ${GOTSYSD_CONF}:
 	@${UNPRIV} "printf '\tprefork 1\n'  >> $@"
 	@${UNPRIV} "printf '\tenable authentication insecure\n' >> $@"
 	@${UNPRIV} "printf '\tlogin hint user \"${GOTSYSD_TEST_USER}\"\n' >> $@"
+	@${UNPRIV} "printf '\tlisten on socket \\\"/var/www/run/gotweb.sock\\\"\n' >> $@"
+	@${UNPRIV} "printf '\tlisten on 127.0.0.1 port 9000\n' >> $@"
+	@${UNPRIV} "printf '\tlisten on ::1 port 9000\n' >> $@"
 	@${UNPRIV} "echo '}' >> $@"
 	@${UNPRIV} "echo 'web server \"VMIP\"' >> $@"
 
