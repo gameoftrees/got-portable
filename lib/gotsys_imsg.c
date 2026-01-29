@@ -25,6 +25,7 @@
 
 #include <netdb.h>
 
+#include <ctype.h>
 #include <event.h>
 #include <imsg.h>
 #include <limits.h>
@@ -1113,23 +1114,52 @@ gotsys_imsg_recv_web_cfg(struct gotsysd_web_config *new, struct imsg *imsg)
 }
 
 const struct got_error *
-gotsysd_conf_validate_inet_addr(const char *hostname, const char *servname)
+gotsysd_conf_validate_inet_addr(const char *hostname, const char *servicename)
 {
-	struct addrinfo hints, *res0;
-	int error;
+	int ret;
+	struct in_addr addr4;
+	struct in6_addr addr6;
+	const char *errstr = NULL;
 
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG;
-	error = getaddrinfo(hostname, servname, &hints, &res0);
-	if (error) {
+	ret = inet_pton(AF_INET, hostname, &addr4);
+	if (ret == -1)
+		return got_error_from_errno("inet_pton");
+	if (ret == 0) {
+		ret = inet_pton(AF_INET6, hostname, &addr6);
+		if (ret == -1)
+			return got_error_from_errno("inet_pton");
+	}
+	if (ret == 0) {
 		return got_error_fmt(GOT_ERR_PARSE_CONFIG,
-		    "could not parse \"%s:%s\": %s", hostname, servname,
-		    gai_strerror(error));
+		    "not a valid IPv4 or IPv6 address: %s", hostname);
 	}
 
-	freeaddrinfo(res0);
+	strtonum(servicename, LLONG_MIN, LLONG_MAX, &errstr);
+	if (errstr) {
+		size_t len, i;
+
+		/* Not a number. Assume a service name. */
+		len = strlen(servicename);
+		for (i = 0; i < len; i++) {
+			if (isalnum((unsigned char)servicename[i]) ||
+			    servicename[i] == '-')
+				continue;
+
+			return got_error_fmt(GOT_ERR_PARSE_CONFIG,
+				    "bad listening port specification; "
+				    "service names may only contain "
+				    "alphanumeric ASCII characters and "
+				    "hyphens: %s ",
+				    servicename);
+		}
+	} else {
+		strtonum(servicename, 1, USHRT_MAX, &errstr);
+		if (errstr) {
+			return got_error_fmt(GOT_ERR_PARSE_CONFIG,
+			    "port number %s is %s", servicename, errstr);
+		}
+	}
+
 	return NULL;
 }
 
