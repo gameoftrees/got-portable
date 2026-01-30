@@ -171,7 +171,7 @@ EOF
 	cat > $testroot/stdout.expected <<EOF
 [got]
 Repos
-Log in by running: ssh ${GOTSYSD_TEST_USER}@${VMIP} "weblogin ${VMIP}"
+login failed
 
 EOF
 	cmp -s $testroot/stdout.expected $testroot/stdout
