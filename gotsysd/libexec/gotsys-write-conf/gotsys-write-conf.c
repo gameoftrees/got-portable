@@ -1463,11 +1463,11 @@ write_gotwebd_conf(void)
 		}
 
 		if (webcfg.login_hint_port[0] != '\0') {
-			ret = dprintf(fd, "login hint port \"%s\"\n",
+			ret = dprintf(fd, "login hint port %s\n",
 			    webcfg.login_hint_port);
 			if (ret == -1) 
 				return got_error_from_errno2("dprintf", path);
-			if (ret != 18 + strlen(webcfg.login_hint_port) + 1) {
+			if (ret != 16 + strlen(webcfg.login_hint_port) + 1) {
 				return got_error_fmt(GOT_ERR_IO,
 				    "short write to %s", path);
 			}
