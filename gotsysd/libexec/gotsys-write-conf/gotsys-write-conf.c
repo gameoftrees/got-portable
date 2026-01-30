@@ -2486,6 +2486,10 @@ done:
 	    err == NULL)
 		err = got_error_from_errno2("unlink", gotd_secrets_tmppath);
 	free(gotd_secrets_tmppath);
+	if (gotwebd_conf_tmppath && unlink(gotwebd_conf_tmppath) == -1 &&
+	    err == NULL)
+		err = got_error_from_errno2("unlink", gotwebd_conf_tmppath);
+	free(gotwebd_conf_tmppath);
 	if (gotd_conf_tmpfd != -1 && close(gotd_conf_tmpfd) == -1 &&
 	    err == NULL)
 		err = got_error_from_errno("close");
