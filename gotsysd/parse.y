@@ -394,11 +394,13 @@ webopts1	: GOTSYSD_CONTROL SOCKET STRING {
 		| GOTSYSD_LOGIN HINT USER STRING {
 			const struct got_error *err;
 
-			err = gotsys_conf_validate_name($4, "user");
-			if (err) {
-				yyerror("%s", err->msg);
-				free($4);
-				YYERROR;
+			if (strcmp($4, "anonymous") != 0) {
+				err = gotsys_conf_validate_name($4, "user");
+				if (err) {
+					yyerror("%s", err->msg);
+					free($4);
+					YYERROR;
+				}
 			}
 
 			if (strlcpy(gotsysd->web.login_hint_user, $4,

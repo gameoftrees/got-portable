@@ -1088,7 +1088,8 @@ gotsys_imsg_recv_web_cfg(struct gotsysd_web_config *new, struct imsg *imsg)
 			return err;
 	}
 
-	if (cfg.login_hint_user[0] != '\0') {
+	if (cfg.login_hint_user[0] != '\0' &&
+	    strcmp(cfg.login_hint_user, "anonymous") != 0) {
 		err = gotsys_conf_validate_name(cfg.login_hint_user, "user");
 		if (err)
 			return err;
