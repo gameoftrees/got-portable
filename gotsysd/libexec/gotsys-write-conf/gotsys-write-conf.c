@@ -310,11 +310,15 @@ write_access_rules(int fd, const char *path,
 }
 
 static const struct got_error *
-write_web_access_rules(int fd, const char *path,
+write_web_access_rules(int *have_login_hint_user, int fd, const char *path,
     const char *prefix, struct gotsys_access_rule_list *rules)
 {
 	const struct got_error *err;
 	struct gotsys_access_rule *rule;
+	const char *login_hint_user = NULL;
+
+	if (webcfg.login_hint_user[0] != '\0')
+		login_hint_user = webcfg.login_hint_user;
 
 	STAILQ_FOREACH(rule, rules, entry) {
 		const char *access;
@@ -325,6 +329,10 @@ write_web_access_rules(int fd, const char *path,
 			break;
 		case GOTSYS_ACCESS_PERMITTED:
 			access = "permit ";
+
+			if (login_hint_user != NULL &&
+			    strcmp(rule->identifier, login_hint_user) == 0)
+				*have_login_hint_user = 1;
 			break;
 		default:
 			return got_error_fmt(GOT_ERR_PARSE_CONFIG,
@@ -944,15 +952,17 @@ hide_gotsys_repo(int fd, const char *path)
 }
 
 static const struct got_error *
-write_webrepo(int *show_repo_description, int fd, const char *path,
-    struct gotsys_webrepo *webrepo,
-    enum gotsysd_web_auth_config webd_auth_config)
+write_webrepo(int *show_repo_description, int *login_hint_user_access,
+    int fd, const char *path, struct gotsys_webrepo *webrepo,
+    enum gotsysd_web_auth_config webd_auth_config,
+    int hide_repositories)
 {
 	const struct got_error *err;
 	struct gotsys_repo *repo;
 	int ret;
 	char repo_name[_POSIX_PATH_MAX];
 	size_t namelen;
+	int have_login_hint_user = 0;
 
 	namelen = strlcpy(repo_name, webrepo->repo_name, sizeof(repo_name));
 	if (namelen >= sizeof(repo_name)) {
@@ -975,9 +985,14 @@ write_webrepo(int *show_repo_description, int fd, const char *path,
 	if (err)
 		return err;
 
-	err = write_web_access_rules(fd, path, "\t\t", &webrepo->access_rules);
+	err = write_web_access_rules(&have_login_hint_user,
+	    fd, path, "\t\t", &webrepo->access_rules);
 	if (err)
 		return err;
+
+	if (have_login_hint_user && (webrepo->hidden == 0 ||
+	    (webrepo->hidden == -1 && hide_repositories != 1)))
+		*login_hint_user_access = 1;
 
 	if (webrepo->hidden != -1) {
 		const char *val;
@@ -1015,13 +1030,14 @@ write_webrepo(int *show_repo_description, int fd, const char *path,
 }
 
 static const struct got_error *
-write_website(int fd, const char *path, struct gotsys_website *site,
-    enum gotsysd_web_auth_config webd_auth_config)
+write_website(int *login_hint_user_access, int fd, const char *path,
+    struct gotsys_website *site, enum gotsysd_web_auth_config webd_auth_config)
 {
 	const struct got_error *err;
 	int ret;
 	char repo_name[_POSIX_PATH_MAX];
 	size_t namelen;
+	int have_login_hint_user = 0;
 
 	ret = dprintf(fd, "\twebsite \"%s\" {\n", site->url_path);
 	if (ret == -1) 
@@ -1067,9 +1083,17 @@ write_website(int fd, const char *path, struct gotsys_website *site,
 	if (err)
 		return err;
 
-	err = write_web_access_rules(fd, path, "\t\t", &site->access_rules);
+	err = write_web_access_rules(&have_login_hint_user,
+	    fd, path, "\t\t", &site->access_rules);
 	if (err)
 		return err;
+
+	if (have_login_hint_user &&
+	    (site->auth_config == GOTSYS_AUTH_ENABLED ||
+	    (site->auth_config == GOTSYS_AUTH_UNSET &&
+	    (webd_auth_config == GOTSYSD_WEB_AUTH_INSECURE ||
+	    webd_auth_config == GOTSYSD_WEB_AUTH_SECURE))))
+		*login_hint_user_access = 1;
 
 	ret = dprintf(fd, "\t}\n");
 	if (ret == -1) 
@@ -1088,6 +1112,7 @@ write_gotwebd_conf(void)
 	const char *path = gotwebd_conf_tmppath;
 	struct gotsysd_web_address *addr;
 	struct gotsysd_web_server *srv_cfg;
+	int login_hint_user_access = 0;
 
 	err = got_opentemp_truncatefd(fd);
 	if (err)
@@ -1146,28 +1171,6 @@ write_gotwebd_conf(void)
 		if (ret == -1) 
 			return got_error_from_errno2("dprintf", path);
 		if (ret != 11 + strlen(webcfg.www_user) + 1) {
-			return got_error_fmt(GOT_ERR_IO, "short write to %s",
-			    path);
-		}
-	}
-
-	if (webcfg.login_hint_user[0] != '\0') {
-		ret = dprintf(fd, "login hint user \"%s\"\n",
-		    webcfg.login_hint_user);
-		if (ret == -1) 
-			return got_error_from_errno2("dprintf", path);
-		if (ret != 18 + strlen(webcfg.login_hint_user) + 1) {
-			return got_error_fmt(GOT_ERR_IO, "short write to %s",
-			    path);
-		}
-	}
-
-	if (webcfg.login_hint_port[0] != '\0') {
-		ret = dprintf(fd, "login hint port \"%s\"\n",
-		    webcfg.login_hint_port);
-		if (ret == -1) 
-			return got_error_from_errno2("dprintf", path);
-		if (ret != 18 + strlen(webcfg.login_hint_port) + 1) {
 			return got_error_fmt(GOT_ERR_IO, "short write to %s",
 			    path);
 		}
@@ -1321,8 +1324,8 @@ write_gotwebd_conf(void)
 			struct got_pathlist_entry *pe;
 			int show_repo_description = 0;
 
-			err = write_web_access_rules(fd, path, "\t",
-			    &srv->access_rules);
+			err = write_web_access_rules(&login_hint_user_access,
+			    fd, path, "\t", &srv->access_rules);
 			if (err)
 				return err;
 
@@ -1373,7 +1376,9 @@ write_gotwebd_conf(void)
 
 			STAILQ_FOREACH(webrepo, &srv->repos, entry) {
 				err = write_webrepo(&show_repo_description,
-				    fd, path, webrepo, srv_cfg->auth_config);
+				    &login_hint_user_access,
+				    fd, path, webrepo, srv_cfg->auth_config,
+				    hide_repositories);
 				if (err)
 					return err;
 			}
@@ -1413,8 +1418,8 @@ write_gotwebd_conf(void)
 			RB_FOREACH(pe, got_pathlist_head, &srv->websites) {
 				struct gotsys_website *site = pe->data;
 
-				err = write_website(fd, path, site,
-				    srv_cfg->auth_config);
+				err = write_website(&login_hint_user_access,
+				    fd, path, site, srv_cfg->auth_config);
 				if (err)
 					return err;
 			}
@@ -1444,6 +1449,28 @@ write_gotwebd_conf(void)
 		if (ret != 8 + strlen(buf) + 1) {
 			return got_error_fmt(GOT_ERR_IO, "short write to %s",
 			    path);
+		}
+	}
+
+	if (login_hint_user_access) {
+		ret = dprintf(fd, "login hint user \"%s\"\n",
+		    webcfg.login_hint_user);
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		if (ret != 18 + strlen(webcfg.login_hint_user) + 1) {
+			return got_error_fmt(GOT_ERR_IO, "short write to %s",
+			    path);
+		}
+
+		if (webcfg.login_hint_port[0] != '\0') {
+			ret = dprintf(fd, "login hint port \"%s\"\n",
+			    webcfg.login_hint_port);
+			if (ret == -1) 
+				return got_error_from_errno2("dprintf", path);
+			if (ret != 18 + strlen(webcfg.login_hint_port) + 1) {
+				return got_error_fmt(GOT_ERR_IO,
+				    "short write to %s", path);
+			}
 		}
 	}
 
