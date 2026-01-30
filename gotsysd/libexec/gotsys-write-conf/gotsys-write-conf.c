@@ -1306,7 +1306,7 @@ write_gotwebd_conf(void)
 		if (hide_repositories != -1) {
 			const char *val;
 
-			val = srv->hide_repositories ? "on" : "off";
+			val = hide_repositories ? "on" : "off";
 			ret = dprintf(fd, "\thide repositories %s\n", val);
 			if (ret == -1) 
 				return got_error_from_errno2("dprintf", path);
