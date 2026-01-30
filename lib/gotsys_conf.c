@@ -1340,8 +1340,11 @@ gotsys_conf_validate_string(const char *s)
 	for (i = 0; s[i] != '\0'; ++i) {
 		char x = s[i];
 
-		/* keep in sync with gotwebd/parse.y allowed_in_string() */
-		if (isalnum((unsigned char)x) ||
+		/*
+		 * Similar to gotwebd/parse.y allowed_in_string() while
+		 * allowing for spaces and tabs in quoted strings.
+		 */
+		if (isalnum((unsigned char)x) || x == ' ' || x == '\t' ||
 		    (ispunct((unsigned char)x) && x != '(' && x != ')' &&
 		    x != '{' && x != '}' &&
 		    x != '!' && x != '=' && x != '#' &&
