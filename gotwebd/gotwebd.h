@@ -74,7 +74,7 @@
 #define D_GOTPATH		 "/got/public"
 #define D_SITENAME		 "Gotweb"
 #define D_SITEOWNER		 "Got Owner"
-#define D_SITELINK		 "Repos"
+#define D_SITELINK		 "Repositories"
 #define D_GOTLOGO		 "got.png"
 #define D_GOTURL		 "https://gameoftrees.org"
 #define D_GOTWEBCSS		 "gotweb.css"
