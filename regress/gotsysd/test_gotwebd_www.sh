@@ -154,7 +154,7 @@ EOF
 	w3m "http://${VMIP}/nonexistent" -dump > $testroot/stdout
 	cat > $testroot/stdout.expected <<EOF
 [got]
-Repos / no action /
+Repositories / no action /
 not found
 
 EOF
@@ -170,7 +170,7 @@ EOF
 	w3m "http://${VMIP}/repos" -dump > $testroot/stdout
 	cat > $testroot/stdout.expected <<EOF
 [got]
-Repos
+Repositories
 login failed
 
 EOF

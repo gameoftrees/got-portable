@@ -110,7 +110,7 @@ EOF
 	w3m "http://${VMIP}/" -dump > $testroot/stdout
 	cat > $testroot/stdout.expected <<EOF
 [got]
-Repos
+Repositories
 Log in by running: ssh ${GOTSYSD_TEST_USER}@${VMIP} "weblogin ${VMIP}"
 
 EOF
@@ -173,7 +173,7 @@ EOF
 	w3m -cookie-jar "$testroot/cookies" "$url" -dump > $testroot/stdout
 	cat > $testroot/stdout.expected <<EOF
 [got]
-Repos
+Repositories
 Repository
 testrepo.git
 summary | briefs | commits | tags | tree | rss
@@ -202,7 +202,7 @@ EOF
 
 	cat > $testroot/stdout.expected <<EOF
 [got]
-Repos / testrepo.git / tree /
+Repositories / testrepo.git / tree /
 
 Tree
 
@@ -236,7 +236,7 @@ EOF
 
 	cat > $testroot/stdout.expected <<EOF
 [got]
-Repos / testrepo.git / tree /
+Repositories / testrepo.git / tree /
 Log in by running: ssh ${GOTSYSD_TEST_USER}@${VMIP} "weblogin ${VMIP}"
 
 EOF
@@ -260,7 +260,7 @@ EOF
 
 	cat > $testroot/stdout.expected <<EOF
 [got]
-Repos / nonexistent.git / tree /
+Repositories / nonexistent.git / tree /
 Log in by running: ssh ${GOTSYSD_TEST_USER}@${VMIP} "weblogin ${VMIP}"
 
 EOF
@@ -377,7 +377,7 @@ EOF
 	w3m "http://${VMIP}/" -dump > $testroot/stdout
 	cat > $testroot/stdout.expected <<EOF
 [got]
-Repos
+Repositories
 Repository
 public.git
 summary | briefs | commits | tags | tree | rss
@@ -401,7 +401,7 @@ EOF
 	w3m -cookie-jar "$testroot/cookies" "$url" -dump > $testroot/stdout
 	cat > $testroot/stdout.expected <<EOF
 [got]
-Repos
+Repositories
 Repository
 gottest.git
 summary | briefs | commits | tags | tree | rss
@@ -435,7 +435,7 @@ EOF
 	w3m -cookie-jar "$testroot/cookies" "$url" -dump > $testroot/stdout
 	cat > $testroot/stdout.expected <<EOF
 [got]
-Repos
+Repositories
 Repository
 gottestdev.git
 summary | briefs | commits | tags | tree | rss
@@ -557,7 +557,7 @@ EOF
 
 	cat > $testroot/stdout.expected <<EOF
 [got]
-Repos / public.git / tree /
+Repositories / public.git / tree /
 reference refs/heads/main not found
 
 EOF
@@ -575,7 +575,7 @@ EOF
 
 	cat > $testroot/stdout.expected <<EOF
 [got]
-Repos / gottest.git / tree /
+Repositories / gottest.git / tree /
 Log in by running: ssh ${GOTSYSD_TEST_USER}@${VMIP} "weblogin ${VMIP}"
 
 EOF
@@ -601,7 +601,7 @@ EOF
 	w3m -cookie-jar "$testroot/cookies" "$url" -dump > $testroot/stdout
 	cat > $testroot/stdout.expected <<EOF
 [got]
-Repos
+Repositories
 Repository
 gottest.git
 summary | briefs | commits | tags | tree | rss
@@ -626,7 +626,7 @@ EOF
 
 	cat > $testroot/stdout.expected <<EOF
 [got]
-Repos / gottest.git / tree /
+Repositories / gottest.git / tree /
 reference refs/heads/main not found
 
 EOF

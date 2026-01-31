@@ -149,7 +149,7 @@ EOF
 	w3m "http://${VMIP}/nonexistent" -dump > $testroot/stdout
 	cat > $testroot/stdout.expected <<EOF
 [got]
-Repos
+Repositories
 not found
 
 EOF
@@ -165,7 +165,7 @@ EOF
 	w3m "http://${VMIP}/" -dump > $testroot/stdout
 	cat > $testroot/stdout.expected <<EOF
 [got]
-Repos
+Repositories
 Log in by running: ssh ${GOTSYSD_TEST_USER}@${VMIP} "weblogin ${VMIP}"
 
 EOF
@@ -193,7 +193,7 @@ EOF
 	w3m -cookie-jar "$testroot/cookies" "$url" -dump > $testroot/stdout
 	cat > $testroot/stdout.expected <<EOF
 [got]
-Repos
+Repositories
 Repository
 www.git
 summary | briefs | commits | tags | tree | rss
