@@ -20,6 +20,7 @@
 #include <sys/tree.h>
 #include <sys/stat.h>
 
+#include <stddef.h>
 #include <err.h>
 #include <event.h>
 #include <imsg.h>

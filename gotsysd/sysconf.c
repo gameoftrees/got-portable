@@ -19,6 +19,7 @@
 #include <sys/queue.h>
 #include <sys/tree.h>
 
+#include <stddef.h>
 #include <errno.h>
 #include <event.h>
 #include <limits.h>

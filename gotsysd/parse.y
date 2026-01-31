@@ -29,6 +29,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 
+#include <stddef.h>
 #include <ctype.h>
 #include <err.h>
 #include <errno.h>
