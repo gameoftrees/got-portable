@@ -174,7 +174,7 @@ EOF
 	cat > $testroot/stdout.expected <<EOF
 [got]
 Repos
-Project
+Repository
 testrepo.git
 summary | briefs | commits | tags | tree | rss
 -------------------------------------------------------------------------------
@@ -378,7 +378,7 @@ EOF
 	cat > $testroot/stdout.expected <<EOF
 [got]
 Repos
-Project
+Repository
 public.git
 summary | briefs | commits | tags | tree | rss
 -------------------------------------------------------------------------------
@@ -402,7 +402,7 @@ EOF
 	cat > $testroot/stdout.expected <<EOF
 [got]
 Repos
-Project
+Repository
 gottest.git
 summary | briefs | commits | tags | tree | rss
 -------------------------------------------------------------------------------
@@ -436,7 +436,7 @@ EOF
 	cat > $testroot/stdout.expected <<EOF
 [got]
 Repos
-Project
+Repository
 gottestdev.git
 summary | briefs | commits | tags | tree | rss
 -------------------------------------------------------------------------------
@@ -602,7 +602,7 @@ EOF
 	cat > $testroot/stdout.expected <<EOF
 [got]
 Repos
-Project
+Repository
 gottest.git
 summary | briefs | commits | tags | tree | rss
 -------------------------------------------------------------------------------
