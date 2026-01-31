@@ -7,8 +7,8 @@
 #		    If it's a developer build, it's left as-is.
 #
 # Intended to be called from configure.ac (via autogen.sh)
-GOT_RELEASE=yes
-GOT_PORTABLE_VER=0.121
+GOT_RELEASE=no
+GOT_PORTABLE_VER=0.122
 
 [ -d ".git" -a "$GOT_RELEASE" = "no" ] || { echo "$GOT_PORTABLE_VER" ; exit ; }
 
