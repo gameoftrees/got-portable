@@ -206,7 +206,9 @@ ${GOTSYSD_CONF}:
 	@${UNPRIV} "printf '\tlisten on 127.0.0.1 port 9000\n' >> $@"
 	@${UNPRIV} "printf '\tlisten on ::1 port 9000\n' >> $@"
 	@${UNPRIV} "echo '}' >> $@"
-	@${UNPRIV} "echo 'web server \"VMIP\"' >> $@"
+	@${UNPRIV} "echo 'web server \"VMIP\" {' >> $@"
+	@${UNPRIV} "printf '\tshow_repo_age off\n' >> $@"
+	@${UNPRIV} "echo '}' >> $@"
 
 ${GOTSYS_CONF}: ${GOTSYSD_SSH_PUBKEY}
 	@${UNPRIV} "echo user ${GOTSYSD_TEST_USER} { >> $@"

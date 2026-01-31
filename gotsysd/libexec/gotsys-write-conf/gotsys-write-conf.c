@@ -1396,18 +1396,18 @@ write_gotwebd_conf(void)
 				}
 			}
 
-			/*
-			 * Repository age and owner currently need to be off
-			 * to keep our regression tests passing: And these
-			 * options cannot be controlled via gotsys.conf yet.
-			 */
-			ret = dprintf(fd, "\tshow_repo_age off\n");
-			if (ret == -1) 
-				return got_error_from_errno2("dprintf", path);
-			if (ret != 18 + 1) {
-				return got_error_fmt(GOT_ERR_IO,
-				    "short write to %s", path);
+			if (!srv_cfg->show_repo_age) {
+				ret = dprintf(fd, "\tshow_repo_age off\n");
+				if (ret == -1)  {
+					return got_error_from_errno2("dprintf",
+					    path);
+				}
+				if (ret != 18 + 1) {
+					return got_error_fmt(GOT_ERR_IO,
+					    "short write to %s", path);
+				}
 			}
+
 			ret = dprintf(fd, "\tshow_repo_owner off\n");
 			if (ret == -1) 
 				return got_error_from_errno2("dprintf", path);
