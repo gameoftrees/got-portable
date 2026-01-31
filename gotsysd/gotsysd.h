@@ -151,6 +151,7 @@ struct gotsysd_web_server {
 
 	enum gotsysd_web_auth_config auth_config;
 	int hide_repositories;
+	int show_repo_age;
 };
 STAILQ_HEAD(gotsysd_web_serverlist, gotsysd_web_server);
 

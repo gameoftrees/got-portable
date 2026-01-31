@@ -116,7 +116,7 @@ typedef struct {
 %}
 
 %token	AUTHENTICATION CHROOT GOTSYSD_CONTROL GOTWEB_URL_ROOT GOTWEB
-%token	HTDOCS INSECURE PORT PREFORK SERVER NAME SOCKET WWW HINT
+%token	HTDOCS INSECURE PORT PREFORK SERVER NAME SOCKET WWW HINT SHOW_REPO_AGE
 %token	ERROR LISTEN ON USER GOTD DIRECTORY REPOSITORY UID RANGE PERMIT
 %token	DENY RO RW WEB GOTSYSD_LOGIN ENABLE DISABLE HIDE REPOSITORIES
 
@@ -710,6 +710,13 @@ webserveropts1	: GOTWEB_URL_ROOT STRING {
 
 			srv->hide_repositories = $3;
 		}
+		| SHOW_REPO_AGE boolean {
+			struct gotsysd_web_server *srv;
+
+			srv = STAILQ_LAST(&gotsysd->web.servers,
+			    gotsysd_web_server, entry);
+			srv->show_repo_age = $2;
+		}
 		;
 
 webserveropts2	: webserveropts2 webserveropts1 nl
@@ -783,6 +790,7 @@ lookup(char *s)
 		{ "ro",				RO },
 		{ "rw",				RW },
 		{ "server",			SERVER },
+		{ "show_repo_age",		SHOW_REPO_AGE },
 		{ "socket",			SOCKET },
 		{ "uid",			UID },
 		{ "user",			USER },
@@ -1327,6 +1335,7 @@ conf_new_web_server(const char *name)
 	}
 
 	srv->hide_repositories = -1;
+	srv->show_repo_age = 1;
 	STAILQ_INSERT_TAIL(&gotsysd->web.servers, srv, entry);
 	return NULL;
 }
