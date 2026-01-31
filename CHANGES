@@ -1,3 +1,25 @@
+* got 0.121; 2026-01-31
+- plug fulltext delta cache memory leaks; found by otto malloc
+- make gotwebd serve its own static files if not they are not served by httpd
+- avoid deleting local HEAD and "refs/got/" refs during 'got fetch -d'
+- hint at PASSWDSKIP for security(8) in gotsh.1
+- fix bogus 'got histedit' error when deleting files which do not exist on disk
+- standardize -h option exit status code across all commands
+- gotwebd: stop reading from client once request has been parsed; fixes hangs
+- gotwebd: add support for serving static web sites from Git repositories
+- gotwebd: fix login links when gotwebd is not served at the root URL location
+- gotwebd: add support for custom mime types, like in httpd.conf
+- gotwebd: allow for displaying non-default SSH port numbers in login hints
+- gotwebd: prepend 64 bits of randomness to login token data
+- gotwebd: stop gracefully when a TERM signal is received
+- remove undocumented support for macros from gotsys.conf parse.y
+- make it possible to set repository descriptions in gotwebd.conf
+- add gotwebctl, a utility which can be used to control gotwebd
+- fix gotsys.conf syntax check for empty hmac secrets
+- allow gotsysd to configure and restart gotwebd
+- remove gotsys-sshdconfig; gotsysd no longer modifies /etc/ssh/sshd_config
+- improve syntax error handling in gotsysd.conf, gotwebd.conf, and gotd.conf
+
 * got 0.120; 2025-10-03
 - disable gotwebd authentication if it is not enabled in /etc/gotwebd.conf
 - ensure that GOTWEBD_LOGIN_TIMEOUT is used consistently at build time
