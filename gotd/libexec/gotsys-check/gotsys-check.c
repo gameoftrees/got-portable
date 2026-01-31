@@ -124,6 +124,17 @@ gotsys_check(struct gotd_imsgev *iev, struct imsg *imsg)
 		goto done;
 	}
 
+	if (sb.st_size == 0) {
+		err = got_error_fmt(GOT_ERR_BAD_PATH,
+		    "%s is empty", configfile);
+		goto done;
+	}
+
+	if (lseek(fd, 0L, SEEK_SET) == -1) {
+		err = got_error_from_errno("lseek");
+		goto done;
+	}
+
 	err = gotsys_conf_parse(configfile, &gotsysconf, &fd);
 	if (err)
 		goto done;
