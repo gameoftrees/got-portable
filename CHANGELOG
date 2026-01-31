@@ -6,6 +6,12 @@ other than OpenBSD.
 
 All changes are on top of the versioned changes listed in CHANGES.
 
+# got-portable 0.121 (2026-01-31)
+
+* Changes from got-0.121
+
+  - Introduce gotwebctl binary
+
 # got-portable 0.120 (2025-10-03)
 
 * Changes from got-0.120
