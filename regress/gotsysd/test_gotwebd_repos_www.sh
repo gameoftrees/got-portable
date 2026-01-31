@@ -194,7 +194,7 @@ EOF
 	cat > $testroot/stdout.expected <<EOF
 [got]
 Repos
-Project
+Repository
 www.git
 summary | briefs | commits | tags | tree | rss
 -------------------------------------------------------------------------------
