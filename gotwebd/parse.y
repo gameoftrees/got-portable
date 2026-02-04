@@ -149,7 +149,7 @@ mediatype_ok(const char *s)
 %}
 
 %token	LISTEN GOTWEBD_LOGIN WWW SITE_NAME SITE_OWNER SITE_LINK LOGO
-%token	LOGO_URL SHOW_REPO_OWNER SHOW_REPO_AGE SHOW_REPO_DESCRIPTION
+%token	LOGO_URL SHOW_REPO_OWNER SHOW_REPO_AGE SHOW_REPO_DESCRIPTION CLONE_URL
 %token	MAX_REPOS_DISPLAY REPOS_PATH MAX_COMMITS_DISPLAY ON ERROR
 %token	SHOW_SITE_OWNER SHOW_REPO_CLONEURL PORT PREFORK RESPECT_EXPORTOK
 %token	SERVER CHROOT CUSTOM_CSS SOCKET HINT HTDOCS GOTWEB_URL_ROOT
@@ -967,6 +967,17 @@ repoopts1	: DISABLE AUTHENTICATION {
 				YYERROR;
 			}
 		}
+		| CLONE_URL STRING {
+			n = strlcpy(new_repo->clone_url, $2,
+			    sizeof(new_repo->clone_url));
+			if (n >= sizeof(new_repo->clone_url)) {
+				yyerror("repository clone URL too long, "
+				    "exceeds %zd bytes",
+				    sizeof(new_repo->clone_url) - 1);
+				free($2);
+				YYERROR;
+			}
+		}
 		;
 
 types		: TYPES	'{' optnl mediaopts_l '}'
@@ -1079,6 +1090,7 @@ lookup(char *s)
 		{ "authentication",		AUTHENTICATION },
 		{ "branch",			BRANCH },
 		{ "chroot",			CHROOT },
+		{ "clone_url",			CLONE_URL },
 		{ "control",			GOTWEBD_CONTROL },
 		{ "custom_css",			CUSTOM_CSS },
 		{ "deny",			DENY },

@@ -1698,8 +1698,16 @@ gotweb_load_got_path(struct repo_dir **rp, const char *dir,
 		if (error)
 			goto err;
 	}
-	error = gotweb_get_clone_url(&repo_dir->url, srv, repo_dir->path,
-	    dirfd(dt));
+	if (srv->show_repo_cloneurl && repo && repo->clone_url[0] != '\0') {
+		repo_dir->url = strdup(repo->clone_url);
+		if (repo_dir->url == NULL) {
+			error = got_error_from_errno("strdup");
+			goto err;
+		}
+	} else {
+		error = gotweb_get_clone_url(&repo_dir->url, srv,
+		    repo_dir->path, dirfd(dt));
+	}
 err:
 	free(dir_test);
 	if (dt != NULL && closedir(dt) == EOF && error == NULL)

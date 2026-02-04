@@ -397,6 +397,7 @@ struct gotwebd_repo {
 
 	char name[NAME_MAX];
 	char description[GOTWEBD_MAXDESCRSZ];
+	char clone_url[GOTWEBD_MAXCLONEURLSZ];
 
 	enum gotwebd_auth_config	auth_config;
 	struct gotwebd_access_rule_list access_rules;
