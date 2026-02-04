@@ -956,7 +956,7 @@ static const struct got_error *
 write_webrepo(int *show_repo_description, int *login_hint_user_access,
     int fd, const char *path, struct gotsys_webrepo *webrepo,
     enum gotsysd_web_auth_config webd_auth_config,
-    int hide_repositories)
+    int hide_repositories, const char *server_name)
 {
 	const struct got_error *err;
 	struct gotsys_repo *repo;
@@ -964,6 +964,7 @@ write_webrepo(int *show_repo_description, int *login_hint_user_access,
 	char repo_name[_POSIX_PATH_MAX];
 	size_t namelen;
 	int have_login_hint_user = 0;
+	int login_hint_user_has_repo_access = 0;
 
 	namelen = strlcpy(repo_name, webrepo->repo_name, sizeof(repo_name));
 	if (namelen >= sizeof(repo_name)) {
@@ -1019,6 +1020,55 @@ write_webrepo(int *show_repo_description, int *login_hint_user_access,
 		}
 
 		*show_repo_description = 1;
+	}
+
+	if (repo) {
+		struct gotsys_access_rule *rule;
+
+		STAILQ_FOREACH(rule, &repo->access_rules, entry) {
+			if (rule->access == GOTSYS_ACCESS_PERMITTED &&
+			    strcmp(rule->identifier,
+			    webcfg.login_hint_user) == 0) {
+				login_hint_user_has_repo_access = 1;
+				break;
+			}
+		}
+	}
+
+	if (!login_hint_user_has_repo_access) {
+		struct gotsys_access_rule *rule;
+
+		STAILQ_FOREACH(rule, &global_repo_access_rules, entry) {
+			if (rule->access == GOTSYS_ACCESS_PERMITTED &&
+			    strcmp(rule->identifier,
+			    webcfg.login_hint_user) == 0) {
+				login_hint_user_has_repo_access = 1;
+				break;
+			}
+		}
+	}
+
+	if (login_hint_user_has_repo_access) {
+		char *clone_url;
+
+		if (asprintf(&clone_url, "ssh://%s@%s%s%s/%s.git",
+		    webcfg.login_hint_user, server_name,
+		    webcfg.login_hint_port[0] ? ":" : "",
+		    webcfg.login_hint_port[0] ? webcfg.login_hint_port : "",
+		    repo_name) == -1)
+			return got_error_from_errno("asprintf");
+	
+		ret = dprintf(fd, "\t\tclone_url \"%s\"\n", clone_url);
+		if (ret == -1)  {
+			free(clone_url);
+			return got_error_from_errno2("dprintf", path);
+		}
+		if (ret != 14 + strlen(clone_url) + 1) {
+			free(clone_url);
+			return got_error_fmt(GOT_ERR_IO,
+			    "short write to %s", path);
+		}
+		free(clone_url);
 	}
 
 	ret = dprintf(fd, "\t}\n");
@@ -1379,7 +1429,7 @@ write_gotwebd_conf(void)
 				err = write_webrepo(&show_repo_description,
 				    &login_hint_user_access,
 				    fd, path, webrepo, srv_cfg->auth_config,
-				    hide_repositories);
+				    hide_repositories, srv_cfg->server_name);
 				if (err)
 					return err;
 			}

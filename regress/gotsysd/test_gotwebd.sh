@@ -642,7 +642,185 @@ EOF
 	test_done "$testroot" "$ret"
 }
 
+test_summary_page() {
+	local testroot=`test_init summary_page 1`
+
+	got checkout -q $testroot/${GOTSYS_REPO} $testroot/wt >/dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got checkout failed unexpectedly" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	crypted_vm_pw=`echo ${GOTSYSD_VM_PASSWORD} | encrypt | tr -d '\n'`
+	crypted_pw=`echo ${GOTSYSD_DEV_PASSWORD} | encrypt | tr -d '\n'`
+	sshkey=`cat ${GOTSYSD_SSH_PUBKEY}`
+	cat > ${testroot}/wt/gotsys.conf <<EOF
+user ${GOTSYSD_TEST_USER} {
+	password "${crypted_vm_pw}" 
+	authorized key ${sshkey}
+}
+user ${GOTSYSD_DEV_USER} {
+	password "${crypted_pw}" 
+	authorized key ${sshkey}
+}
+repository gotsys.git {
+	permit rw ${GOTSYSD_TEST_USER}
+	permit rw ${GOTSYSD_DEV_USER}
+}
+repository public.git {
+	permit rw ${GOTSYSD_TEST_USER}
+	permit rw ${GOTSYSD_DEV_USER}
+}
+repository gottestdev.git {
+	permit rw ${GOTSYSD_DEV_USER}
+}
+repository gottest.git {
+	permit rw ${GOTSYSD_TEST_USER}
+}
+repository hidden.git {
+	permit rw ${GOTSYSD_TEST_USER}
+}
+web server "${VMIP}" {
+	repository public {
+		disable authentication
+	}
+	repository gottestdev.git {
+		permit ${GOTSYSD_DEV_USER}
+		deny ${GOTSYSD_TEST_USER}
+	}
+	repository gottest.git {
+		permit ${GOTSYSD_TEST_USER}
+	}
+	repository hidden {
+		permit ${GOTSYSD_TEST_USER}
+		deny ${GOTSYSD_DEV_USER}
+		hide repository on
+	}
+}
+EOF
+	(cd ${testroot}/wt && gotsys check -q)
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "bad gotsys.conf written by test" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	(cd ${testroot}/wt && got commit -m "no-op change" >/dev/null)
+	local commit_id=`git_show_head $testroot/${GOTSYS_REPO}`
+
+	got send -q -i ${GOTSYSD_SSH_KEY} -r ${testroot}/${GOTSYS_REPO}
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got send failed unexpectedly" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	# Wait for gotsysd to apply the new configuration.
+	echo "$commit_id" > $testroot/stdout.expected
+	for i in 1 2 3 4 5; do
+		sleep 1
+		ssh -i ${GOTSYSD_SSH_KEY} root@${VMIP} \
+			cat /var/db/gotsysd/commit > $testroot/stdout
+		if cmp -s $testroot/stdout.expected $testroot/stdout; then
+			break;
+		fi
+	done
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "gotsysd failed to apply configuration" >&2
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	got init $testroot/public.git > /dev/null
+	mkdir -p $testroot/public
+
+	cat > $testroot/public/readme.txt <<EOF
+Testing the summary page of gotwebd
+EOF
+	got import -m init -r $testroot/public.git $testroot/public > /dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got import failed unexpectedly" >&2
+		return 1
+	fi
+	local commit_id=`git_show_head $testroot/public.git`
+	local short_commit_id=`trim_obj_id 10 $commit_id`
+
+	cat > $testroot/public.git/got.conf <<EOF
+remote "origin" {
+	server "${GOTSYSD_DEV_USER}@$VMIP"
+	protocol ssh
+	repository "public"
+}
+EOF
+	got send -q -i ${GOTSYSD_SSH_KEY} -b main -f -r $testroot/public.git
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got send failed unexpectedly" >&2
+		return 1
+	fi
+
+	# Attempt to access a public repository's summary
+	w3m "http://${VMIP}/?action=summary&path=public.git" -dump \
+		> $testroot/stdout
+
+	cat > $testroot/stdout.expected <<EOF
+[got]
+Repositories / public.git / summary
+
+Clone URL:
+
+    ssh://${GOTSYSD_TEST_USER}@${VMIP}/public.git
+
+Commit Briefs
+
+right now $short_commit_id Flan Hacker
+
+init (main)
+
+diff | patch | tree
+-------------------------------------------------------------------------------
+
+Branches
+
+right now
+main
+summary | commit briefs | commits
+-------------------------------------------------------------------------------
+
+Tags
+
+This repository contains no tags
+
+Tree
+
+readme.txt commits | blame
+
+readme.txt
+
+Testing the summary page of gotwebd
+
+EOF
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	test_done "$testroot" "$ret"
+}
+
 test_parseargs "$@"
 run_test test_login
 run_test test_access_rules_index_page
 run_test test_access_rules_tree_page
+run_test test_summary_page
