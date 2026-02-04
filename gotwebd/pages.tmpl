@@ -172,9 +172,27 @@ nextsep(char *s, char **t)
 	struct gotweb_url	 u_path;
 	char			 prefix[MAX_DOCUMENT_URI * 2];
 	const char		*css = srv->custom_css;
+	const char		*url_root, *url_path;
 
-	strlcpy(prefix, srv->gotweb_url_root, sizeof(prefix));
-	strlcat(prefix, srv->repos_url_path, sizeof(prefix));
+	strlcpy(prefix, "/", sizeof(prefix));
+
+	url_root = srv->gotweb_url_root;
+	while (url_root[0] == '/')
+		url_root++;
+	if (url_root[0] != '\0')
+		strlcat(prefix, url_root, sizeof(prefix));
+
+	url_path = srv->repos_url_path;
+	while (url_path[0] == '/')
+		url_path++;
+	if (url_path[0] != '\0') {
+		if (url_root[0] != '\0') {
+			got_path_strip_trailing_slashes(prefix);
+			strlcat(prefix, "/", sizeof(prefix));
+		}
+		strlcat(prefix, url_path, sizeof(prefix));
+	}
+
 	got_path_strip_trailing_slashes(prefix);
 
 	memset(&u_path, 0, sizeof(u_path));
