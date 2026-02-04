@@ -201,6 +201,8 @@ create_repo(struct imsg *imsg)
 	const struct got_error *err = NULL;
 	size_t datalen, namelen;
 	char *repo_name = NULL;
+	char *headref = NULL;
+	const char *head_name = NULL;
 	char *fullname = NULL;
 	char *abspath = NULL;
 
@@ -214,6 +216,31 @@ create_repo(struct imsg *imsg)
 	repo_name = strndup(imsg->data, datalen);
 	if (repo_name == NULL)
 		return got_error_from_errno("strndup");
+	if (strlen(repo_name) != param.name_len) {
+		err = got_error(GOT_ERR_PRIVSEP_LEN);
+		goto done;
+	}
+
+	if (param.headref_len > 0) {
+		headref = strndup(imsg->data + sizeof(param) + param.name_len,
+		    param.headref_len);
+		if (headref == NULL) {
+			err = got_error_from_errno("strndup");
+			goto done;
+		}
+		if (strlen(headref) != param.headref_len) {
+			err = got_error(GOT_ERR_PRIVSEP_LEN);
+			goto done;
+		}
+		if (!got_ref_name_is_valid(headref)) {
+			err = got_error_path(headref, GOT_ERR_BAD_REF_NAME);
+			goto done;
+		}
+
+		head_name = headref;
+		if (strncmp(head_name, "refs/heads/", 11) == 0)
+			head_name += 11;
+	}
 
 	err = gotsys_conf_validate_repo_name(repo_name);
 	if (err)
@@ -249,7 +276,7 @@ create_repo(struct imsg *imsg)
 		} else
 			err = got_error_from_errno2("mkdir", abspath);
 	} else
-		err = got_repo_init(abspath, NULL, GOT_HASH_SHA1);
+		err = got_repo_init(abspath, head_name, GOT_HASH_SHA1);
 done:
 	free(repo_name);
 	free(fullname);

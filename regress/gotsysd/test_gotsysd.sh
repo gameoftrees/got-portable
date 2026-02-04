@@ -1432,6 +1432,11 @@ repository "foo" {
 	permit ro anonymous
 	head foo
 }
+repository "customhead" {
+	permit rw ${GOTSYSD_DEV_USER}
+	permit ro anonymous
+	head foo
+}
 EOF
 	(cd ${testroot}/wt && got commit -m "set foo as head" >/dev/null)
 	local commit_id=`git_show_head $testroot/${GOTSYS_REPO}`
@@ -1476,6 +1481,67 @@ EOF
 
 	# The foo repository should now advertise refs/heads/foo as HEAD.
 	got clone -q -l anonymous@${VMIP}:foo.git | egrep '^HEAD:' \
+ 		> $testroot/stdout
+	echo "HEAD: refs/heads/foo" > $testroot/stdout.expected
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	ssh -i ${GOTSYSD_SSH_KEY} root@${VMIP} cat /git/customhead.git/HEAD \
+		> $testroot/stdout
+	echo "ref: refs/heads/foo" > $testroot/stdout.expected
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "wrong HEAD ref set during repository creation" >&2
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	# Forcibly apply the configuration again. HEAD refs will be updated
+	# and should remain unchanged.
+	ssh -q -i ${GOTSYSD_SSH_KEY} root@${VMIP} 'gotsys apply -w' > /dev/null
+
+	ssh -i ${GOTSYSD_SSH_KEY} root@${VMIP} cat /git/customhead.git/HEAD \
+		> $testroot/stdout
+	echo "ref: refs/heads/foo" > $testroot/stdout.expected
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "wrong HEAD ref after gotsys apply" >&2
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	# Create branch "foo" in customhead.git.
+	got init -b foo $testroot/customhead.git
+	mkdir $testroot/foo
+	echo alpha > $testroot/foo/alpha
+	got import -m init -b foo -r $testroot/customhead.git \
+		$testroot/foo >/dev/null
+	cat > $testroot/customhead.git/got.conf <<EOF
+remote "origin" {
+	server ${GOTSYSD_DEV_USER}@${VMIP}
+	protocol ssh
+	repository "customhead.git"
+	branch "foo"
+}
+EOF
+	got send -q -i ${GOTSYSD_SSH_KEY} -r $testroot/customhead.git
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got send failed unexpectedly" >&2
+		return 1
+	fi
+
+	# The customhead repository should now advertise refs/heads/foo as HEAD.
+	got clone -q -l anonymous@${VMIP}:customhead.git | egrep '^HEAD:' \
 		> $testroot/stdout
 	ret=$?
 	if [ $ret -ne 0 ]; then
