@@ -82,7 +82,7 @@ gotweb_reply(struct request *c, int status, const char *ctype,
 	}
 
 	csp = "Content-Security-Policy: default-src 'self'; "
-	    "script-src 'none'; object-src 'none';\r\n";
+	    "script-src 'self'; object-src 'none';\r\n";
 	if (tp_writes(c->tp, csp) == -1)
 		return -1;
 
