@@ -474,8 +474,7 @@ gotweb_serve_website(struct request *c, struct website *site,
 	if (site->branch_name[0] != 0) {
 		const char *branch = site->branch_name;
 
-		if (strncmp("refs/", branch, 5) != 0) {
-			branch += 5;
+		if (strncmp("refs/heads/", branch, 11) != 0) {
 			if (asprintf(&refname, "refs/heads/%s", branch) == -1) {
 				error = got_error_from_errno("asprintf");
 				goto done;
