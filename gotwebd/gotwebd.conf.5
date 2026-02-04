@@ -481,6 +481,22 @@ is enabled.
 .Pp
 The available repository configuration directives are as follows:
 .Bl -tag -width Ds
+.It Ic clone_url Ar string
+Sets the repository Git clone URL shown on the repository summary page.
+The
+.Ar string
+parameter should be wrapped in quotes and should be a valid URL for use
+with
+.Ic got clone
+or
+.Ic git clone .
+.Pp
+If no clone URL is set in
+.Nm
+then URLs stored in the repository's
+.Pa cloneurl
+file will be shown instead.
+This file may contain multiple URLs, one per line.
 .It Ic description Ar string
 Sets the repository description shown on the repository listing page.
 The
@@ -640,7 +656,9 @@ Toggle display of last repository modification date.
 Enabled by default.
 .It Ic show_repo_cloneurl Ar on | off
 Toggle display of clone URLs for a repository.
-This requires the creation of a
+This requires the repository's
+.iC clone_url
+option to be set, or requires the creation of a
 .Pa cloneurl
 file inside the repository which contains one URL per line.
 Enabled by default.
