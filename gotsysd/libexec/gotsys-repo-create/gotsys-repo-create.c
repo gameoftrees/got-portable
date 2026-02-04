@@ -212,6 +212,7 @@ create_repo(struct imsg *imsg)
 	struct gotsysd_imsg_sysconf_repo_create param;
 	char *repo_name = NULL;
 	char *headref = NULL;
+	const char *head_name = NULL;
 	char *fullname = NULL;
 	char *abspath = NULL;
 
@@ -250,6 +251,10 @@ create_repo(struct imsg *imsg)
 			err = got_error_path(headref, GOT_ERR_BAD_REF_NAME);
 			goto done;
 		}
+
+		head_name = headref;
+		if (strncmp(head_name, "refs/heads/", 11) == 0)
+			head_name += 11;
 	}
 
 	err = gotsys_conf_validate_repo_name(repo_name);
@@ -286,7 +291,7 @@ create_repo(struct imsg *imsg)
 		} else
 			err = got_error_from_errno2("mkdir", abspath);
 	} else
-		err = got_repo_init(abspath, headref, GOT_HASH_SHA1);
+		err = got_repo_init(abspath, head_name, GOT_HASH_SHA1);
 done:
 	free(repo_name);
 	free(fullname);
