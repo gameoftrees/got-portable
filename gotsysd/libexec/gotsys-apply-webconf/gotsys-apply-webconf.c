@@ -397,7 +397,7 @@ main(int argc, char *argv[])
 	}
 
 	/*
-	 * If we cannot conncet to the control socket then gotwebd might have
+	 * If we cannot connect to the control socket then gotwebd might have
 	 * crashed and restarting it could have bad consequences (such as
 	 * leaking info to a remote attacker). Log a warning and send 'done'
 	 * to gotsysd which can then proceed with system configuration tasks.
