@@ -42,14 +42,18 @@ widechar_file_content()
 	EOF
 }
 
-widechar_logmsg()
+widechar_logmsg1()
 {
-	cat <<-EOF
-	選り抜き記事ウィリアム・ユワート・グラッドストン（英語: William Ewart Gladstone PC FRS FSS、1809年12月29日 - 1898年5月19日）は、イギリスの政治家。
+cat <<-EOF
+選り抜き記事ウィリアム・ユワート・グラッドストン（英語: William Ewart Gladstone PC FRS FSS、1809年12月29日 - 1898年5月19日）は、イギリスの政治家。
+EOF
+}
 
-
-	    良質な記事 おまかせ表示 つまみ読み 選考
-	EOF
+widechar_logmsg2()
+{
+cat <<-EOF
+良質な記事 おまかせ表示 つまみ読み 選考
+EOF
 }
 
 widechar_commit()
@@ -59,7 +63,10 @@ widechar_commit()
 	echo "$(widechar_file_content)" > $repo/$(widechar_filename)
 
 	(cd $repo && git add $(widechar_filename) > /dev/null)
-	(cd $repo && git commit -q --cleanup=verbatim -m "$(widechar_logmsg)" \
+	widechar_logmsg1 > $testroot/logmsg
+	echo >> $testroot/logmsg
+	widechar_logmsg2 >> $testroot/logmsg
+	(cd $repo && git commit -q --cleanup=verbatim -F $testroot/logmsg \
 	    > /dev/null)
 }
 
