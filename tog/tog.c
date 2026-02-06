@@ -6039,7 +6039,7 @@ write_commit_info(struct got_diff_line **lines, size_t *nlines,
 		goto done;
 	s = logmsg;
 	while ((line = strsep(&s, "\n")) != NULL) {
-		n = fprintf(outfile, "%s\n", line);
+		n = fprintf(outfile, " %s\n", line);
 		if (n < 0) {
 			err = got_error_from_errno("fprintf");
 			goto done;
