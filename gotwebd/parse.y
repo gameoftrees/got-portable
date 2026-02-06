@@ -157,6 +157,7 @@ mediatype_ok(const char *s)
 %token	ENABLE DISABLE INSECURE REPOSITORY REPOSITORIES PERMIT DENY HIDE
 %token	WEBSITE PATH BRANCH REPOS_URL_PATH DESCRIPTION
 %token	TYPES INCLUDE GOTWEBD_CONTROL
+%token	SSH_HOSTKEY_ECDSA SSH_HOSTKEY_ED25519 SSH_HOSTKEY_RSA
 
 %token	<v.string>	STRING
 %token	<v.number>	NUMBER
@@ -978,6 +979,72 @@ repoopts1	: DISABLE AUTHENTICATION {
 				YYERROR;
 			}
 		}
+		| SSH_HOSTKEY_ECDSA STRING {
+			int i = GOTWEBD_SSHFP_ECDSA;
+
+			if (*$2 == '\0') {
+				yyerror("ssh host key fingerprint cannot be "
+				    "an empty string");
+				free($2);
+				YYERROR;
+			}
+
+			if (strlcpy(new_repo->clone_url_hostkey[i], $2,
+			    sizeof(new_repo->clone_url_hostkey[i])) >=
+			    sizeof(new_repo->clone_url_hostkey[i])) {
+				yyerror("ssh host key fingerprint too long, "
+				    "exceeds " "%zd bytes: %s",
+				    sizeof(new_repo->clone_url_hostkey[i]), $2);
+				free($2);
+				YYERROR;
+			}
+
+			free($2);
+		}
+		| SSH_HOSTKEY_ED25519 STRING {
+			int i = GOTWEBD_SSHFP_ED25519;
+
+			if (*$2 == '\0') {
+				yyerror("ssh host key fingerprint cannot be "
+				    "an empty string");
+				free($2);
+				YYERROR;
+			}
+
+			if (strlcpy(new_repo->clone_url_hostkey[i], $2,
+			    sizeof(new_repo->clone_url_hostkey[i])) >=
+			    sizeof(new_repo->clone_url_hostkey[i])) {
+				yyerror("ssh host key fingerprint too long, "
+				    "exceeds " "%zd bytes: %s",
+				    sizeof(new_repo->clone_url_hostkey[i]), $2);
+				free($2);
+				YYERROR;
+			}
+
+			free($2);
+		}
+		| SSH_HOSTKEY_RSA STRING {
+			int i = GOTWEBD_SSHFP_RSA;
+
+			if (*$2 == '\0') {
+				yyerror("ssh host key fingerprint cannot be "
+				    "an empty string");
+				free($2);
+				YYERROR;
+			}
+
+			if (strlcpy(new_repo->clone_url_hostkey[i], $2,
+			    sizeof(new_repo->clone_url_hostkey[i])) >=
+			    sizeof(new_repo->clone_url_hostkey[i])) {
+				yyerror("ssh host key fingerprint too long, "
+				    "exceeds " "%zd bytes: %s",
+				    sizeof(new_repo->clone_url_hostkey[i]), $2);
+				free($2);
+				YYERROR;
+			}
+
+			free($2);
+		}
 		;
 
 types		: TYPES	'{' optnl mediaopts_l '}'
@@ -1129,6 +1196,9 @@ lookup(char *s)
 		{ "site_name",			SITE_NAME },
 		{ "site_owner",			SITE_OWNER },
 		{ "socket",			SOCKET },
+		{ "ssh_hostkey_ecdsa",		SSH_HOSTKEY_ECDSA},
+		{ "ssh_hostkey_ed25519",	SSH_HOSTKEY_ED25519},
+		{ "ssh_hostkey_rsa",		SSH_HOSTKEY_RSA},
 		{ "summary_commits_display",	SUMMARY_COMMITS_DISPLAY },
 		{ "summary_tags_display",	SUMMARY_TAGS_DISPLAY },
 		{ "types",			TYPES },

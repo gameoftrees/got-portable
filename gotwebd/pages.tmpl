@@ -1133,6 +1133,18 @@ nextsep(char *s, char **t)
   {{ if srv->show_repo_cloneurl }}
     <dt>Clone URL:</dt>
     <dd><pre class="clone-url">{{ t->repo_dir->url }}</pre></dd>
+  {{ if t->repo_dir->sshfp[GOTWEBD_SSHFP_ECDSA] }}
+    <dt>ECDSA:</dt>
+    <dd><pre class="clone-url">{{ t->repo_dir->sshfp[GOTWEBD_SSHFP_ECDSA] }}</pre></dd>
+  {{ end }}
+  {{ if t->repo_dir->sshfp[GOTWEBD_SSHFP_ED25519] }}
+    <dt>ED25519:</dt>
+    <dd><pre class="clone-url">{{ t->repo_dir->sshfp[GOTWEBD_SSHFP_ED25519] }}</pre></dd>
+  {{ end }}
+  {{ if t->repo_dir->sshfp[GOTWEBD_SSHFP_RSA] }}
+    <dt>RSA:</dt>
+    <dd><pre class="clone-url">{{ t->repo_dir->sshfp[GOTWEBD_SSHFP_RSA] }}</pre></dd>
+  {{ end }}
   {{ end }}
 </dl>
 <div class="summary-briefs">
