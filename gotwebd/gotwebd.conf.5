@@ -497,6 +497,18 @@ then URLs stored in the repository's
 .Pa cloneurl
 file will be shown instead.
 This file may contain multiple URLs, one per line.
+.It Ic ssh_hostkey_ecdsa Ar string
+Set the server's SSH ECDSA host key fingerprint to be displayed beneath
+the clone URL.
+Should be set when the clone URL uses the SSH protocol.
+.It Ic ssh_hostkey_ed25519 Ar string
+Set the server's SSH ED25519 host key fingerprint to be displayed beneath
+the clone URL.
+Should be set when the clone URL uses the SSH protocol.
+.It Ic ssh_hostkey_rsa Ar string
+Set the server's SSH RSA host key fingerprint to be displayed beneath
+the clone URL.
+Should be set when the clone URL uses the SSH protocol.
 .It Ic description Ar string
 Sets the repository description shown on the repository listing page.
 The

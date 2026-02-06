@@ -54,6 +54,12 @@
 #define GOTWEBD_MAXPORT		 6
 #define GOTWEBD_NUMPROC		 3
 #define GOTWEBD_SOCK_FILENO	 3
+#define GOTWEBD_MAX_SSHFP	 64
+
+#define GOTWEBD_SSHFP_ECDSA	0
+#define GOTWEBD_SSHFP_ED25519	1
+#define GOTWEBD_SSHFP_RSA	2
+#define GOTWEBD_NUM_SSHFP	3
 
 #define PROC_MAX_INSTANCES	 32
 
@@ -206,6 +212,7 @@ struct repo_dir {
 	char			*owner;
 	char			*description;
 	char			*url;
+	char			*sshfp[GOTWEBD_NUM_SSHFP];
 	time_t			 age;
 	char			*path;
 };
@@ -398,6 +405,7 @@ struct gotwebd_repo {
 	char name[NAME_MAX];
 	char description[GOTWEBD_MAXDESCRSZ];
 	char clone_url[GOTWEBD_MAXCLONEURLSZ];
+	char clone_url_hostkey[GOTWEBD_NUM_SSHFP][GOTWEBD_MAX_SSHFP];
 
 	enum gotwebd_auth_config	auth_config;
 	struct gotwebd_access_rule_list access_rules;

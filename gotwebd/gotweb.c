@@ -1122,11 +1122,15 @@ gotweb_free_repo_commit(struct repo_commit *rc)
 static void
 gotweb_free_repo_dir(struct repo_dir *repo_dir)
 {
+	size_t i;
+
 	if (repo_dir != NULL) {
 		free(repo_dir->name);
 		free(repo_dir->owner);
 		free(repo_dir->description);
 		free(repo_dir->url);
+		for (i = 0; i < nitems(repo_dir->sshfp); i++)
+			free(repo_dir->sshfp[i]);
 		free(repo_dir->path);
 	}
 	free(repo_dir);
@@ -1706,6 +1710,23 @@ gotweb_load_got_path(struct repo_dir **rp, const char *dir,
 		error = gotweb_get_clone_url(&repo_dir->url, srv,
 		    repo_dir->path, dirfd(dt));
 	}
+
+	if (srv->show_repo_cloneurl && repo) {
+		size_t i;
+
+		for (i = 0; i < nitems(repo->clone_url_hostkey); i++) {
+			if (repo->clone_url_hostkey[i][0] == '\0')
+				continue;
+
+			repo_dir->sshfp[i] = strdup(repo->clone_url_hostkey[i]);
+			if (repo_dir->sshfp[i] == NULL) {
+				error = got_error_from_errno("strdup");
+				goto err;
+			}
+		}
+
+	}
+
 err:
 	free(dir_test);
 	if (dt != NULL && closedir(dt) == EOF && error == NULL)
