@@ -21,6 +21,7 @@
 #define GOT_CAPA_REPORT_STATUS		"report-status"
 #define GOT_CAPA_DELETE_REFS		"delete-refs"
 #define GOT_CAPA_NO_THIN		"no-thin"
+#define GOT_CAPA_OBJECT_FORMAT		"object-format"
 
 #define GOT_SIDEBAND_PACKFILE_DATA	1
 #define GOT_SIDEBAND_PROGRESS_INFO	2
@@ -34,6 +35,7 @@ struct got_capability {
 };
 
 struct got_pathlist_head;
+enum got_hash_algorithm;
 
 const struct got_error *got_gitproto_parse_refline(char **id_str,
     char **refname, char **server_capabilities, char *line, int len);
@@ -47,7 +49,8 @@ const struct got_error *got_gitproto_parse_ref_update_line(char **old_id_str,
 const struct got_error *got_gitproto_match_capabilities(
     char **common_capabilities,
     struct got_pathlist_head *symrefs, char *capabilities,
-    const struct got_capability my_capabilities[], size_t ncapa);
+    const struct got_capability my_capabilities[], size_t ncapa,
+    enum got_hash_algorithm *);
 const struct got_error *got_gitproto_append_capabilities(size_t *capalen,
     char *buf, size_t offset, size_t bufsize,
     const struct got_capability my_capabilities[], size_t ncapa);

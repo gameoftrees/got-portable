@@ -406,6 +406,7 @@ struct got_imsg_fetch_wanted_ref {
 
 /* Structure for GOT_IMSG_FETCH_REQUEST data. */
 struct got_imsg_fetch_request {
+	int expected_algo; /* -1 for unknown */
 	int no_head;
 	int fetch_all_branches;
 	int list_refs_only;
@@ -453,6 +454,7 @@ struct got_imsg_fetch_download_progress {
 
 /* Structure for GOT_IMSG_SEND_REQUEST data. */
 struct got_imsg_send_request {
+	int algo;
 	int verbosity;
 	size_t nrefs;
 	/* Followed by nrefs GOT_IMSG_SEND_REF messages. */
@@ -722,14 +724,14 @@ const struct got_error *got_privsep_send_index_pack_outfd(struct imsgbuf *,
     int);
 const struct got_error *got_privsep_recv_index_progress(int *, int *, int *,
     int *, int *, struct imsgbuf *ibuf);
-const struct got_error *got_privsep_send_fetch_req(struct imsgbuf *, int,
+const struct got_error *got_privsep_send_fetch_req(struct imsgbuf *, int, int,
     struct got_pathlist_head *, int, struct got_pathlist_head *,
     struct got_pathlist_head *, int, const char *, const char *, int, int);
 const struct got_error *got_privsep_send_fetch_outfd(struct imsgbuf *, int);
 const struct got_error *got_privsep_recv_fetch_progress(int *,
     struct got_object_id **, char **, struct got_pathlist_head *, char **,
-    off_t *, uint8_t *, struct imsgbuf *);
-const struct got_error *got_privsep_send_send_req(struct imsgbuf *, int,
+    off_t *, struct got_object_id *, struct imsgbuf *);
+const struct got_error *got_privsep_send_send_req(struct imsgbuf *, int, int,
     struct got_pathlist_head *, struct got_pathlist_head *, int);
 const struct got_error *got_privsep_recv_send_remote_refs(
     struct got_pathlist_head *, struct imsgbuf *);

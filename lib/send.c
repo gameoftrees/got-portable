@@ -367,10 +367,6 @@ got_send_pack(const char *remote_name, struct got_pathlist_head *branch_names,
 
 	memset(&sendibuf, 0, sizeof(sendibuf));
 
-	if (got_repo_get_object_format(repo) != GOT_HASH_SHA1)
-		return got_error_fmt(GOT_ERR_NOT_IMPL,
-		    "sha256 object IDs unsupported in network protocol");
-
 	RB_FOREACH(pe, got_pathlist_head, branch_names) {
 		const char *branchname = pe->path;
 		const char *targetname = pe->data;
@@ -500,7 +496,8 @@ got_send_pack(const char *remote_name, struct got_pathlist_head *branch_names,
 		nours++;
 	}
 
-	err = got_privsep_send_send_req(&sendibuf, nsendfd, &have_refs,
+	err = got_privsep_send_send_req(&sendibuf, nsendfd,
+	    got_repo_get_object_format(repo), &have_refs,
 	    delete_branches, verbosity);
 	if (err)
 		goto done;

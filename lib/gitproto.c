@@ -23,9 +23,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sha1.h>
+#include <sha2.h>
 
 #include "got_error.h"
 #include "got_path.h"
+#include "got_object.h"
 
 #include "got_lib_gitproto.h"
 
@@ -229,7 +232,7 @@ got_gitproto_parse_ref_update_line(char **old_id_str, char **new_id_str,
 
 static const struct got_error *
 match_capability(char **my_capabilities, const char *capa,
-    const struct got_capability *mycapa)
+    const struct got_capability *mycapa, enum got_hash_algorithm *algo)
 {
 	char *equalsign;
 	char *s;
@@ -238,6 +241,15 @@ match_capability(char **my_capabilities, const char *capa,
 	if (equalsign) {
 		if (strncmp(capa, mycapa->key, equalsign - capa) != 0)
 			return NULL;
+
+		if (strcmp(mycapa->key, "object-format") == 0) {
+			/* require an exact match on object-format value */
+			if (strcmp(equalsign + 1, mycapa->value) != 0)
+				return NULL;
+
+			if (strcmp(mycapa->value, "sha256") == 0)
+				*algo = GOT_HASH_SHA256;
+		}
 	} else {
 		if (strcmp(capa, mycapa->key) != 0)
 			return NULL;
@@ -296,13 +308,15 @@ done:
 const struct got_error *
 got_gitproto_match_capabilities(char **common_capabilities,
     struct got_pathlist_head *symrefs, char *capabilities,
-    const struct got_capability my_capabilities[], size_t ncapa)
+    const struct got_capability my_capabilities[], size_t ncapa,
+    enum got_hash_algorithm *algo)
 {
 	const struct got_error *err = NULL;
 	char *capa, *equalsign;
 	size_t i;
 
 	*common_capabilities = NULL;
+	*algo = GOT_HASH_SHA1;
 	do {
 		capa = strsep(&capabilities, " ");
 		if (capa == NULL)
@@ -319,7 +333,7 @@ got_gitproto_match_capabilities(char **common_capabilities,
 
 		for (i = 0; i < ncapa; i++) {
 			err = match_capability(common_capabilities,
-			    capa, &my_capabilities[i]);
+			    capa, &my_capabilities[i], algo);
 			if (err)
 				break;
 		}
