@@ -20,9 +20,13 @@
 #include <sys/tree.h>
 #include <sys/stat.h>
 
+#include <netinet/in.h>
+
 #include <stddef.h>
+#include <errno.h>
 #include <err.h>
 #include <event.h>
+#include <resolv.h>
 #include <imsg.h>
 #include <limits.h>
 #include <sha1.h>
@@ -63,6 +67,21 @@ static struct got_pathlist_head *notif_refs_cur;
 static size_t *num_notif_refs_cur;
 static size_t num_notif_refs_needed;
 static size_t num_notif_refs_received;
+
+static char ssh_hostkeys[GOTWEBD_NUM_SSHFP][GOTWEBD_MAX_SSHFP];
+static const char *ssh_hostkey_paths[GOTWEBD_NUM_SSHFP];
+
+#ifndef GOTSYS_SSHFP_ECDSA_PATH
+#define GOTSYS_SSHFP_ECDSA_PATH "/etc/ssh/ssh_host_ecdsa_key.pub"
+#endif
+
+#ifndef GOTSYS_SSHFP_ED25519_PATH
+#define GOTSYS_SSHFP_ED25519_PATH "/etc/ssh/ssh_host_ed25519_key.pub"
+#endif
+
+#ifndef GOTSYS_SSHFP_RSA_PATH
+#define GOTSYS_SSHFP_RSA_PATH "/etc/ssh/ssh_host_rsa_key.pub"
+#endif
 
 enum writeconf_state {
 	WRITECONF_STATE_EXPECT_GOTWEB_CFG,
@@ -1069,6 +1088,48 @@ write_webrepo(int *show_repo_description, int *login_hint_user_access,
 			    "short write to %s", path);
 		}
 		free(clone_url);
+
+		if (ssh_hostkeys[GOTWEBD_SSHFP_ECDSA][0]) {
+			ret = dprintf(fd, "\t\tssh_hostkey_ecdsa \"%s\"\n",
+			    ssh_hostkeys[GOTWEBD_SSHFP_ECDSA]);
+			if (ret == -1)  {
+				return got_error_from_errno2("dprintf", path);
+			}
+			if (ret != 22 +
+			    strlen(ssh_hostkeys[GOTWEBD_SSHFP_ECDSA]) + 1) {
+				return got_error_fmt(GOT_ERR_IO,
+				    "short write to %s", path);
+			}
+			
+		}
+
+		if (ssh_hostkeys[GOTWEBD_SSHFP_ED25519][0]) {
+			ret = dprintf(fd, "\t\tssh_hostkey_ed25519 \"%s\"\n",
+			    ssh_hostkeys[GOTWEBD_SSHFP_ED25519]);
+			if (ret == -1)  {
+				return got_error_from_errno2("dprintf", path);
+			}
+			if (ret != 24 +
+			    strlen(ssh_hostkeys[GOTWEBD_SSHFP_ED25519]) + 1) {
+				return got_error_fmt(GOT_ERR_IO,
+				    "short write to %s", path);
+			}
+			
+		}
+
+		if (ssh_hostkeys[GOTWEBD_SSHFP_RSA][0]) {
+			ret = dprintf(fd, "\t\tssh_hostkey_rsa \"%s\"\n",
+			    ssh_hostkeys[GOTWEBD_SSHFP_RSA]);
+			if (ret == -1)  {
+				return got_error_from_errno2("dprintf", path);
+			}
+			if (ret != 20 +
+			    strlen(ssh_hostkeys[GOTWEBD_SSHFP_RSA]) + 1) {
+				return got_error_fmt(GOT_ERR_IO,
+				    "short write to %s", path);
+			}
+			
+		}
 	}
 
 	ret = dprintf(fd, "\t}\n");
@@ -2456,12 +2517,123 @@ fatal:
 	}
 }
 
+static const struct got_error *
+parse_hostkey(const char *line, char *outbuf, size_t outsize)
+{
+	const struct got_error *err = NULL;
+	char *space;
+	char *b64;
+	uint8_t *hostkey = NULL;
+	size_t hostkey_len;
+	size_t len;
+	uint8_t digest[SHA256_DIGEST_LENGTH];
+	SHA2_CTX ctx;
+	uint8_t *b64digest = NULL;
+	size_t b64digest_len;
+	int ret;
+
+	space = strchr(line, ' ');
+	if (space == NULL)
+		return got_error(GOT_ERR_NOT_FOUND);
+
+	b64 = space + 1;
+	space = strchr(b64, ' ');
+	if (space == NULL)
+		return got_error(GOT_ERR_NOT_FOUND);
+
+	*space = '\0';
+
+	len = strlen(b64);
+	if (len == 0)
+		return got_error(GOT_ERR_NOT_FOUND);
+
+	hostkey = calloc(1, len);
+	if (hostkey == NULL)
+		return got_error_from_errno("calloc");
+
+	hostkey_len = b64_pton(b64, hostkey, len);
+	if (hostkey_len <= 0) {
+		err = got_error(GOT_ERR_NOT_FOUND);
+		goto done;
+	}
+
+	SHA256Init(&ctx);
+	SHA256Update(&ctx, hostkey, hostkey_len);
+	SHA256Final(digest, &ctx);
+
+	b64digest_len = ((len + 2) / 3) * 4 + 1;
+	b64digest = calloc(1, b64digest_len);
+	if (b64digest == NULL) {
+		err = got_error_from_errno("calloc");
+		goto done;
+	}
+
+	if (b64_ntop(digest, SHA256_DIGEST_LENGTH,
+	    b64digest, b64digest_len) == -1) {
+		err = got_error_from_errno("b64_ntop");
+		goto done;
+	}
+
+	b64digest[strcspn(b64digest, "=")] = '\0';
+	ret = snprintf(outbuf, outsize, "SHA256:%s\n", b64digest);
+	if (ret == -1) {
+		err = got_error_from_errno("snprintf");
+		goto done;
+	}
+	if ((size_t)ret >= outsize) {
+		err = got_error_fmt(GOT_ERR_NO_SPACE, "SSH host key "
+		    "fingerprint too long, exceeds %zu bytes: SHA256:%s",
+		    outsize, b64digest);
+		goto done;
+	}
+done:
+	free(hostkey);
+	free(b64digest);
+	return err;
+}
+
+static const struct got_error *
+load_ssh_hostkey(int key_type)
+{
+	const struct got_error *err = NULL;
+	const char *path = ssh_hostkey_paths[key_type];
+	FILE *f;
+	char *line = NULL;
+	size_t linesize = 0;
+	ssize_t linelen;
+
+	f = fopen(path, "r");
+	if (f == NULL) {
+		/* Don't care why it failed. Skip this file. */
+		return NULL;
+	}
+
+	while ((linelen = getline(&line, &linesize, f)) != -1) {
+		if (linelen == 0)
+			continue;
+
+		err = parse_hostkey(line, ssh_hostkeys[key_type],
+		    sizeof(ssh_hostkeys[key_type]));
+		if (err == NULL || err->code != GOT_ERR_NOT_FOUND)
+			break;
+		err = NULL;
+	}
+
+	free(line);
+
+	if (fclose(f) == EOF && ferror(f) && err == NULL)
+		err = got_ferror(f, GOT_ERR_IO);
+
+	return err;
+}
+
 int
 main(int argc, char *argv[])
 {
 	const struct got_error *err = NULL;
 	struct gotsysd_imsgev iev;
 	struct event evsigint, evsigterm, evsighup, evsigusr1;
+	size_t i;
 #if 0
 	static int attached;
 
@@ -2539,10 +2711,32 @@ main(int argc, char *argv[])
 		goto done;
 	}
 
+	ssh_hostkey_paths[GOTWEBD_SSHFP_ECDSA] = GOTSYS_SSHFP_ECDSA_PATH;
+	ssh_hostkey_paths[GOTWEBD_SSHFP_ED25519] = GOTSYS_SSHFP_ED25519_PATH;
+	ssh_hostkey_paths[GOTWEBD_SSHFP_RSA] = GOTSYS_SSHFP_RSA_PATH;
+
+	for (i = 0; i < nitems(ssh_hostkey_paths); i++) {
+		if (unveil(ssh_hostkey_paths[i], "r") == -1) {
+			err = got_error_from_errno2("unveil r",
+			    ssh_hostkey_paths[i]);
+			goto done;
+		}
+	}
+
 	if (unveil(NULL, NULL) == -1) {
 		err = got_error_from_errno("unveil");
 		goto done;
 	}
+
+	err = load_ssh_hostkey(GOTWEBD_SSHFP_ECDSA);
+	if (err)
+		goto done;
+	err = load_ssh_hostkey(GOTWEBD_SSHFP_ED25519);
+	if (err)
+		goto done;
+	err = load_ssh_hostkey(GOTWEBD_SSHFP_RSA);
+	if (err)
+		goto done;
 
 	iev.handler = dispatch_event;
 	iev.events = EV_READ;
