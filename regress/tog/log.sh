@@ -44,7 +44,7 @@ commit $head_id (master)
 from: Flan Hacker <flan_hacker@openbsd.org>
 date: $date
 
-adding the test tree
+ adding the test tree
 
 A  alpha         |  1+  0-
 A  beta          |  1+  0-
@@ -93,7 +93,7 @@ $ymd flan_hacker  [master] adding the test tree        |commit $head_id (master)
                                                              |from: Flan Hacker <flan_hacker@openbsd.org>
                                                              |date: $date
                                                              |
-                                                             |adding the test tree
+                                                             | adding the test tree
                                                              |
                                                              |A  alpha         |  1+  0-
                                                              |A  beta          |  1+  0-
@@ -356,12 +356,14 @@ SCREENDUMP
 EOF
 
 	cat <<EOF >$testroot/view.expected
-[1/26] diff $commit1 $head_id
+[1/25] diff $commit1 $head_id
 commit $head_id (master)
 from: Flan Hacker <flan_hacker@openbsd.org>
 date: $date
 
-$(widechar_logmsg)
+ $(widechar_logmsg1)
+$(echo)
+ $(widechar_logmsg2)
 
 A  $(widechar_filename)  |  5+  0-
 
@@ -379,6 +381,7 @@ blob + $blobid (mode 644)
 +ヴィクトリア朝中期から後期にかけて、自由党を指導して、4度にわたり首相を務めた。
 +
 +生涯を通じて敬虔なイングランド国教会の信徒であり、キリスト教の精神を政治に反映させることを目指した。多くの自由主義改革を行い、帝国主義にも批判的であった。好敵手である保守党党首ベン
+
 
 
 

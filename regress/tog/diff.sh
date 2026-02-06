@@ -41,7 +41,7 @@ commit $head_id (master)
 from: Flan Hacker <flan_hacker@openbsd.org>
 date: $date
 
-changed alpha
+ changed alpha
 
 M  alpha  |  1+  1-
 
@@ -191,7 +191,7 @@ commit $id7
 from: Flan Hacker <flan_hacker@openbsd.org>
 date: $date7
 
-7
+ 7
 
 M  alpha  |  1+  1-
 
@@ -239,7 +239,7 @@ commit $id26
 from: Flan Hacker <flan_hacker@openbsd.org>
 date: $date26
 
-26
+ 26
 
 M  alpha  |  1+  1-
 
@@ -287,7 +287,7 @@ commit $id7
 from: Flan Hacker <flan_hacker@openbsd.org>
 date: $date7
 
-7
+ 7
 
 M  alpha  |  1+  1-
 
@@ -375,7 +375,7 @@ test_diff_commit_keywords()
 	from: Flan Hacker <flan_hacker@openbsd.org>
 	date: $date
 
-	commit 1
+	 commit 1
 
 	M  alpha  |  1+  1-
 
@@ -456,7 +456,7 @@ test_diff_commit_keywords()
 	from: Flan Hacker <flan_hacker@openbsd.org>
 	date: $date
 
-	commit 8
+	 commit 8
 
 	M  alpha  |  1+  1-
 
@@ -519,7 +519,7 @@ $(trim 80 "[1/20] diff $commit_id1 $head_id_truncated")
 Flan Hacker <flan_hacker@openbsd.org>
 $date
 
-
+l
 
 ha  |  1+  0-
 
@@ -582,9 +582,9 @@ test_diff_p_keymap()
 commit $id_head (master)
 from: Flan Hacker <flan_hacker@openbsd.org>
 date: $date_head
-
-modified beta
-
+ 
+ modified beta
+ 
 M  beta  |  1+  1-
 
 1 file changed, 1 insertion(+), 1 deletion(-)
