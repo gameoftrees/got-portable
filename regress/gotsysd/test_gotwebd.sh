@@ -645,6 +645,19 @@ EOF
 test_summary_page() {
 	local testroot=`test_init summary_page 1`
 
+	GOTSYS_ECDSA_HOST_FP=$(ssh -i ${GOTSYSD_SSH_KEY} \
+		${GOTSYSD_TEST_USER}@${VMIP} \
+		ssh-keygen -lf /etc/ssh/ssh_host_ecdsa_key.pub | \
+		cut -d' ' -f2)
+	GOTSYS_ED25519_HOST_FP=$(ssh -i ${GOTSYSD_SSH_KEY} \
+		${GOTSYSD_TEST_USER}@${VMIP} \
+		ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub | \
+		cut -d' ' -f2)
+	GOTSYS_RSA_HOST_FP=$(ssh -i ${GOTSYSD_SSH_KEY} \
+		${GOTSYSD_TEST_USER}@${VMIP} \
+		ssh-keygen -lf /etc/ssh/ssh_host_rsa_key.pub | \
+		cut -d' ' -f2)
+
 	got checkout -q $testroot/${GOTSYS_REPO} $testroot/wt >/dev/null
 	ret=$?
 	if [ $ret -ne 0 ]; then
@@ -778,6 +791,18 @@ Repositories / public.git / summary
 Clone URL:
 
     ssh://${GOTSYSD_TEST_USER}@${VMIP}/public.git
+
+ECDSA:
+
+    ${GOTSYS_ECDSA_HOST_FP}
+
+ED25519:
+
+    ${GOTSYS_ED25519_HOST_FP}
+
+RSA:
+
+    ${GOTSYS_RSA_HOST_FP}
 
 Commit Briefs
 
