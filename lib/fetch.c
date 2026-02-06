@@ -130,14 +130,12 @@ got_fetch_pack(struct got_object_id **pack_hash, struct got_pathlist_head *refs,
 	uint32_t nobj = 0;
 	char *path;
 	char *progress = NULL;
+	enum got_hash_algorithm algo = GOT_HASH_SHA1;
+	size_t idlen;
 
 	*pack_hash = NULL;
 	memset(&fetchibuf, 0, sizeof(fetchibuf));
 	memset(&idxibuf, 0, sizeof(idxibuf));
-
-	if (repo && got_repo_get_object_format(repo) != GOT_HASH_SHA1)
-		return got_error_fmt(GOT_ERR_NOT_IMPL,
-		    "sha256 object IDs unsupported in network protocol");
 
 	/*
 	 * Prevent fetching of references that won't make any
@@ -151,6 +149,12 @@ got_fetch_pack(struct got_object_id **pack_hash, struct got_pathlist_head *refs,
 		    strncmp(refname, "remotes/", 8) == 0)
 			return got_error_path(refname, GOT_ERR_FETCH_BAD_REF);
 	}
+
+	/* for listing refs we don't actually care about the algorithm */
+	if (!list_refs_only)
+		algo = got_repo_get_object_format(repo);
+
+	idlen = got_hash_digest_length(algo);
 
 	if (!list_refs_only)
 		repo_path = got_repo_get_path_git_dir(repo);
@@ -190,7 +194,6 @@ got_fetch_pack(struct got_object_id **pack_hash, struct got_pathlist_head *refs,
 			free(refname);
 			free(id);
 		}
-
 	}
 
 	if (list_refs_only) {
@@ -277,7 +280,7 @@ got_fetch_pack(struct got_object_id **pack_hash, struct got_pathlist_head *refs,
 		err = got_error_from_errno("dup");
 		goto done;
 	}
-	err = got_privsep_send_fetch_req(&fetchibuf, nfetchfd, &have_refs,
+	err = got_privsep_send_fetch_req(&fetchibuf, nfetchfd, algo, &have_refs,
 	    fetch_all_branches, wanted_branches, wanted_refs,
 	    list_refs_only, worktree_refname, remote_head, no_head, verbosity);
 	if (err != NULL)
@@ -314,11 +317,11 @@ got_fetch_pack(struct got_object_id **pack_hash, struct got_pathlist_head *refs,
 
 		err = got_privsep_recv_fetch_progress(&done,
 		    &id, &refname, symrefs, &server_progress,
-		    &packfile_size_cur, (*pack_hash)->hash, &fetchibuf);
+		    &packfile_size_cur, *pack_hash, &fetchibuf);
 		if (err != NULL)
 			goto done;
 		/* Don't report size progress for an empty pack file. */
-		if (packfile_size_cur <= ssizeof(pack_hdr) + SHA1_DIGEST_LENGTH)
+		if (packfile_size_cur <= ssizeof(pack_hdr) + idlen)
 			packfile_size_cur = 0;
 		if (!done && refname && id) {
 			err = got_pathlist_insert(&pe, refs, refname, id);
@@ -389,12 +392,17 @@ got_fetch_pack(struct got_object_id **pack_hash, struct got_pathlist_head *refs,
 		goto done;
 	}
 
+	if ((*pack_hash)->algo != algo) {
+		err = got_error(GOT_ERR_OBJECT_FORMAT);
+		goto done;
+	}
+
 	/* If zero data was fetched without error we are already up-to-date. */
 	if (packfile_size == 0) {
 		free(*pack_hash);
 		*pack_hash = NULL;
 		goto done;
-	} else if (packfile_size < ssizeof(pack_hdr) + SHA1_DIGEST_LENGTH) {
+	} else if (packfile_size < ssizeof(pack_hdr) + idlen) {
 		err = got_error_msg(GOT_ERR_BAD_PACKFILE, "short pack file");
 		goto done;
 	} else {
@@ -421,13 +429,13 @@ got_fetch_pack(struct got_object_id **pack_hash, struct got_pathlist_head *refs,
 		}
 		nobj = be32toh(pack_hdr.nobjects);
 		if (nobj == 0 &&
-		    packfile_size > ssizeof(pack_hdr) + SHA1_DIGEST_LENGTH) {
+		    packfile_size > ssizeof(pack_hdr) + idlen) {
 			err = got_error_msg(GOT_ERR_BAD_PACKFILE,
 			    "bad pack file with zero objects");
 			goto done;
 		}
 		if (nobj != 0 &&
-		    packfile_size <= ssizeof(pack_hdr) + SHA1_DIGEST_LENGTH) {
+		    packfile_size <= ssizeof(pack_hdr) + idlen) {
 			err = got_error_msg(GOT_ERR_BAD_PACKFILE,
 			    "empty pack file with non-zero object count");
 			goto done;

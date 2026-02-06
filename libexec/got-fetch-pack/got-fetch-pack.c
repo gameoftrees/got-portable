@@ -67,19 +67,21 @@ static int chattygot;
 
 static const struct got_capability got_capabilities[] = {
 	{ GOT_CAPA_AGENT, "got/" GOT_VERSION_STR },
+	{ GOT_CAPA_OBJECT_FORMAT, "sha256" },
 	{ GOT_CAPA_OFS_DELTA, NULL },
 	{ GOT_CAPA_SIDE_BAND_64K, NULL },
 };
 
 static void
 match_remote_ref(struct got_pathlist_head *have_refs,
-    struct got_object_id *my_id, const char *refname)
+    struct got_object_id *my_id, const char *refname, int algo)
 {
 	struct got_pathlist_entry *pe;
 
 	/* XXX zero-hash signifies we don't have this ref;
 	 * we should use a flag instead */
 	memset(my_id, 0, sizeof(*my_id));
+	my_id->algo = algo;
 
 	RB_FOREACH(pe, got_pathlist_head, have_refs) {
 		struct got_object_id *id = pe->data;
@@ -168,10 +170,10 @@ send_fetch_download_progress(struct imsgbuf *ibuf, off_t bytes,
 }
 
 static const struct got_error *
-send_fetch_done(struct imsgbuf *ibuf, uint8_t *pack_sha1)
+send_fetch_done(struct imsgbuf *ibuf, struct got_object_id *pack_hash)
 {
 	if (imsg_compose(ibuf, GOT_IMSG_FETCH_DONE, 0, 0, -1,
-	    pack_sha1, SHA1_DIGEST_LENGTH) == -1)
+	    pack_hash, sizeof(*pack_hash)) == -1)
 		return got_error_from_errno("imsg_compose FETCH");
 	return got_privsep_flush_imsg(ibuf);
 }
@@ -297,17 +299,17 @@ send_fetch_ref(struct imsgbuf *ibuf, struct got_object_id *refid,
 static const struct got_error *
 fetch_ref(struct imsgbuf *ibuf, struct got_pathlist_head *have_refs,
     struct got_object_id *have, struct got_object_id *want,
-    const char *refname, const char *id_str)
+    const char *refname, const char *id_str, int algo)
 {
 	const struct got_error *err;
 	char *theirs = NULL, *mine = NULL;
 
-	if (!got_parse_object_id(want, id_str, GOT_HASH_SHA1)) {
+	if (!got_parse_object_id(want, id_str, algo)) {
 		err = got_error(GOT_ERR_BAD_OBJ_ID_STR);
 		goto done;
 	}
 
-	match_remote_ref(have_refs, have, refname);
+	match_remote_ref(have_refs, have, refname, algo);
 	err = send_fetch_ref(ibuf, want, refname);
 	if (err)
 		goto done;
@@ -332,7 +334,8 @@ done:
 }
 
 static const struct got_error *
-fetch_pack(int fd, int packfd, uint8_t *pack_sha1,
+fetch_pack(int fd, int packfd, int expected_algo,
+    struct got_object_id *pack_hash,
     struct got_pathlist_head *have_refs, int fetch_all_branches,
     struct got_pathlist_head *wanted_branches,
     struct got_pathlist_head *wanted_refs, int list_refs_only,
@@ -341,7 +344,7 @@ fetch_pack(int fd, int packfd, uint8_t *pack_sha1,
 {
 	const struct got_error *err = NULL;
 	char buf[GOT_PKT_MAX];
-	char hashstr[SHA1_DIGEST_STRING_LENGTH];
+	char hashstr[GOT_HASH_DIGEST_STRING_MAXLEN];
 	struct got_object_id *have, *want;
 	int is_firstpkt = 1, nref = 0, refsz = 16;
 	int i, n, nwant = 0, nhave = 0, acked = 0, eof = 0;
@@ -355,13 +358,14 @@ fetch_pack(int fd, int packfd, uint8_t *pack_sha1,
 	int sent_my_capabilites = 0, have_sidebands = 0;
 	int found_branch = 0;
 	struct got_hash ctx;
-	uint8_t sha1_buf[SHA1_DIGEST_LENGTH];
+	uint8_t sha1_buf[GOT_HASH_DIGEST_MAXLEN];
 	size_t sha1_buf_len = 0;
 	ssize_t w;
 	struct got_ratelimit rl;
+	size_t idlen;
+	enum got_hash_algorithm algo = GOT_HASH_SHA1;
 
 	RB_INIT(&symrefs);
-	got_hash_init(&ctx, GOT_HASH_SHA1);
 	got_ratelimit_init(&rl, 0, 500);
 
 	have = malloc(refsz * sizeof(have[0]));
@@ -414,9 +418,13 @@ fetch_pack(int fd, int packfd, uint8_t *pack_sha1,
 				    getprogname(), server_capabilities);
 			err = got_gitproto_match_capabilities(&my_capabilities,
 			    &symrefs, server_capabilities,
-			    got_capabilities, nitems(got_capabilities));
+			    got_capabilities, nitems(got_capabilities), &algo);
 			if (err)
 				goto done;
+			if (expected_algo != -1 && algo != expected_algo) {
+				err = got_error(GOT_ERR_OBJECT_FORMAT);
+				goto done;
+			}
 			if (chattygot)
 				fprintf(stderr, "%s: my capabilities:%s\n",
 				    getprogname(), my_capabilities != NULL ?
@@ -475,14 +483,14 @@ fetch_pack(int fd, int packfd, uint8_t *pack_sha1,
 
 		if (list_refs_only || strncmp(refname, "refs/tags/", 10) == 0) {
 			err = fetch_ref(ibuf, have_refs, &have[nref],
-			    &want[nref], refname, id_str);
+			    &want[nref], refname, id_str, algo);
 			if (err)
 				goto done;
 			nref++;
 		} else if (strncmp(refname, "refs/heads/", 11) == 0) {
 			if (fetch_all_branches) {
 				err = fetch_ref(ibuf, have_refs, &have[nref],
-				    &want[nref], refname, id_str);
+				    &want[nref], refname, id_str, algo);
 				if (err)
 					goto done;
 				nref++;
@@ -496,7 +504,7 @@ fetch_pack(int fd, int packfd, uint8_t *pack_sha1,
 			if (pe != NULL || (worktree_branch != NULL &&
 			    match_branch(refname, worktree_branch))) {
 				err = fetch_ref(ibuf, have_refs, &have[nref],
-				    &want[nref], refname, id_str);
+				    &want[nref], refname, id_str, algo);
 				if (err)
 					goto done;
 				nref++;
@@ -513,7 +521,7 @@ fetch_pack(int fd, int packfd, uint8_t *pack_sha1,
 			}
 			if (pe != NULL) {
 				err = fetch_ref(ibuf, have_refs, &have[nref],
-				    &want[nref], refname, id_str);
+				    &want[nref], refname, id_str, algo);
 				if (err)
 					goto done;
 				nref++;
@@ -526,6 +534,9 @@ fetch_pack(int fd, int packfd, uint8_t *pack_sha1,
 
 	if (list_refs_only)
 		goto done;
+
+	got_hash_init(&ctx, algo);
+	idlen = got_hash_digest_length(algo);
 
 	/*
 	 * If -b was not used and either none of the requested branches
@@ -543,7 +554,7 @@ fetch_pack(int fd, int packfd, uint8_t *pack_sha1,
 
 		if (!found_branch || remote_head_changed) {
 			err = fetch_ref(ibuf, have_refs, &have[nref],
-			    &want[nref], default_branch, default_id_str);
+			    &want[nref], default_branch, default_id_str, algo);
 			if (err)
 				goto done;
 			nref++;
@@ -638,14 +649,12 @@ fetch_pack(int fd, int packfd, uint8_t *pack_sha1,
 			 */
 			break;
 		}
-		if (n < 4 + SHA1_DIGEST_STRING_LENGTH ||
-		    strncmp(buf, "ACK ", 4) != 0) {
+		if (n < 4 + idlen || strncmp(buf, "ACK ", 4) != 0) {
 			err = got_error_msg(GOT_ERR_BAD_PACKET,
 			    "unexpected message from server");
 			goto done;
 		}
-		if (!got_parse_object_id(&common_id, buf + 4,
-		    GOT_HASH_SHA1)) {
+		if (!got_parse_object_id(&common_id, buf + 4, algo)) {
 			err = got_error_msg(GOT_ERR_BAD_PACKET,
 			    "bad object ID in ACK packet from server");
 			goto done;
@@ -777,14 +786,15 @@ fetch_pack(int fd, int packfd, uint8_t *pack_sha1,
 		}
 
 		/*
-		 * An expected SHA1 checksum sits at the end of the pack file.
+		 * An expected checksum sits at the end of the pack file.
 		 * Since we don't know the file size ahead of time we have to
-		 * keep SHA1_DIGEST_LENGTH bytes buffered and avoid mixing
-		 * those bytes into our SHA1 checksum computation until we
-		 * know for sure that additional pack file data bytes follow.
+		 * keep idlen bytes buffered and avoid mixing those
+		 * bytes into our checksum computation until we know
+		 * for sure that additional pack file data bytes
+		 * follow.
 		 */
-		if (r < SHA1_DIGEST_LENGTH) {
-			if (sha1_buf_len < SHA1_DIGEST_LENGTH) {
+		if (r < idlen) {
+			if (sha1_buf_len < idlen) {
 				/*
 				 * If there's enough buffered + read data to
 				 * fill up the buffer then shift a sufficient
@@ -792,9 +802,9 @@ fetch_pack(int fd, int packfd, uint8_t *pack_sha1,
 				 * room, mixing those bytes into the checksum.
 				 */
 				if (sha1_buf_len > 0 &&
-				    sha1_buf_len + r > SHA1_DIGEST_LENGTH) {
+				    sha1_buf_len + r > idlen) {
 					size_t nshift = MIN(sha1_buf_len + r -
-					    SHA1_DIGEST_LENGTH, sha1_buf_len);
+					    idlen, sha1_buf_len);
 					got_hash_update(&ctx, sha1_buf,
 					    nshift);
 					memmove(sha1_buf, sha1_buf + nshift,
@@ -822,12 +832,11 @@ fetch_pack(int fd, int packfd, uint8_t *pack_sha1,
 			got_hash_update(&ctx, sha1_buf, sha1_buf_len);
 
 			/* Mix in bytes read minus potential checksum bytes. */
-			got_hash_update(&ctx, buf, r - SHA1_DIGEST_LENGTH);
+			got_hash_update(&ctx, buf, r - idlen);
 
 			/* Buffer potential checksum bytes. */
-			memcpy(sha1_buf, buf + r - SHA1_DIGEST_LENGTH,
-			    SHA1_DIGEST_LENGTH);
-			sha1_buf_len = SHA1_DIGEST_LENGTH;
+			memcpy(sha1_buf, buf + r - idlen, idlen);
+			sha1_buf_len = idlen;
 		}
 
 		/* Write packfile data to temporary pack file. */
@@ -854,9 +863,11 @@ fetch_pack(int fd, int packfd, uint8_t *pack_sha1,
 	if (err)
 		goto done;
 
-	got_hash_final(&ctx, pack_sha1);
-	if (sha1_buf_len != SHA1_DIGEST_LENGTH ||
-	    memcmp(pack_sha1, sha1_buf, sha1_buf_len) != 0) {
+	got_hash_final_object_id(&ctx, pack_hash);
+	if (sha1_buf_len != idlen ||
+	    memcmp(pack_hash, sha1_buf, sha1_buf_len) != 0) {
+		fprintf(stderr, "error'd due to a length mismatch? %d\n",
+		    sha1_buf_len != idlen);
 		err = got_error_msg(GOT_ERR_BAD_PACKFILE,
 		    "pack file checksum mismatch");
 	}
@@ -879,7 +890,7 @@ main(int argc, char **argv)
 {
 	const struct got_error *err = NULL;
 	int fetchfd = -1, packfd = -1;
-	uint8_t pack_sha1[SHA1_DIGEST_LENGTH];
+	struct got_object_id pack_hash;
 	struct imsgbuf ibuf;
 	struct imsg imsg;
 	struct got_pathlist_head have_refs;
@@ -1128,8 +1139,8 @@ main(int argc, char **argv)
 	}
 	packfd = imsg_get_fd(&imsg);
 
-	err = fetch_pack(fetchfd, packfd, pack_sha1, &have_refs,
-	    fetch_req.fetch_all_branches, &wanted_branches,
+	err = fetch_pack(fetchfd, packfd, fetch_req.expected_algo, &pack_hash,
+	    &have_refs, fetch_req.fetch_all_branches, &wanted_branches,
 	    &wanted_refs, fetch_req.list_refs_only,
 	    worktree_branch, remote_head, fetch_req.no_head, &ibuf);
 done:
@@ -1144,7 +1155,7 @@ done:
 	if (err != NULL)
 		got_privsep_send_error(&ibuf, err);
 	else
-		err = send_fetch_done(&ibuf, pack_sha1);
+		err = send_fetch_done(&ibuf, &pack_hash);
 	if (err != NULL) {
 		fprintf(stderr, "%s: %s\n", getprogname(), err->msg);
 		got_privsep_send_error(&ibuf, err);

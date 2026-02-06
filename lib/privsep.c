@@ -554,7 +554,7 @@ got_privsep_send_obj(struct imsgbuf *ibuf, struct got_object *obj)
 }
 
 const struct got_error *
-got_privsep_send_fetch_req(struct imsgbuf *ibuf, int fd,
+got_privsep_send_fetch_req(struct imsgbuf *ibuf, int fd, int expected_algo,
     struct got_pathlist_head *have_refs, int fetch_all_branches,
     struct got_pathlist_head *wanted_branches,
     struct got_pathlist_head *wanted_refs, int list_refs_only,
@@ -589,6 +589,7 @@ got_privsep_send_fetch_req(struct imsgbuf *ibuf, int fd,
 	}
 
 	memset(&fetchreq, 0, sizeof(fetchreq));
+	fetchreq.expected_algo = expected_algo;
 	fetchreq.no_head = no_head;
 	fetchreq.fetch_all_branches = fetch_all_branches;
 	fetchreq.list_refs_only = list_refs_only;
@@ -714,7 +715,7 @@ got_privsep_send_fetch_outfd(struct imsgbuf *ibuf, int fd)
 const struct got_error *
 got_privsep_recv_fetch_progress(int *done, struct got_object_id **id,
     char **refname, struct got_pathlist_head *symrefs, char **server_progress,
-    off_t *packfile_size, uint8_t *pack_sha1, struct imsgbuf *ibuf)
+    off_t *packfile_size, struct got_object_id *pack_hash, struct imsgbuf *ibuf)
 {
 	const struct got_error *err = NULL;
 	struct imsg imsg;
@@ -730,7 +731,7 @@ got_privsep_recv_fetch_progress(int *done, struct got_object_id **id,
 	*refname = NULL;
 	*server_progress = NULL;
 	*packfile_size = 0;
-	memset(pack_sha1, 0, SHA1_DIGEST_LENGTH);
+	memset(pack_hash, 0, sizeof(*pack_hash));
 
 	err = got_privsep_recv_imsg(&imsg, ibuf, 0);
 	if (err)
@@ -839,11 +840,10 @@ got_privsep_recv_fetch_progress(int *done, struct got_object_id **id,
 		memcpy(packfile_size, imsg.data, sizeof(*packfile_size));
 		break;
 	case GOT_IMSG_FETCH_DONE:
-		if (datalen != SHA1_DIGEST_LENGTH) {
+		if (imsg_get_data(&imsg, pack_hash, sizeof(*pack_hash)) == -1) {
 			err = got_error(GOT_ERR_PRIVSEP_MSG);
 			break;
 		}
-		memcpy(pack_sha1, imsg.data, SHA1_DIGEST_LENGTH);
 		*done = 1;
 		break;
 	default:
@@ -888,7 +888,7 @@ send_send_ref(const char *name, size_t name_len, struct got_object_id *id,
 }
 
 const struct got_error *
-got_privsep_send_send_req(struct imsgbuf *ibuf, int fd,
+got_privsep_send_send_req(struct imsgbuf *ibuf, int fd, int algo,
     struct got_pathlist_head *have_refs,
     struct got_pathlist_head *delete_refs,
     int verbosity)
@@ -900,6 +900,7 @@ got_privsep_send_send_req(struct imsgbuf *ibuf, int fd,
 
 	memset(&zero_id, 0, sizeof(zero_id));
 	memset(&sendreq, 0, sizeof(sendreq));
+	sendreq.algo = algo;
 	sendreq.verbosity = verbosity;
 	RB_FOREACH(pe, got_pathlist_head, have_refs)
 		sendreq.nrefs++;

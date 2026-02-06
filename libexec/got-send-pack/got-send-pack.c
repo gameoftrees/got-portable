@@ -70,6 +70,7 @@ static const struct got_capability got_capabilities[] = {
 #endif
 	{ GOT_CAPA_REPORT_STATUS, NULL },
 	{ GOT_CAPA_DELETE_REFS, NULL },
+	{ GOT_CAPA_OBJECT_FORMAT, "sha256" },
 };
 
 static const struct got_error *
@@ -338,14 +339,14 @@ describe_refchange(int *n, int *sent_my_capabilites,
 }
 
 static const struct got_error *
-send_pack(int fd, struct got_pathlist_head *refs,
+send_pack(int fd, enum got_hash_algorithm algo, struct got_pathlist_head *refs,
     struct got_pathlist_head *delete_refs, struct imsgbuf *ibuf)
 {
 	const struct got_error *err = NULL;
 	char buf[GOT_PKT_MAX];
-	const unsigned char zero_id[SHA1_DIGEST_LENGTH] = { 0 };
-	char old_hashstr[SHA1_DIGEST_STRING_LENGTH];
-	char new_hashstr[SHA1_DIGEST_STRING_LENGTH];
+	const unsigned char zero_id[GOT_HASH_DIGEST_MAXLEN] = { 0 };
+	char old_hashstr[GOT_HASH_DIGEST_STRING_MAXLEN];
+	char new_hashstr[GOT_HASH_DIGEST_STRING_MAXLEN];
 	struct got_pathlist_head their_refs;
 	int is_firstpkt = 1;
 	int n, nsent = 0;
@@ -379,6 +380,8 @@ send_pack(int fd, struct got_pathlist_head *refs,
 		if (err)
 			goto done;
 		if (is_firstpkt) {
+			enum got_hash_algorithm expected_algo = algo;
+
 			if (server_capabilities == NULL) {
 				server_capabilities = strdup("");
 				if (server_capabilities == NULL) {
@@ -391,9 +394,13 @@ send_pack(int fd, struct got_pathlist_head *refs,
 				    getprogname(), server_capabilities);
 			err = got_gitproto_match_capabilities(&my_capabilities,
 			    NULL, server_capabilities, got_capabilities,
-			    nitems(got_capabilities));
+			    nitems(got_capabilities), &expected_algo);
 			if (err)
 				goto done;
+			if (algo != expected_algo) {
+				err = got_error(GOT_ERR_OBJECT_FORMAT);
+				goto done;
+			}
 			if (chattygot)
 				fprintf(stderr, "%s: my capabilities:%s\n",
 				    getprogname(),
@@ -413,7 +420,7 @@ send_pack(int fd, struct got_pathlist_head *refs,
 			err = got_error_from_errno("malloc");
 			goto done;
 		}
-		if (!got_parse_object_id(id, id_str, GOT_HASH_SHA1)) {
+		if (!got_parse_object_id(id, id_str, algo)) {
 			err = got_error(GOT_ERR_BAD_OBJ_ID_STR);
 			goto done;
 		}
@@ -469,8 +476,8 @@ send_pack(int fd, struct got_pathlist_head *refs,
 
 		got_object_id_hex(their_id, old_hashstr,
 		    sizeof(old_hashstr));
-		got_sha1_digest_to_str(zero_id, new_hashstr,
-		    sizeof(new_hashstr));
+		got_hash_digest_to_str(zero_id, new_hashstr,
+		    sizeof(new_hashstr), algo);
 		err = describe_refchange(&n, &sent_my_capabilites,
 		    my_capabilities, buf, sizeof(buf), refname,
 		    old_hashstr, new_hashstr);
@@ -512,8 +519,8 @@ send_pack(int fd, struct got_pathlist_head *refs,
 			got_object_id_hex(their_id, old_hashstr,
 			    sizeof(old_hashstr));
 		} else {
-			got_sha1_digest_to_str(zero_id, old_hashstr,
-			    sizeof(old_hashstr));
+			got_hash_digest_to_str(zero_id, old_hashstr,
+			    sizeof(old_hashstr), algo);
 		}
 		got_object_id_hex(id, new_hashstr, sizeof(new_hashstr));
 		err = describe_refchange(&n, &sent_my_capabilites,
@@ -743,7 +750,7 @@ main(int argc, char **argv)
 		imsg_free(&imsg);
 	}
 
-	err = send_pack(sendfd, &refs, &delete_refs, &ibuf);
+	err = send_pack(sendfd, send_req.algo, &refs, &delete_refs, &ibuf);
 done:
 	got_pathlist_free(&refs, GOT_PATHLIST_FREE_ALL);
 	got_pathlist_free(&delete_refs, GOT_PATHLIST_FREE_ALL);
