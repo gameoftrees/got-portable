@@ -1129,7 +1129,7 @@ nextsep(char *s, char **t)
       {{ render datetime(tp, t->repo_dir->age, TM_DIFF) }}
     </dd>
   {{ end }}
-  {{ if srv->show_repo_cloneurl }}
+  {{ if srv->show_repo_cloneurl && t->repo_dir->url }}
     <dt>Clone URL:</dt>
     <dd><pre class="clone-url">{{ t->repo_dir->url }}</pre></dd>
   {{ if t->repo_dir->sshfp[GOTWEBD_SSHFP_ECDSA] }}
