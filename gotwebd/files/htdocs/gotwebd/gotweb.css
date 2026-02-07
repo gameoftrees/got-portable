@@ -101,6 +101,15 @@ hr {
 	padding-bottom: 10px;
 	padding-top: 10px;
 }
+#login_status {
+	color: lightgrey;
+	text-align: right;
+	padding-right: 10px;
+	padding-left: 10px;
+	padding-top: 5px;
+	padding-bottom: 5px;
+	font-weight: monospace;
+}
 #np_wrapper {
 	width: 100%;
 	border-bottom: 1px dotted #444444;
