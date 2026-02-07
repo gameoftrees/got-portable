@@ -193,6 +193,7 @@ EOF
 	w3m -cookie-jar "$testroot/cookies" "$url" -dump > $testroot/stdout
 	cat > $testroot/stdout.expected <<EOF
 [got]
+Logged in as: ${GOTSYSD_TEST_USER}  (Logout)
 Repositories
 Repository
 www.git
