@@ -220,6 +220,11 @@ nextsep(char *s, char **t)
           <img src="{{ prefix }}/{{ srv->logo }}" />
         </a>
       </div>
+      {{ if (c->access_identifier[0]) }}	
+      <div id="login_status">
+        Logged in as: <b>{{ c->access_identifier }}</b>
+      </div>
+      {{ end }}
     </header>
     <nav id="site_path">
       <div id="site_link">
