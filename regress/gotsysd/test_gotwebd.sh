@@ -173,6 +173,7 @@ EOF
 	w3m -cookie-jar "$testroot/cookies" "$url" -dump > $testroot/stdout
 	cat > $testroot/stdout.expected <<EOF
 [got]
+Logged in as: ${GOTSYSD_TEST_USER}  (Logout)
 Repositories
 Repository
 testrepo.git
@@ -202,6 +203,7 @@ EOF
 
 	cat > $testroot/stdout.expected <<EOF
 [got]
+Logged in as: ${GOTSYSD_TEST_USER}  (Logout)
 Repositories / testrepo.git / tree /
 
 Tree
@@ -401,6 +403,7 @@ EOF
 	w3m -cookie-jar "$testroot/cookies" "$url" -dump > $testroot/stdout
 	cat > $testroot/stdout.expected <<EOF
 [got]
+Logged in as: ${GOTSYSD_TEST_USER}  (Logout)
 Repositories
 Repository
 gottest.git
@@ -435,6 +438,7 @@ EOF
 	w3m -cookie-jar "$testroot/cookies" "$url" -dump > $testroot/stdout
 	cat > $testroot/stdout.expected <<EOF
 [got]
+Logged in as: ${GOTSYSD_DEV_USER}  (Logout)
 Repositories
 Repository
 gottestdev.git
@@ -601,6 +605,7 @@ EOF
 	w3m -cookie-jar "$testroot/cookies" "$url" -dump > $testroot/stdout
 	cat > $testroot/stdout.expected <<EOF
 [got]
+Logged in as: ${GOTSYSD_TEST_USER}  (Logout)
 Repositories
 Repository
 gottest.git
@@ -626,6 +631,7 @@ EOF
 
 	cat > $testroot/stdout.expected <<EOF
 [got]
+Logged in as: ${GOTSYSD_TEST_USER}  (Logout)
 Repositories / gottest.git / tree /
 reference refs/heads/main not found
 
