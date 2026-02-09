@@ -388,9 +388,9 @@ logged_in:
 	}
 
 	r = tp_writef(c->tp, "Set-Cookie: gwdauth=%s;"
-	    " SameSite=Strict;%s Path=/; HttpOnly; Max-Age=%llu\r\n", token,
+	    " SameSite=Strict;%s Path=%s; HttpOnly; Max-Age=%llu\r\n", token,
 	    env->auth_config == GOTWEBD_AUTH_SECURE ? " Secure;" : "",
-	    validity);
+	    env->gotweb_url_root, validity);
 	explicit_bzero(token, strlen(token));
 	free(token);
 	if (r == -1) {
