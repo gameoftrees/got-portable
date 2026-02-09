@@ -1469,6 +1469,12 @@ gotweb_render_url(struct request *c, struct gotweb_url *url)
 		sep = "&";
 	}
 
+	if (url->logout == 1) {
+		if (tp_writef(c->tp, "%slogout=1", sep) == -1)
+			return -1;
+		sep = "&";
+	}
+
 	return 0;
 }
 

@@ -192,6 +192,7 @@ static const struct querystring_keys querystring_keys[] = {
 	{ "index_page",	GOTWEBD_QS_INDEX_PAGE },
 	{ "path",		GOTWEBD_QS_PATH },
 	{ "login",		GOTWEBD_QS_LOGIN },
+	{ "logout",		GOTWEBD_QS_LOGOUT },
 };
 
 static const struct action_keys action_keys[] = {
@@ -379,6 +380,11 @@ assign_querystring(struct querystring *qs, char *key, char *value)
 				    "login token too long");
 				goto done;
 			}
+			break;
+		case GOTWEBD_QS_LOGOUT:
+			if (strcmp(value, "1") != 0)
+				break;
+			qs->logout = 1;
 			break;
  		}
 

@@ -640,6 +640,9 @@ recv_parsed_params(struct imsg *imsg)
 		goto fail;
 	}
 
+	if (params.qs.logout)
+		p->qs.logout = 1;
+
 	if (params.document_uri[0] != '\0' &&
 	    strlcpy(p->document_uri, params.document_uri,
 	    sizeof(p->document_uri)) >= sizeof(p->document_uri)) {

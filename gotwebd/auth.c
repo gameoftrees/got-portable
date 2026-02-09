@@ -390,7 +390,7 @@ logged_in:
 	r = tp_writef(c->tp, "Set-Cookie: gwdauth=%s;"
 	    " SameSite=Strict;%s Path=%s; HttpOnly; Max-Age=%llu\r\n", token,
 	    env->auth_config == GOTWEBD_AUTH_SECURE ? " Secure;" : "",
-	    env->gotweb_url_root, validity);
+	    srv->gotweb_url_root, validity);
 	explicit_bzero(token, strlen(token));
 	free(token);
 	if (r == -1) {
@@ -418,6 +418,80 @@ err:
 			return;
 		gotweb_render_page(c->tp, gotweb_render_error);
 	}
+}
+
+static void
+do_logout(struct request *c)
+{
+	const struct got_error *error = NULL;
+	struct gotwebd *env = gotwebd_env;
+	uid_t uid;
+	struct server *srv;
+	char *hostname = NULL;
+	const char *identifier = NULL;
+	struct gotweb_url url;
+
+	int r;
+
+	if (login_check_token(&uid, &hostname, c->fcgi_params.auth_cookie,
+	    auth_token_secret, sizeof(auth_token_secret),
+	    "authentication") == -1) {
+		error = got_error(GOT_ERR_LOGOUT_FAILED);
+		goto err;
+	}
+
+	/*
+	 * The www user ID represents the case where no authentication
+	 * occurred. This user must not be allowed to log in.
+	 */
+	if (uid == env->www_uid) {
+		error = got_error(GOT_ERR_LOGOUT_FAILED);
+		goto err;
+	}
+
+	c->client_uid = uid;
+	if (strcmp(hostname, c->fcgi_params.server_name) != 0) {
+		error = got_error_msg(GOT_ERR_LOGOUT_FAILED,
+		    "wrong server name in authentication cookie");
+		goto err;
+	}
+
+	srv = gotweb_get_server(c->fcgi_params.server_name);
+	if (srv == NULL) {
+		error = got_error_msg(GOT_ERR_LOGIN_FAILED,
+		    "invalid server name for logout");
+		goto err;
+	}
+
+	if (gotwebd_env->gotwebd_verbose > 0) {
+		log_info("logging out uid %u as %s for server \"%s\"",
+		    uid, identifier, hostname);
+	}
+
+	/* Ask the browser to delete the authentication cookie.  */
+	r = tp_writef(c->tp, "Set-Cookie: gwdauth=invalid;"
+	    " SameSite=Strict;%s Path=%s; HttpOnly; Max-Age=-1\r\n",
+	    env->auth_config == GOTWEBD_AUTH_SECURE ? " Secure;" : "",
+	    srv->gotweb_url_root);
+	if (r == -1) {
+		error = got_error_from_errno("tp_writef");
+		goto err;
+	}
+
+	memset(&url, 0, sizeof(url));
+	url.action = INDEX;
+	gotweb_reply(c, 307, "text/html", &url);
+	return;
+
+err:
+	free(hostname);
+	hostname = NULL;
+
+	log_warnx("%s: %s", __func__, error->msg);
+	c->t->error = error;
+	if (gotweb_reply(c, 400, "text/html", NULL) == -1)
+		return;
+	gotweb_render_page(c->tp, gotweb_render_error);
 }
 
 static const struct got_error *
@@ -760,6 +834,8 @@ auth_dispatch_sockets(int fd, short event, void *arg)
 
 			if (c->fcgi_params.qs.login[0] != '\0')
 				do_login(c);
+			else if (c->fcgi_params.qs.logout)
+				do_logout(c);
 			else
 				process_request(c);
 

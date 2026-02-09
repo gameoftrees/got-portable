@@ -252,6 +252,7 @@ static const struct got_error got_errors[] = {
 	{ GOT_ERR_UNKNOWN_COMMAND, "command not found" },
 	{ GOT_ERR_NOT_FOUND, "not found" },
 	{ GOT_ERR_MEDIA_TYPE,	"malformed media type" },
+	{ GOT_ERR_LOGOUT_FAILED, "logout failed" },
 };
 
 static struct got_custom_error {
