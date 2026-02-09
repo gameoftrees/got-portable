@@ -387,14 +387,9 @@ logged_in:
 	}
 
 	r = tp_writef(c->tp, "Set-Cookie: gwdauth=%s;"
-	    " SameSite=Strict;%s Path=/; HttpOnly; Max-Age=%llu\r\n", token,
+	    " SameSite=Strict;%s Path=%s; HttpOnly; Max-Age=%llu\r\n", token,
 	    env->auth_config == GOTWEBD_AUTH_SECURE ? " Secure;" : "",
-	    validity);
-#ifdef __APPLE__
-	memset_s(token, sizeof(*token), 0, sizeof(*token));
-#elif defined(__NetBSD__)
-	explicit_memset(token, sizeof(*token), 0);
-#else 
+	    env->gotweb_url_root, validity);
 	explicit_bzero(token, strlen(token));
 #endif
 	free(token);
