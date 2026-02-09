@@ -311,6 +311,7 @@ struct querystring {
 	int		 index_page;
 	char		 path[PATH_MAX];
 	char		 login[MAX_AUTH_COOKIE];
+	int		 logout;
 };
 
 struct gotwebd_fcgi_params {
@@ -556,6 +557,7 @@ struct gotweb_url {
 	const char	*folder;
 	const char	*headref;
 	const char	*path;
+	int		 logout;
 };
 
 struct querystring_keys {
@@ -577,6 +579,7 @@ enum querystring_elements {
 	GOTWEBD_QS_INDEX_PAGE,
 	GOTWEBD_QS_PATH,
 	GOTWEBD_QS_LOGIN,
+	GOTWEBD_QS_LOGOUT,
 };
 
 extern struct gotwebd	*gotwebd_env;
