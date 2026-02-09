@@ -1009,6 +1009,7 @@ struct got_fetch_progress_arg {
 		const char *git_url;
 		int fetch_all_branches;
 		int mirror_references;
+		int expected_algo;
 	} config_info;
 };
 
@@ -1022,6 +1023,7 @@ create_config_files(const char *proto, const char *host, const char *port,
 
 static const struct got_error *
 fetch_progress(void *arg, const char *message, off_t packfile_size,
+    struct got_object_id *pack_hash,
     int nobj_total, int nobj_indexed, int nobj_loose, int nobj_resolved)
 {
 	const struct got_error *err = NULL;
@@ -1038,6 +1040,14 @@ fetch_progress(void *arg, const char *message, off_t packfile_size,
 	 */
 	if (a->create_configs && !a->configs_created &&
 	    !RB_EMPTY(a->config_info.symrefs)) {
+		if (a->config_info.expected_algo == -1 &&
+		    pack_hash->algo == GOT_HASH_SHA256) {
+			err = got_repo_init_gitconfig(a->repo,
+			    pack_hash->algo);
+			if (err)
+				return err;
+		}
+
 		err = create_config_files(a->config_info.proto,
 		    a->config_info.host, a->config_info.port,
 		    a->config_info.remote_repo_path,
@@ -1049,6 +1059,7 @@ fetch_progress(void *arg, const char *message, off_t packfile_size,
 		    a->config_info.wanted_refs, a->repo);
 		if (err)
 			return err;
+
 		a->configs_created = 1;
 	}
 
@@ -1721,10 +1732,11 @@ cmd_clone(int argc, char *argv[])
 	fpa.config_info.git_url = git_url;
 	fpa.config_info.fetch_all_branches = fetch_all_branches;
 	fpa.config_info.mirror_references = mirror_references;
+	fpa.config_info.expected_algo = -1;
 	error = got_fetch_pack(&pack_hash, &refs, &symrefs,
 	    GOT_FETCH_DEFAULT_REMOTE_NAME, mirror_references,
 	    fetch_all_branches, &wanted_branches, &wanted_refs,
-	    list_refs_only, verbosity, fetchfd, repo, NULL, NULL, bflag,
+	    list_refs_only, verbosity, -1, fetchfd, repo, NULL, NULL, bflag,
 	    fetch_progress, &fpa);
 	if (error)
 		goto done;
@@ -2678,6 +2690,7 @@ cmd_update(int argc, char *argv[])
 	int delete_remote = 0;
 	int replace_tags = 0;
 	int *pack_fds = NULL;
+	int expected_algo;
 	const char *remote_head = NULL, *worktree_branch = NULL;
 	struct got_object_id *commit_id = NULL;
 	char *commit_id_str = NULL;
@@ -2902,6 +2915,8 @@ cmd_update(int argc, char *argv[])
 	if (strncmp(refname, "refs/heads/", 11) == 0)
 		worktree_branch = refname;
 
+	expected_algo = got_repo_get_object_format(repo);
+
 	fpa.last_scaled_size[0] = '\0';
 	fpa.last_p_indexed = -1;
 	fpa.last_p_resolved = -1;
@@ -2910,10 +2925,12 @@ cmd_update(int argc, char *argv[])
 	fpa.create_configs = 0;
 	fpa.configs_created = 0;
 	memset(&fpa.config_info, 0, sizeof(fpa.config_info));
+	fpa.config_info.expected_algo = expected_algo;
 
 	error = got_fetch_pack(&pack_hash, &refs, &symrefs, remote->name,
 	    remote->mirror_references, 0, &wanted_branches, &wanted_refs,
-	    0, verbosity, fetchfd, repo, worktree_branch, remote_head,
+	    0, verbosity, expected_algo,
+	    fetchfd, repo, worktree_branch, remote_head,
 	    0, fetch_progress, &fpa);
 	if (error)
 		goto done;

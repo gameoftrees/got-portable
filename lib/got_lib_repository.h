@@ -187,3 +187,4 @@ void got_repo_temp_fds_put(int, struct got_repository *);
 
 const struct got_error *got_repo_find_object_id(struct got_object_id *,
     struct got_repository *);
+void got_repo_free_gitconfig(struct got_repository *);

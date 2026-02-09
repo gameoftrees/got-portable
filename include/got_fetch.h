@@ -37,16 +37,19 @@ const struct got_error *got_fetch_connect(pid_t *, int *, const char *,
 
 /* A callback function which gets invoked with progress information to print. */
 typedef const struct got_error *(*got_fetch_progress_cb)(void *,
-    const char *, off_t, int, int, int, int);
+    const char *, off_t, struct got_object_id *, int, int, int, int);
 
 /*
  * Attempt to fetch a packfile from a server. This pack file will contain
  * objects which that are not yet contained in the provided repository.
  * Return the hash of the packfile (in form of an object ID) and lists of
  * references and symbolic references learned from the server.
+ * The expected object ID format is either from got_repo_get_object_format(),
+ * or can be passed as -1 to discover the server's object iD hash format
+ * when cloning a fresh repository.
  */
 const struct got_error *got_fetch_pack(struct got_object_id **,
 	struct got_pathlist_head *, struct got_pathlist_head *, const char *,
 	int, int, struct got_pathlist_head *, struct got_pathlist_head *,
-	int, int, int, struct got_repository *, const char *, const char *,
+	int, int, int, int, struct got_repository *, const char *, const char *,
 	int, got_fetch_progress_cb, void *);

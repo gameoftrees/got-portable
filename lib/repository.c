@@ -844,6 +844,24 @@ done:
 	return err;
 }
 
+void
+got_repo_free_gitconfig(struct got_repository *repo)
+{
+	size_t i;
+
+	free(repo->gitconfig_author_name);
+	free(repo->gitconfig_author_email);
+	for (i = 0; i < repo->ngitconfig_remotes; i++)
+		got_repo_free_remote_repo_data(&repo->gitconfig_remotes[i]);
+	free(repo->gitconfig_remotes);
+	for (i = 0; i < repo->nextensions; i++) {
+		free(repo->extnames[i]);
+		free(repo->extvals[i]);
+	}
+	free(repo->extnames);
+	free(repo->extvals);
+}
+
 const struct got_error *
 got_repo_close(struct got_repository *repo)
 {
@@ -903,17 +921,7 @@ got_repo_close(struct got_repository *repo)
 
 	if (repo->gotconfig)
 		got_gotconfig_free(repo->gotconfig);
-	free(repo->gitconfig_author_name);
-	free(repo->gitconfig_author_email);
-	for (i = 0; i < repo->ngitconfig_remotes; i++)
-		got_repo_free_remote_repo_data(&repo->gitconfig_remotes[i]);
-	free(repo->gitconfig_remotes);
-	for (i = 0; i < repo->nextensions; i++) {
-		free(repo->extnames[i]);
-		free(repo->extvals[i]);
-	}
-	free(repo->extnames);
-	free(repo->extvals);
+	got_repo_free_gitconfig(repo);
 
 	got_pathlist_free(&repo->packidx_paths, GOT_PATHLIST_FREE_PATH);
 	free(repo);
