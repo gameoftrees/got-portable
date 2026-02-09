@@ -440,12 +440,13 @@ fetch_pack(int fd, int packfd, int expected_algo,
 				fprintf(stderr, "%s: my capabilities:%s\n",
 				    getprogname(), my_capabilities != NULL ?
 				    my_capabilities : "");
-			err = send_fetch_symrefs(ibuf, &symrefs);
-			if (err)
-				goto done;
 
 			pack_hash->algo = algo;
 			err = send_object_format(ibuf, pack_hash);
+			if (err)
+				goto done;
+
+			err = send_fetch_symrefs(ibuf, &symrefs);
 			if (err)
 				goto done;
 
