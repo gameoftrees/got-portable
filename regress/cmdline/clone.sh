@@ -16,6 +16,19 @@
 
 . ./common.sh
 
+got_base_config="[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = true"
+if [ "$GOT_TEST_ALGO" = sha256 ]; then
+	got_base_config="[core]
+	repositoryformatversion = 1
+	filemode = true
+	bare = true
+[extensions]
+	objectformat = sha256"
+fi
+
 test_clone_basic() {
 	local testroot=`test_init clone_basic`
 	local testurl=ssh://127.0.0.1/$testroot
@@ -110,10 +123,7 @@ EOF
 	fi
 
 	cat > $testroot/config.expected <<EOF
-[core]
-	repositoryformatversion = 0
-	filemode = true
-	bare = true
+$got_base_config
 
 [remote "origin"]
 	url = ssh://127.0.0.1$testroot/repo
@@ -243,10 +253,7 @@ EOF
 	fi
 
 	cat > $testroot/config.expected <<EOF
-[core]
-	repositoryformatversion = 0
-	filemode = true
-	bare = true
+$got_base_config
 
 [remote "origin"]
 	url = ssh://127.0.0.1$testroot/repo
@@ -320,10 +327,7 @@ EOF
 	fi
 
 	cat > $testroot/config.expected <<EOF
-[core]
-	repositoryformatversion = 0
-	filemode = true
-	bare = true
+$got_base_config
 
 [remote "origin"]
 	url = ssh://127.0.0.1$testroot/repo
@@ -395,10 +399,7 @@ EOF
 	fi
 
 	cat > $testroot/config.expected <<EOF
-[core]
-	repositoryformatversion = 0
-	filemode = true
-	bare = true
+$got_base_config
 
 [remote "origin"]
 	url = ssh://127.0.0.1$testroot/repo
@@ -468,10 +469,7 @@ EOF
 	fi
 
 	cat > $testroot/config.expected <<EOF
-[core]
-	repositoryformatversion = 0
-	filemode = true
-	bare = true
+$got_base_config
 
 [remote "origin"]
 	url = ssh://127.0.0.1$testroot/repo
@@ -547,10 +545,7 @@ EOF
 	fi
 
 	cat > $testroot/config.expected <<EOF
-[core]
-	repositoryformatversion = 0
-	filemode = true
-	bare = true
+$got_base_config
 
 [remote "origin"]
 	url = ssh://127.0.0.1$testroot/repo
@@ -625,10 +620,7 @@ EOF
 	fi
 
 	cat > $testroot/config.expected <<EOF
-[core]
-	repositoryformatversion = 0
-	filemode = true
-	bare = true
+$got_base_config
 
 [remote "origin"]
 	url = ssh://127.0.0.1$testroot/repo
@@ -701,10 +693,7 @@ EOF
 	fi
 
 	cat > $testroot/config.expected <<EOF
-[core]
-	repositoryformatversion = 0
-	filemode = true
-	bare = true
+$got_base_config
 
 [remote "origin"]
 	url = ssh://127.0.0.1$testroot/repo
@@ -775,10 +764,7 @@ EOF
 	fi
 
 	cat > $testroot/config.expected <<EOF
-[core]
-	repositoryformatversion = 0
-	filemode = true
-	bare = true
+$got_base_config
 
 [remote "origin"]
 	url = ssh://127.0.0.1$testroot/repo
@@ -859,10 +845,7 @@ EOF
 	fi
 
 	cat > $testroot/config.expected <<EOF
-[core]
-	repositoryformatversion = 0
-	filemode = true
-	bare = true
+$got_base_config
 
 [remote "origin"]
 	url = ssh://127.0.0.1$testroot/repo
@@ -1006,10 +989,7 @@ EOF
 	fi
 
 	cat > $testroot/config.expected <<EOF
-[core]
-	repositoryformatversion = 0
-	filemode = true
-	bare = true
+$got_base_config
 
 [remote "origin"]
 	url = $testurl/repo
@@ -1026,16 +1006,16 @@ EOF
 }
 
 test_parseargs "$@"
-run_test test_clone_basic			no-sha256
-run_test test_clone_quoting			no-sha256
-run_test test_clone_list			no-sha256
-run_test test_clone_branch			no-sha256
-run_test test_clone_all				no-sha256
-run_test test_clone_mirror			no-sha256
-run_test test_clone_mirror_all			no-sha256
-run_test test_clone_reference			no-sha256
-run_test test_clone_branch_and_reference	no-sha256
-run_test test_clone_reference_mirror		no-sha256
-run_test test_clone_multiple_branches		no-sha256
-run_test test_clone_dangling_headref		no-sha256
-run_test test_clone_basic_http			no-sha256
+run_test test_clone_basic
+run_test test_clone_quoting
+run_test test_clone_list
+run_test test_clone_branch
+run_test test_clone_all
+run_test test_clone_mirror
+run_test test_clone_mirror_all
+run_test test_clone_reference
+run_test test_clone_branch_and_reference
+run_test test_clone_reference_mirror
+run_test test_clone_multiple_branches
+run_test test_clone_dangling_headref
+run_test test_clone_basic_http
