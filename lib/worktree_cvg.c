@@ -2599,6 +2599,7 @@ struct got_fetch_progress_arg {
 
 static const struct got_error *
 fetch_progress(void *arg, const char *message, off_t packfile_size,
+    struct got_object_id *pack_hash,
     int nobj_total, int nobj_indexed, int nobj_loose, int nobj_resolved)
 {
 	struct got_fetch_progress_arg *a = arg;
@@ -2808,6 +2809,7 @@ fetch_updated_remote(const char *proto, const char *host, const char *port,
 
 	err = got_fetch_pack(&pack_hash, &learned_refs, &symrefs,
 	    remote->name, 1, 0, &wanted_branches, &wanted_refs, 0, verbosity,
+	    got_repo_get_object_format(repo),
 	    fetchfd, repo, head_refname, NULL, 0, fetch_progress, &fpa);
 	if (err)
 		goto done;

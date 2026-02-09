@@ -272,6 +272,15 @@ send_fetch_symrefs(struct imsgbuf *ibuf, struct got_pathlist_head *symrefs)
 }
 
 static const struct got_error *
+send_object_format(struct imsgbuf *ibuf, struct got_object_id *pack_hash)
+{
+	if (imsg_compose(ibuf, GOT_IMSG_FETCH_OBJECT_FORMAT, 0, 0, -1,
+	    pack_hash, sizeof(*pack_hash)) == -1)
+		return got_error_from_errno("imsg_compose FETCH_OBJECT_FORMAT");
+	return got_privsep_flush_imsg(ibuf);
+}
+
+static const struct got_error *
 send_fetch_ref(struct imsgbuf *ibuf, struct got_object_id *refid,
     const char *refname)
 {
@@ -418,13 +427,29 @@ fetch_pack(int fd, int packfd, int expected_algo,
 				    getprogname(), server_capabilities);
 			err = got_gitproto_match_capabilities(&my_capabilities,
 			    &symrefs, server_capabilities,
-			    got_capabilities, nitems(got_capabilities), &algo);
+			    got_capabilities, nitems(got_capabilities),
+			    &algo);
 			if (err)
 				goto done;
 			if (expected_algo != -1 && algo != expected_algo) {
 				err = got_error(GOT_ERR_OBJECT_FORMAT);
 				goto done;
 			}
+
+			if (algo == GOT_HASH_SHA256) {
+				char *s;
+
+				if (asprintf(&s, "%s%s%s=%s", my_capabilities,
+				    my_capabilities[0] != '\0' ? " " : "",
+				    GOT_CAPA_OBJECT_FORMAT,
+				    GOT_CAPA_OBJECT_FORMAT_SHA256) == -1) {
+					err = got_error_from_errno("asprintf");
+					goto done;
+				}
+				free(my_capabilities);
+				my_capabilities = s;
+			}
+
 			if (chattygot)
 				fprintf(stderr, "%s: my capabilities:%s\n",
 				    getprogname(), my_capabilities != NULL ?
@@ -432,6 +457,12 @@ fetch_pack(int fd, int packfd, int expected_algo,
 			err = send_fetch_symrefs(ibuf, &symrefs);
 			if (err)
 				goto done;
+
+			pack_hash->algo = algo;
+			err = send_object_format(ibuf, pack_hash);
+			if (err)
+				goto done;
+
 			is_firstpkt = 0;
 			if (!fetch_all_branches) {
 				RB_FOREACH(pe, got_pathlist_head, &symrefs) {

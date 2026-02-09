@@ -715,7 +715,8 @@ got_privsep_send_fetch_outfd(struct imsgbuf *ibuf, int fd)
 const struct got_error *
 got_privsep_recv_fetch_progress(int *done, struct got_object_id **id,
     char **refname, struct got_pathlist_head *symrefs, char **server_progress,
-    off_t *packfile_size, struct got_object_id *pack_hash, struct imsgbuf *ibuf)
+    off_t *packfile_size, struct got_object_id *pack_hash,
+    struct imsgbuf *ibuf)
 {
 	const struct got_error *err = NULL;
 	struct imsg imsg;
@@ -731,7 +732,6 @@ got_privsep_recv_fetch_progress(int *done, struct got_object_id **id,
 	*refname = NULL;
 	*server_progress = NULL;
 	*packfile_size = 0;
-	memset(pack_hash, 0, sizeof(*pack_hash));
 
 	err = got_privsep_recv_imsg(&imsg, ibuf, 0);
 	if (err)
@@ -838,6 +838,12 @@ got_privsep_recv_fetch_progress(int *done, struct got_object_id **id,
 			break;
 		}
 		memcpy(packfile_size, imsg.data, sizeof(*packfile_size));
+		break;
+	case GOT_IMSG_FETCH_OBJECT_FORMAT:
+		if (imsg_get_data(&imsg, pack_hash, sizeof(*pack_hash)) == -1) {
+			err = got_error(GOT_ERR_PRIVSEP_MSG);
+			break;
+		}
 		break;
 	case GOT_IMSG_FETCH_DONE:
 		if (imsg_get_data(&imsg, pack_hash, sizeof(*pack_hash)) == -1) {

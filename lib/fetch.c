@@ -106,7 +106,8 @@ got_fetch_pack(struct got_object_id **pack_hash, struct got_pathlist_head *refs,
     int mirror_references, int fetch_all_branches,
     struct got_pathlist_head *wanted_branches,
     struct got_pathlist_head *wanted_refs, int list_refs_only, int verbosity,
-    int fetchfd, struct got_repository *repo, const char *worktree_refname,
+    int expected_algo, int fetchfd, struct got_repository *repo,
+    const char *worktree_refname,
     const char *remote_head, int no_head, got_fetch_progress_cb progress_cb,
     void *progress_arg)
 {
@@ -130,8 +131,7 @@ got_fetch_pack(struct got_object_id **pack_hash, struct got_pathlist_head *refs,
 	uint32_t nobj = 0;
 	char *path;
 	char *progress = NULL;
-	enum got_hash_algorithm algo = GOT_HASH_SHA1;
-	size_t idlen;
+	size_t idlen = 0;
 
 	*pack_hash = NULL;
 	memset(&fetchibuf, 0, sizeof(fetchibuf));
@@ -149,12 +149,6 @@ got_fetch_pack(struct got_object_id **pack_hash, struct got_pathlist_head *refs,
 		    strncmp(refname, "remotes/", 8) == 0)
 			return got_error_path(refname, GOT_ERR_FETCH_BAD_REF);
 	}
-
-	/* for listing refs we don't actually care about the algorithm */
-	if (!list_refs_only)
-		algo = got_repo_get_object_format(repo);
-
-	idlen = got_hash_digest_length(algo);
 
 	if (!list_refs_only)
 		repo_path = got_repo_get_path_git_dir(repo);
@@ -280,8 +274,8 @@ got_fetch_pack(struct got_object_id **pack_hash, struct got_pathlist_head *refs,
 		err = got_error_from_errno("dup");
 		goto done;
 	}
-	err = got_privsep_send_fetch_req(&fetchibuf, nfetchfd, algo, &have_refs,
-	    fetch_all_branches, wanted_branches, wanted_refs,
+	err = got_privsep_send_fetch_req(&fetchibuf, nfetchfd, expected_algo,
+	    &have_refs, fetch_all_branches, wanted_branches, wanted_refs,
 	    list_refs_only, worktree_refname, remote_head, no_head, verbosity);
 	if (err != NULL)
 		goto done;
@@ -320,6 +314,26 @@ got_fetch_pack(struct got_object_id **pack_hash, struct got_pathlist_head *refs,
 		    &packfile_size_cur, *pack_hash, &fetchibuf);
 		if (err != NULL)
 			goto done;
+
+		/* Hash algorithm must now be known. */
+		switch ((*pack_hash)->algo) {
+		case GOT_HASH_SHA1:
+		case GOT_HASH_SHA256:
+			idlen = got_hash_digest_length((*pack_hash)->algo);
+			break;
+		default:
+			err = got_error_fmt(GOT_ERR_OBJECT_FORMAT,
+			    "could not determine object hash algorithm "
+			    "used by server");
+			goto done;
+		}
+
+		if (expected_algo != -1 &&
+		    (*pack_hash)->algo != expected_algo) {
+			err = got_error(GOT_ERR_OBJECT_FORMAT);
+			goto done;
+		}
+
 		/* Don't report size progress for an empty pack file. */
 		if (packfile_size_cur <= ssizeof(pack_hdr) + idlen)
 			packfile_size_cur = 0;
@@ -356,7 +370,7 @@ got_fetch_pack(struct got_object_id **pack_hash, struct got_pathlist_head *refs,
 					goto done;
 				}
 				err = progress_cb(progress_arg, s,
-				    packfile_size_cur, 0, 0, 0, 0);
+				    packfile_size_cur, *pack_hash, 0, 0, 0, 0);
 				free(s);
 				if (err)
 					break;
@@ -372,7 +386,7 @@ got_fetch_pack(struct got_object_id **pack_hash, struct got_pathlist_head *refs,
 				goto done;
 		} else if (!done && packfile_size_cur != packfile_size) {
 			err = progress_cb(progress_arg, NULL,
-			    packfile_size_cur, 0, 0, 0, 0);
+			    packfile_size_cur, *pack_hash, 0, 0, 0, 0);
 			if (err)
 				break;
 			packfile_size = packfile_size_cur;
@@ -389,11 +403,6 @@ got_fetch_pack(struct got_object_id **pack_hash, struct got_pathlist_head *refs,
 
 	if (lseek(packfd, 0, SEEK_SET) == -1) {
 		err = got_error_from_errno("lseek");
-		goto done;
-	}
-
-	if ((*pack_hash)->algo != algo) {
-		err = got_error(GOT_ERR_OBJECT_FORMAT);
 		goto done;
 	}
 
@@ -508,7 +517,7 @@ got_fetch_pack(struct got_object_id **pack_hash, struct got_pathlist_head *refs,
 			goto done;
 		if (nobj_indexed != 0) {
 			err = progress_cb(progress_arg, NULL,
-			    packfile_size, nobj_total,
+			    packfile_size, *pack_hash, nobj_total,
 			    nobj_indexed, nobj_loose, nobj_resolved);
 			if (err)
 				break;
