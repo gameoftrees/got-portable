@@ -438,20 +438,6 @@ fetch_pack(int fd, int packfd, int expected_algo,
 				goto done;
 			}
 
-			if (algo == GOT_HASH_SHA256) {
-				char *s;
-
-				if (asprintf(&s, "%s%s%s=%s", my_capabilities,
-				    my_capabilities[0] != '\0' ? " " : "",
-				    GOT_CAPA_OBJECT_FORMAT,
-				    GOT_CAPA_OBJECT_FORMAT_SHA256) == -1) {
-					err = got_error_from_errno("asprintf");
-					goto done;
-				}
-				free(my_capabilities);
-				my_capabilities = s;
-			}
-
 			if (chattygot)
 				fprintf(stderr, "%s: my capabilities:%s\n",
 				    getprogname(), my_capabilities != NULL ?
