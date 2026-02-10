@@ -433,6 +433,7 @@ dd {
 
 .clone-url {
 	white-space: pre-wrap;
+	overflow-wrap: break-word;
 }
 
 .commit-msg {
