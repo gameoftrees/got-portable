@@ -1,3 +1,21 @@
+* got 0.122; 2026-02-10
+- fix gotd/gotsys-check trying to parse gotsys.conf from a non-zero file offset
+- fix setting of a custom HEAD reference during repository creation by gotsysd
+- tweak gotwebd's Content-Security-Policy (CSP) to allow javascript in websites
+- fix CSP-violating URL-paths to gotwebd static assets in generated HTML
+- document gotwebd's Content-Security-Policy in gotwebd.conf.5
+- fix gotwebd serving websites from a branch other than HEAD
+- add a per-repository clone_url option gotwebd.conf
+- make gotsys-write-conf set the clone_url option in gotwebd.conf
+- make 'tog diff' indent log messages above patches for safety
+- gotweb can now show SSH host key fingerprints for clone URLs and login hints
+- make gotsys-write-conf add ssh host key fingerprints to /etc/gotwebd.conf
+- only display the "Clone URL:" label if there is a clone URL to display
+- fix overflow CSS for gotwebd clone URL
+- scope gotwebd authentication cookies to gotweb URL root path instead of "/"
+- make gotwebd display the authenticated user name while logged in
+- provide a link which can be used to log out when logged into gotwebd
+
 * got 0.121; 2026-01-31
 - plug fulltext delta cache memory leaks; found by otto malloc
 - make gotwebd serve its own static files if not they are not served by httpd
