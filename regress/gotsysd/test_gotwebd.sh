@@ -124,7 +124,10 @@ EOF
 	cat > $testroot/stdout.expected <<EOF
 [got]
 Repositories
-Log in by running: ssh ${GOTSYSD_TEST_USER}@${VMIP} "weblogin ${VMIP}"
+
+Log in by running:
+
+ssh ${GOTSYSD_TEST_USER}@${VMIP} "weblogin ${VMIP}"
 
 The SSH host key fingerprints of ${VMIP} are:
 
@@ -266,7 +269,10 @@ EOF
 	cat > $testroot/stdout.expected <<EOF
 [got]
 Repositories / testrepo.git / tree /
-Log in by running: ssh ${GOTSYSD_TEST_USER}@${VMIP} "weblogin ${VMIP}"
+
+Log in by running:
+
+ssh ${GOTSYSD_TEST_USER}@${VMIP} "weblogin ${VMIP}"
 
 The SSH host key fingerprints of ${VMIP} are:
 
@@ -304,7 +310,10 @@ EOF
 	cat > $testroot/stdout.expected <<EOF
 [got]
 Repositories / nonexistent.git / tree /
-Log in by running: ssh ${GOTSYSD_TEST_USER}@${VMIP} "weblogin ${VMIP}"
+
+Log in by running:
+
+ssh ${GOTSYSD_TEST_USER}@${VMIP} "weblogin ${VMIP}"
 
 The SSH host key fingerprints of ${VMIP} are:
 
@@ -648,7 +657,10 @@ EOF
 	cat > $testroot/stdout.expected <<EOF
 [got]
 Repositories / gottest.git / tree /
-Log in by running: ssh ${GOTSYSD_TEST_USER}@${VMIP} "weblogin ${VMIP}"
+
+Log in by running:
+
+ssh ${GOTSYSD_TEST_USER}@${VMIP} "weblogin ${VMIP}"
 
 The SSH host key fingerprints of ${VMIP} are:
 
