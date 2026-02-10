@@ -496,6 +496,72 @@ main		: PREFORK NUMBER {
 			free(h);
 			free($3);
 		}
+		| SSH_HOSTKEY_ECDSA STRING {
+			int i = GOTWEBD_SSHFP_ECDSA;
+
+			if (*$2 == '\0') {
+				yyerror("ssh host key fingerprint cannot be "
+				    "an empty string");
+				free($2);
+				YYERROR;
+			}
+
+			if (strlcpy(gotwebd->sshfp[i], $2,
+			    sizeof(gotwebd->sshfp[i])) >=
+			    sizeof(gotwebd->sshfp[i])) {
+				yyerror("ssh host key fingerprint too long, "
+				    "exceeds " "%zd bytes: %s",
+				    sizeof(gotwebd->sshfp[i]), $2);
+				free($2);
+				YYERROR;
+			}
+
+			free($2);
+		}
+		| SSH_HOSTKEY_ED25519 STRING {
+			int i = GOTWEBD_SSHFP_ED25519;
+
+			if (*$2 == '\0') {
+				yyerror("ssh host key fingerprint cannot be "
+				    "an empty string");
+				free($2);
+				YYERROR;
+			}
+
+			if (strlcpy(gotwebd->sshfp[i], $2,
+			    sizeof(gotwebd->sshfp[i])) >=
+			    sizeof(gotwebd->sshfp[i])) {
+				yyerror("ssh host key fingerprint too long, "
+				    "exceeds " "%zd bytes: %s",
+				    sizeof(gotwebd->sshfp[i]), $2);
+				free($2);
+				YYERROR;
+			}
+
+			free($2);
+		}
+		| SSH_HOSTKEY_RSA STRING {
+			int i = GOTWEBD_SSHFP_RSA;
+
+			if (*$2 == '\0') {
+				yyerror("ssh host key fingerprint cannot be "
+				    "an empty string");
+				free($2);
+				YYERROR;
+			}
+
+			if (strlcpy(gotwebd->sshfp[i], $2,
+			    sizeof(gotwebd->sshfp[i])) >=
+			    sizeof(gotwebd->sshfp[i])) {
+				yyerror("ssh host key fingerprint too long, "
+				    "exceeds " "%zd bytes: %s",
+				    sizeof(gotwebd->sshfp[i]), $2);
+				free($2);
+				YYERROR;
+			}
+
+			free($2);
+		}
 		;
 
 server		: SERVER STRING {
@@ -791,6 +857,72 @@ serveropts1	: REPOS_PATH STRING {
 			if (new_srv->repos_url_path[0] != '/') {
 				yyerror("repos_url_path must be an absolute "
 				    "path: bad path %s", $2);
+				free($2);
+				YYERROR;
+			}
+
+			free($2);
+		}
+		| SSH_HOSTKEY_ECDSA STRING {
+			int i = GOTWEBD_SSHFP_ECDSA;
+
+			if (*$2 == '\0') {
+				yyerror("ssh host key fingerprint cannot be "
+				    "an empty string");
+				free($2);
+				YYERROR;
+			}
+
+			if (strlcpy(new_srv->sshfp[i], $2,
+			    sizeof(new_srv->sshfp[i])) >=
+			    sizeof(new_srv->sshfp[i])) {
+				yyerror("ssh host key fingerprint too long, "
+				    "exceeds " "%zd bytes: %s",
+				    sizeof(new_srv->sshfp[i]), $2);
+				free($2);
+				YYERROR;
+			}
+
+			free($2);
+		}
+		| SSH_HOSTKEY_ED25519 STRING {
+			int i = GOTWEBD_SSHFP_ED25519;
+
+			if (*$2 == '\0') {
+				yyerror("ssh host key fingerprint cannot be "
+				    "an empty string");
+				free($2);
+				YYERROR;
+			}
+
+			if (strlcpy(new_srv->sshfp[i], $2,
+			    sizeof(new_srv->sshfp[i])) >=
+			    sizeof(new_srv->sshfp[i])) {
+				yyerror("ssh host key fingerprint too long, "
+				    "exceeds " "%zd bytes: %s",
+				    sizeof(new_srv->sshfp[i]), $2);
+				free($2);
+				YYERROR;
+			}
+
+			free($2);
+		}
+		| SSH_HOSTKEY_RSA STRING {
+			int i = GOTWEBD_SSHFP_RSA;
+
+			if (*$2 == '\0') {
+				yyerror("ssh host key fingerprint cannot be "
+				    "an empty string");
+				free($2);
+				YYERROR;
+			}
+
+			if (strlcpy(new_srv->sshfp[i], $2,
+			    sizeof(new_srv->sshfp[i])) >=
+			    sizeof(new_srv->sshfp[i])) {
+				yyerror("ssh host key fingerprint too long, "
+				    "exceeds " "%zd bytes: %s",
+				    sizeof(new_srv->sshfp[i]), $2);
 				free($2);
 				YYERROR;
 			}
@@ -1581,6 +1713,7 @@ parse_config(const char *filename, struct gotwebd *env)
 	struct sym *sym, *next;
 	struct server *srv;
 	struct gotwebd_repo *repo;
+	size_t i;
 
 	if (config_init(env) == -1)
 		fatalx("failed to initialize configuration");
@@ -1764,6 +1897,18 @@ parse_config(const char *filename, struct gotwebd *env)
 
 	/* Inherit implicit configuration from parent scope. */
 	TAILQ_FOREACH(srv, &env->servers, entry) {
+		for (i = 0; i < GOTWEBD_NUM_SSHFP; i++) {
+			if (srv->sshfp[i][0] == '\0' &&
+			    env->sshfp[i][0] != '\0' &&
+			    strlcpy(srv->sshfp[i], env->sshfp[i],
+			    sizeof(srv->sshfp[i])) >= sizeof(srv->sshfp[i])) {
+				fprintf(stderr, "ssh host key fingerprint too "
+				    "long, exceeds %zd bytes: %s",
+				    sizeof(srv->sshfp[i]), env->sshfp[i]);
+				return -1;
+			}
+		}
+
 		if (srv->auth_config == 0)
 			srv->auth_config = env->auth_config;
 		TAILQ_FOREACH(repo, &srv->repos, entry) {
@@ -1771,6 +1916,22 @@ parse_config(const char *filename, struct gotwebd *env)
 				repo->auth_config = srv->auth_config;
 			if (repo->hidden == -1)
 				repo->hidden = srv->hide_repositories;
+
+			for (i = 0; i < GOTWEBD_NUM_SSHFP; i++) {
+				if (repo->clone_url_hostkey[i][0] == '\0' &&
+				    srv->sshfp[i][0] != '\0' &&
+				    strlcpy(repo->clone_url_hostkey[i],
+				    srv->sshfp[i],
+				    sizeof(repo->clone_url_hostkey[i])) >=
+				    sizeof(repo->clone_url_hostkey[i])) {
+					fprintf(stderr, "ssh host key "
+					    "fingerprint too long, exceeds "
+					    "%zd bytes: %s",
+					    sizeof(repo->clone_url_hostkey[i]),
+					    srv->sshfp[i]);
+					return -1;
+				}
+			}
 		}
 
 		if (srv->login_hint_user[0] == '\0') {

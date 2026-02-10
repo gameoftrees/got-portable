@@ -253,6 +253,15 @@ Needed to ensure that the web server can access
 sockets created by
 .Xr gotwebd 8 .
 If not specified, the user www will be used.
+.It Ic ssh_hostkey_ecdsa Ar string
+Set the server's SSH ECDSA host key fingerprint to be displayed beneath
+login hints and beneath clone URLs which use the SSH protocol.
+.It Ic ssh_hostkey_ed25519 Ar string
+Set the server's SSH ED25519 host key fingerprint to be displayed beneath
+login hints and beneath clone URLs which use the SSH protocol.
+.It Ic ssh_hostkey_rsa Ar string
+Set the server's SSH RSA host key fingerprint to be displayed beneath
+login hints and beneath clone URLs which use the SSH protocol.
 .El
 .Pp
 If no
@@ -446,6 +455,21 @@ The
 .Cm chroot
 directive must be used before the server declaration in order to
 take effect.
+.It Ic ssh_hostkey_ecdsa Ar string
+Set the server's SSH ECDSA host key fingerprint to be displayed beneath
+login hints and beneath clone URLs which use the SSH protocol.
+If not set then SSH fingerprints found in the global configuration context
+will be used.
+.It Ic ssh_hostkey_ed25519 Ar string
+Set the server's SSH ED25519 host key fingerprint to be displayed beneath
+login hints and beneath clone URLs which use the SSH protocol.
+If not set then SSH fingerprints found in the global configuration context
+will be used.
+.It Ic ssh_hostkey_rsa Ar string
+Set the server's SSH RSA host key fingerprint to be displayed beneath
+login hints and beneath clone URLs which use the SSH protocol.
+If not set then SSH fingerprints found in the global configuration context
+will be used.
 .It Ic repository Ar name Brq ...
 Set options which apply to a particular repository served by this server.
 .Pp
@@ -501,14 +525,20 @@ This file may contain multiple URLs, one per line.
 Set the server's SSH ECDSA host key fingerprint to be displayed beneath
 the clone URL.
 Should be set when the clone URL uses the SSH protocol.
+If not set then SSH fingerprints found in the server or global configuration
+context will be used.
 .It Ic ssh_hostkey_ed25519 Ar string
 Set the server's SSH ED25519 host key fingerprint to be displayed beneath
 the clone URL.
 Should be set when the clone URL uses the SSH protocol.
+If not set then SSH fingerprints found in the server or global configuration
+context will be used.
 .It Ic ssh_hostkey_rsa Ar string
 Set the server's SSH RSA host key fingerprint to be displayed beneath
 the clone URL.
 Should be set when the clone URL uses the SSH protocol.
+If not set then SSH fingerprints found in the server or global configuration
+context will be used.
 .It Ic description Ar string
 Sets the repository description shown on the repository listing page.
 The
