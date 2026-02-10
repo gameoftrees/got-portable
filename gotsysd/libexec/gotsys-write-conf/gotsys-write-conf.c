@@ -1088,48 +1088,6 @@ write_webrepo(int *show_repo_description, int *login_hint_user_access,
 			    "short write to %s", path);
 		}
 		free(clone_url);
-
-		if (ssh_hostkeys[GOTWEBD_SSHFP_ECDSA][0]) {
-			ret = dprintf(fd, "\t\tssh_hostkey_ecdsa \"%s\"\n",
-			    ssh_hostkeys[GOTWEBD_SSHFP_ECDSA]);
-			if (ret == -1)  {
-				return got_error_from_errno2("dprintf", path);
-			}
-			if (ret != 22 +
-			    strlen(ssh_hostkeys[GOTWEBD_SSHFP_ECDSA]) + 1) {
-				return got_error_fmt(GOT_ERR_IO,
-				    "short write to %s", path);
-			}
-			
-		}
-
-		if (ssh_hostkeys[GOTWEBD_SSHFP_ED25519][0]) {
-			ret = dprintf(fd, "\t\tssh_hostkey_ed25519 \"%s\"\n",
-			    ssh_hostkeys[GOTWEBD_SSHFP_ED25519]);
-			if (ret == -1)  {
-				return got_error_from_errno2("dprintf", path);
-			}
-			if (ret != 24 +
-			    strlen(ssh_hostkeys[GOTWEBD_SSHFP_ED25519]) + 1) {
-				return got_error_fmt(GOT_ERR_IO,
-				    "short write to %s", path);
-			}
-			
-		}
-
-		if (ssh_hostkeys[GOTWEBD_SSHFP_RSA][0]) {
-			ret = dprintf(fd, "\t\tssh_hostkey_rsa \"%s\"\n",
-			    ssh_hostkeys[GOTWEBD_SSHFP_RSA]);
-			if (ret == -1)  {
-				return got_error_from_errno2("dprintf", path);
-			}
-			if (ret != 20 +
-			    strlen(ssh_hostkeys[GOTWEBD_SSHFP_RSA]) + 1) {
-				return got_error_fmt(GOT_ERR_IO,
-				    "short write to %s", path);
-			}
-			
-		}
 	}
 
 	ret = dprintf(fd, "\t}\n");
@@ -1286,6 +1244,48 @@ write_gotwebd_conf(void)
 			return got_error_fmt(GOT_ERR_IO, "short write to %s",
 			    path);
 		}
+	}
+
+	if (ssh_hostkeys[GOTWEBD_SSHFP_ECDSA][0]) {
+		ret = dprintf(fd, "ssh_hostkey_ecdsa \"%s\"\n",
+		    ssh_hostkeys[GOTWEBD_SSHFP_ECDSA]);
+		if (ret == -1)  {
+			return got_error_from_errno2("dprintf", path);
+		}
+		if (ret != 20 +
+		    strlen(ssh_hostkeys[GOTWEBD_SSHFP_ECDSA]) + 1) {
+			return got_error_fmt(GOT_ERR_IO,
+			    "short write to %s", path);
+		}
+		
+	}
+
+	if (ssh_hostkeys[GOTWEBD_SSHFP_ED25519][0]) {
+		ret = dprintf(fd, "ssh_hostkey_ed25519 \"%s\"\n",
+		    ssh_hostkeys[GOTWEBD_SSHFP_ED25519]);
+		if (ret == -1)  {
+			return got_error_from_errno2("dprintf", path);
+		}
+		if (ret != 22 +
+		    strlen(ssh_hostkeys[GOTWEBD_SSHFP_ED25519]) + 1) {
+			return got_error_fmt(GOT_ERR_IO,
+			    "short write to %s", path);
+		}
+		
+	}
+
+	if (ssh_hostkeys[GOTWEBD_SSHFP_RSA][0]) {
+		ret = dprintf(fd, "ssh_hostkey_rsa \"%s\"\n",
+		    ssh_hostkeys[GOTWEBD_SSHFP_RSA]);
+		if (ret == -1)  {
+			return got_error_from_errno2("dprintf", path);
+		}
+		if (ret != 18 +
+		    strlen(ssh_hostkeys[GOTWEBD_SSHFP_RSA]) + 1) {
+			return got_error_fmt(GOT_ERR_IO,
+			    "short write to %s", path);
+		}
+		
 	}
 
 	switch (webcfg.auth_config) {

@@ -20,6 +20,19 @@
 test_login() {
 	local testroot=`test_init login 1`
 
+	GOTSYS_ECDSA_HOST_FP=$(ssh -i ${GOTSYSD_SSH_KEY} \
+		${GOTSYSD_TEST_USER}@${VMIP} \
+		ssh-keygen -lf /etc/ssh/ssh_host_ecdsa_key.pub | \
+		cut -d' ' -f2)
+	GOTSYS_ED25519_HOST_FP=$(ssh -i ${GOTSYSD_SSH_KEY} \
+		${GOTSYSD_TEST_USER}@${VMIP} \
+		ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub | \
+		cut -d' ' -f2)
+	GOTSYS_RSA_HOST_FP=$(ssh -i ${GOTSYSD_SSH_KEY} \
+		${GOTSYSD_TEST_USER}@${VMIP} \
+		ssh-keygen -lf /etc/ssh/ssh_host_rsa_key.pub | \
+		cut -d' ' -f2)
+
 	got checkout -q $testroot/${GOTSYS_REPO} $testroot/wt >/dev/null
 	ret=$?
 	if [ $ret -ne 0 ]; then
@@ -113,6 +126,20 @@ EOF
 Repositories
 Log in by running: ssh ${GOTSYSD_TEST_USER}@${VMIP} "weblogin ${VMIP}"
 
+The SSH host key fingerprints of ${VMIP} are:
+
+ECDSA
+
+    ${GOTSYS_ECDSA_HOST_FP}
+
+ED25519
+
+    ${GOTSYS_ED25519_HOST_FP}
+
+RSA
+
+    ${GOTSYS_RSA_HOST_FP}
+    
 EOF
 	cmp -s $testroot/stdout.expected $testroot/stdout
 	ret=$?
@@ -241,6 +268,20 @@ EOF
 Repositories / testrepo.git / tree /
 Log in by running: ssh ${GOTSYSD_TEST_USER}@${VMIP} "weblogin ${VMIP}"
 
+The SSH host key fingerprints of ${VMIP} are:
+
+ECDSA
+
+    ${GOTSYS_ECDSA_HOST_FP}
+
+ED25519
+
+    ${GOTSYS_ED25519_HOST_FP}
+
+RSA
+
+    ${GOTSYS_RSA_HOST_FP}
+    
 EOF
 	cmp -s $testroot/stdout.expected $testroot/stdout
 	ret=$?
@@ -265,6 +306,20 @@ EOF
 Repositories / nonexistent.git / tree /
 Log in by running: ssh ${GOTSYSD_TEST_USER}@${VMIP} "weblogin ${VMIP}"
 
+The SSH host key fingerprints of ${VMIP} are:
+
+ECDSA
+
+    ${GOTSYS_ECDSA_HOST_FP}
+
+ED25519
+
+    ${GOTSYS_ED25519_HOST_FP}
+
+RSA
+
+    ${GOTSYS_RSA_HOST_FP}
+    
 EOF
 	cmp -s $testroot/stdout.expected $testroot/stdout
 	ret=$?
@@ -462,6 +517,19 @@ EOF
 test_access_rules_tree_page() {
 	local testroot=`test_init access_rules_tree_page 1`
 
+	GOTSYS_ECDSA_HOST_FP=$(ssh -i ${GOTSYSD_SSH_KEY} \
+		${GOTSYSD_TEST_USER}@${VMIP} \
+		ssh-keygen -lf /etc/ssh/ssh_host_ecdsa_key.pub | \
+		cut -d' ' -f2)
+	GOTSYS_ED25519_HOST_FP=$(ssh -i ${GOTSYSD_SSH_KEY} \
+		${GOTSYSD_TEST_USER}@${VMIP} \
+		ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub | \
+		cut -d' ' -f2)
+	GOTSYS_RSA_HOST_FP=$(ssh -i ${GOTSYSD_SSH_KEY} \
+		${GOTSYSD_TEST_USER}@${VMIP} \
+		ssh-keygen -lf /etc/ssh/ssh_host_rsa_key.pub | \
+		cut -d' ' -f2)
+
 	got checkout -q $testroot/${GOTSYS_REPO} $testroot/wt >/dev/null
 	ret=$?
 	if [ $ret -ne 0 ]; then
@@ -582,6 +650,20 @@ EOF
 Repositories / gottest.git / tree /
 Log in by running: ssh ${GOTSYSD_TEST_USER}@${VMIP} "weblogin ${VMIP}"
 
+The SSH host key fingerprints of ${VMIP} are:
+
+ECDSA
+
+    ${GOTSYS_ECDSA_HOST_FP}
+
+ED25519
+
+    ${GOTSYS_ED25519_HOST_FP}
+
+RSA
+
+    ${GOTSYS_RSA_HOST_FP}
+    
 EOF
 	cmp -s $testroot/stdout.expected $testroot/stdout
 	ret=$?
