@@ -286,13 +286,15 @@ nextsep(char *s, char **t)
 <div id="err_content">
   {{ if t->error }}
     {{ if t->error->code == GOT_ERR_LOGIN_HINT && login_hint_user }}
-      Log in by running: 
+      <p>Log in by running:</p>
+      <pre>
       {{ if login_hint_port }}
 	ssh -p {{ login_hint_port }} {{" "}} {{ login_hint_user }}@{{ srv->name }} {{" "}} "weblogin {{ srv->name }}"
 	
       {{ else }}
 	ssh {{ login_hint_user }}@{{ srv->name }} {{" "}} "weblogin {{ srv->name }}"
       {{ end }}
+      </pre>
       {{ if srv->sshfp[GOTWEBD_SSHFP_ECDSA][0] != '\0' ||
           srv->sshfp[GOTWEBD_SSHFP_ED25519][0] != '\0' ||
           srv->sshfp[GOTWEBD_SSHFP_RSA][0] != '\0' }}
