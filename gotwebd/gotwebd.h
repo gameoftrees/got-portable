@@ -432,6 +432,7 @@ struct server {
 	char		 name[GOTWEBD_MAXTEXT];
 	char		 htdocs_path[PATH_MAX];
 	char		 gotweb_url_root[MAX_DOCUMENT_URI];
+	char		 sshfp[GOTWEBD_NUM_SSHFP][GOTWEBD_MAX_SSHFP];
 
 	char		 repos_path[PATH_MAX];
 	char		 repos_url_path[MAX_DOCUMENT_URI];
@@ -509,6 +510,8 @@ struct gotwebd {
 
 	enum gotwebd_auth_config auth_config;
 	struct gotwebd_access_rule_list access_rules;
+
+	char sshfp[GOTWEBD_NUM_SSHFP][GOTWEBD_MAX_SSHFP];
 
 	struct mediatypes mediatypes;
 
