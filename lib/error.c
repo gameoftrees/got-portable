@@ -253,6 +253,7 @@ static const struct got_error got_errors[] = {
 	{ GOT_ERR_NOT_FOUND, "not found" },
 	{ GOT_ERR_MEDIA_TYPE,	"malformed media type" },
 	{ GOT_ERR_LOGOUT_FAILED, "logout failed" },
+	{ GOT_ERR_LOGIN_HINT, "login failed, see hint" },
 };
 
 static struct got_custom_error {

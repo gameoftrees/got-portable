@@ -202,6 +202,7 @@
 #define GOT_ERR_NOT_FOUND	194
 #define GOT_ERR_MEDIA_TYPE	195
 #define GOT_ERR_LOGOUT_FAILED	196
+#define GOT_ERR_LOGIN_HINT	197
 
 struct got_error {
         int code;
