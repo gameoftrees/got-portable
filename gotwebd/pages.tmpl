@@ -270,10 +270,53 @@ nextsep(char *s, char **t)
 {!
 	struct request		*c = tp->tp_arg;
 	struct transport	*t = c->t;
+	struct server		*srv = NULL;
+	const char		*login_hint_user = NULL;
+	const char		*login_hint_port = NULL;
+
+	if (t->error && t->error->code == GOT_ERR_LOGIN_HINT) {
+		srv = gotweb_get_server(c->fcgi_params.server_name);
+		if (srv && srv->login_hint_user[0] != '\0') {
+			login_hint_user = srv->login_hint_user;
+			if (srv->login_hint_port[0] != '\0')
+				login_hint_port = srv->login_hint_port;
+		}
+	}
 !}
 <div id="err_content">
   {{ if t->error }}
-    {{ t->error->msg }}
+    {{ if t->error->code == GOT_ERR_LOGIN_HINT && login_hint_user }}
+      Log in by running: 
+      {{ if login_hint_port }}
+	ssh -p {{ login_hint_port }} {{" "}} {{ login_hint_user }}@{{ srv->name }} {{" "}} "weblogin {{ srv->name }}"
+	
+      {{ else }}
+	ssh {{ login_hint_user }}@{{ srv->name }} {{" "}} "weblogin {{ srv->name }}"
+      {{ end }}
+      {{ if srv->sshfp[GOTWEBD_SSHFP_ECDSA][0] != '\0' ||
+          srv->sshfp[GOTWEBD_SSHFP_ED25519][0] != '\0' ||
+          srv->sshfp[GOTWEBD_SSHFP_RSA][0] != '\0' }}
+	{{ if login_hint_port }}
+	  <p>The SSH host key fingerprints of {{ srv->name }}:{{ login_hint_port }} {{" "}} are:</p>
+	{{ else }}
+	  <p>The SSH host key fingerprints of {{ srv->name }} {{" "}} are:</p>
+	{{ end }}
+	<dl>
+        {{ if srv->sshfp[GOTWEBD_SSHFP_ECDSA][0] != '\0' }}
+          <dt>ECDSA</dt><dd><pre class="clone-url">{{ srv->sshfp[GOTWEBD_SSHFP_ECDSA] }}</pre></dd>
+        {{ end }}
+        {{ if srv->sshfp[GOTWEBD_SSHFP_ED25519][0] != '\0' }}
+          <dt>ED25519</dt><dd><pre class="clone-url">{{ srv->sshfp[GOTWEBD_SSHFP_ED25519] }}</pre></dd>
+        {{ end }}
+        {{ if srv->sshfp[GOTWEBD_SSHFP_RSA][0] != '\0' }}
+          <dt>RSA</dt><dd><pre class="clone-url">{{ srv->sshfp[GOTWEBD_SSHFP_RSA] }}</pre></dd>
+        {{ end }}
+	</dl>
+      {{ end }}
+
+    {{ else }}
+      {{ t->error->msg }}
+    {{ end }}
   {{ else }}
     See daemon logs for details
   {{ end }}
