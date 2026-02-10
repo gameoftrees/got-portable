@@ -2575,7 +2575,7 @@ parse_hostkey(const char *line, char *outbuf, size_t outsize)
 	}
 
 	b64digest[strcspn(b64digest, "=")] = '\0';
-	ret = snprintf(outbuf, outsize, "SHA256:%s\n", b64digest);
+	ret = snprintf(outbuf, outsize, "SHA256:%s", b64digest);
 	if (ret == -1) {
 		err = got_error_from_errno("snprintf");
 		goto done;
