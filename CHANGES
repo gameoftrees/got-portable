@@ -5,7 +5,7 @@
 - fix CSP-violating URL-paths to gotwebd static assets in generated HTML
 - document gotwebd's Content-Security-Policy in gotwebd.conf.5
 - fix gotwebd serving websites from a branch other than HEAD
-- add a per-repository clone_url option gotwebd.conf
+- add a per-repository clone_url option to gotwebd.conf
 - make gotsys-write-conf set the clone_url option in gotwebd.conf
 - make 'tog diff' indent log messages above patches for safety
 - gotweb can now show SSH host key fingerprints for clone URLs and login hints
