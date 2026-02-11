@@ -972,6 +972,118 @@ hide_gotsys_repo(int fd, const char *path)
 }
 
 static const struct got_error *
+write_clone_url(int fd, const char *path, const char *server_name,
+    const char *repo_name)
+{
+	char *clone_url;
+	int ret;
+
+	if (asprintf(&clone_url, "ssh://%s@%s%s%s/%s.git",
+	    webcfg.login_hint_user, server_name,
+	    webcfg.login_hint_port[0] ? ":" : "",
+	    webcfg.login_hint_port[0] ? webcfg.login_hint_port : "",
+	    repo_name) == -1)
+		return got_error_from_errno("asprintf");
+
+	ret = dprintf(fd, "\t\tclone_url \"%s\"\n", clone_url);
+	if (ret == -1)  {
+		free(clone_url);
+		return got_error_from_errno2("dprintf", path);
+	}
+	if (ret != 14 + strlen(clone_url) + 1) {
+		free(clone_url);
+		return got_error_fmt(GOT_ERR_IO,
+		    "short write to %s", path);
+	}
+
+	free(clone_url);
+	return NULL;
+}
+
+static const struct got_error *
+canon_repo_name(char *outbuf, size_t outsize, const char *repo_name)
+{
+	size_t namelen;
+
+	namelen = strlcpy(outbuf, repo_name, outsize);
+	if (namelen >= outsize) {
+		return got_error_fmt(GOT_ERR_NO_SPACE,
+		    "repository name too long: %s", repo_name);
+	}
+
+	if (namelen > 4 && strcmp(&repo_name[namelen - 4], GOTWEB_GIT_DIR) == 0)
+		outbuf[namelen - 4] = '\0';
+
+	return NULL;
+}
+
+static const struct got_error *
+write_implicit_clone_url(int fd, const char *path, const char *server_name,
+    const char *full_repo_name)
+{
+	const struct got_error *err;
+	char repo_name[_POSIX_PATH_MAX];
+	int ret;
+
+	err = canon_repo_name(repo_name, sizeof(repo_name), full_repo_name);
+	if (err)
+		return err;
+
+	ret = dprintf(fd, "\trepository \"%s\" {\n", repo_name);
+	if (ret == -1) 
+		return got_error_from_errno2("dprintf", path);
+	if (ret != 16 + strlen(repo_name) + 1)
+		return got_error_fmt(GOT_ERR_IO, "short write to %s", path);
+	
+	err = write_clone_url(fd, path, server_name, repo_name);
+	if (err)
+		return err;
+
+	ret = dprintf(fd, "\t}\n");
+	if (ret == -1) 
+		return got_error_from_errno2("dprintf", path);
+	if (ret != 3)
+		return got_error_fmt(GOT_ERR_IO, "short write to %s", path);
+
+	return NULL;
+}
+
+/* Write clone URls for repositories which are not listed as a webrepo. */
+static const struct got_error *
+write_implicit_clone_urls(int fd, const char *path,
+    struct gotsys_webserver *srv)
+{
+	const struct got_error *err = NULL;
+	struct gotsys_repo *repo;
+	struct gotsys_webrepo *webrepo;
+	struct gotsys_access_rule *rule;
+
+	TAILQ_FOREACH(repo, &gotsysconf.repos, entry) {
+		if (strcmp(repo->name, "gotsys") == 0 ||
+		    strcmp(repo->name, "gotsys.git") == 0)
+			continue;
+
+		webrepo = gotsys_find_webrepo_by_name(repo->name, &srv->repos);
+		if (webrepo)
+			continue;
+
+		STAILQ_FOREACH(rule, &repo->access_rules, entry) {
+			if (rule->access == GOTSYS_ACCESS_PERMITTED &&
+			    strcmp(rule->identifier,
+			    webcfg.login_hint_user) == 0) {
+				err = write_implicit_clone_url(fd, path,
+				    srv->server_name, repo->name);
+				if (err)
+					return err;
+				break;
+			}
+		}
+	}
+
+	return NULL;
+}
+
+static const struct got_error *
 write_webrepo(int *show_repo_description, int *login_hint_user_access,
     int fd, const char *path, struct gotsys_webrepo *webrepo,
     enum gotsysd_web_auth_config webd_auth_config,
@@ -981,19 +1093,12 @@ write_webrepo(int *show_repo_description, int *login_hint_user_access,
 	struct gotsys_repo *repo;
 	int ret;
 	char repo_name[_POSIX_PATH_MAX];
-	size_t namelen;
 	int have_login_hint_user = 0;
 	int login_hint_user_has_repo_access = 0;
 
-	namelen = strlcpy(repo_name, webrepo->repo_name, sizeof(repo_name));
-	if (namelen >= sizeof(repo_name)) {
-		return got_error_msg(GOT_ERR_NO_SPACE,
-		    "repository name too long");
-	}
-
-	if (namelen > 4 &&
-	    strcmp(&repo_name[namelen - 4], GOTWEB_GIT_DIR) == 0)
-		repo_name[namelen - 4] = '\0';
+	err = canon_repo_name(repo_name, sizeof(repo_name), webrepo->repo_name);
+	if (err)
+		return err;
 
 	ret = dprintf(fd, "\trepository \"%s\" {\n", repo_name);
 	if (ret == -1) 
@@ -1068,26 +1173,9 @@ write_webrepo(int *show_repo_description, int *login_hint_user_access,
 	}
 
 	if (login_hint_user_has_repo_access) {
-		char *clone_url;
-
-		if (asprintf(&clone_url, "ssh://%s@%s%s%s/%s.git",
-		    webcfg.login_hint_user, server_name,
-		    webcfg.login_hint_port[0] ? ":" : "",
-		    webcfg.login_hint_port[0] ? webcfg.login_hint_port : "",
-		    repo_name) == -1)
-			return got_error_from_errno("asprintf");
-	
-		ret = dprintf(fd, "\t\tclone_url \"%s\"\n", clone_url);
-		if (ret == -1)  {
-			free(clone_url);
-			return got_error_from_errno2("dprintf", path);
-		}
-		if (ret != 14 + strlen(clone_url) + 1) {
-			free(clone_url);
-			return got_error_fmt(GOT_ERR_IO,
-			    "short write to %s", path);
-		}
-		free(clone_url);
+		err = write_clone_url(fd, path, server_name, repo_name);
+		if (err)
+			return err;
 	}
 
 	ret = dprintf(fd, "\t}\n");
@@ -1106,7 +1194,6 @@ write_website(int *login_hint_user_access, int fd, const char *path,
 	const struct got_error *err;
 	int ret;
 	char repo_name[_POSIX_PATH_MAX];
-	size_t namelen;
 	int have_login_hint_user = 0;
 
 	ret = dprintf(fd, "\twebsite \"%s\" {\n", site->url_path);
@@ -1115,16 +1202,9 @@ write_website(int *login_hint_user_access, int fd, const char *path,
 	if (ret != 13 + strlen(site->url_path) + 1)
 		return got_error_fmt(GOT_ERR_IO, "short write to %s", path);
 
-
-	namelen = strlcpy(repo_name, site->repo_name, sizeof(repo_name));
-	if (namelen >= sizeof(repo_name)) {
-		return got_error_msg(GOT_ERR_NO_SPACE,
-		    "repository name too long");
-	}
-
-	if (namelen > 4 &&
-	    strcmp(&repo_name[namelen - 4], GOTWEB_GIT_DIR) == 0)
-		repo_name[namelen - 4] = '\0';
+	err = canon_repo_name(repo_name, sizeof(repo_name), site->repo_name);
+	if (err)
+		return err;
 
 	ret = dprintf(fd, "\t\trepository \"%s\"\n", repo_name);
 	if (ret == -1) 
@@ -1494,6 +1574,11 @@ write_gotwebd_conf(void)
 				if (err)
 					return err;
 			}
+
+			err = write_implicit_clone_urls(fd, path, srv);
+			if (err)
+				return err;
+
 			if (!show_repo_description) {
 				ret = dprintf(fd,
 				    "\tshow_repo_description off\n");
