@@ -511,7 +511,7 @@ client_read(struct bufferevent *bev, void *d)
 	struct evbuffer *out = EVBUFFER_OUTPUT(bev);
 	char *line, *cmd, *code;
 	size_t linelen;
-	const char *hostname, *path = NULL;
+	const char *hostname, *path = NULL, *repos_path = NULL;
 
 	if (client->cmd_done) {
 		log_warnx("%s: client sent data even though login command "
@@ -582,8 +582,13 @@ client_read(struct bufferevent *bev, void *d)
 		    !got_path_is_root_dir(srv->gotweb_url_root))
 			path = srv->gotweb_url_root;
 
-		if (evbuffer_add_printf(out, "ok https://%s%s/?login=%s\n",
-		    hostname, path ? path : "", code) == -1) {
+		if (srv->repos_url_path[0] != '\0' &&
+		    !got_path_is_root_dir(srv->repos_url_path))
+			repos_path = srv->repos_url_path;
+	
+		if (evbuffer_add_printf(out, "ok https://%s%s%s%s/?login=%s\n",
+		    hostname, path ? path : "", path ? "/" : "",
+		    repos_path ? repos_path : "", code) == -1) {
 			log_warnx("%s: evbuffer_add_printf failed", __func__);
 			client_err(bev, EVBUFFER_READ, client);
 			free(code);
