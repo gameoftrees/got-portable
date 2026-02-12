@@ -1,0 +1,239 @@
+.\"
+.\" Copyright (c) 2026 Thomas Adam
+.\"
+.\" Permission to use, copy, modify, and distribute this software for any
+.\" purpose with or without fee is hereby granted, provided that the above
+.\" copyright notice and this permission notice appear in all copies.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+.\" MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+.\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+.\"
+.Dd $Mdocdate$
+.Dt GOT-PORTABLE 7
+.Os
+.Sh NAME
+.Nm got-portable
+.Nd Notes relevanr for the -portable version of Game of Trees
+.Sh SYNOPSIS
+.Nm
+.Op Fl dnv
+.Op Fl D Ar macro Ns = Ns Ar value
+.Op Fl f Ar file
+.Sh DESCRIPTION
+.Nm
+is a FastCGI server program which can display the contents of Git
+repositories via a web browser.
+The program has been designed to work out of the box with
+the
+.Xr httpd 8
+web server.
+.Pp
+.Nm
+provides the following options:
+.Bl -tag -width tenletters
+.It Fl D Ar macro Ns = Ns Ar value
+Define
+.Ar macro
+to be set to
+.Ar value .
+Overrides the definition of
+.Ar macro
+in the configuration file.
+.It Fl d
+Do not daemonize.
+Send log output to stderr.
+.It Fl f Ar file
+Set the path to the configuration file.
+If not specified, the file
+.Pa /etc/gotwebd.conf
+will be used.
+.It Fl n
+Parse the configuration file, report errors if any, and exit.
+.It Fl v
+Verbose mode.
+Verbosity increases if this option is used multiple times.
+.El
+.Pp
+Enabling
+.Nm
+requires the following steps:
+.Bl -enum
+.It
+The
+.Xr httpd.conf 5
+configuration file must be adjusted to run
+.Nm
+as a FastCGI helper program.
+The
+.Sx EXAMPLES
+section below contains an appropriate configuration file sample.
+.It
+httpd(8) must be enabled and started:
+.Bd -literal -offset indent
+  # rcctl enable httpd
+  # rcctl start httpd
+.Ed
+.It
+Optionally, the run-time behaviour of
+.Nm
+can be configured via the
+.Xr gotwebd.conf 5
+configuration file.
+.It
+Git repositories must be created.
+These repositories may reside anywhere in the filesystem and must
+be readable, but should
+.Em not
+be writable, by the user
+.Nm
+runs as.
+The default location for repositories published by
+.Nm
+is
+.Pa /var/www/got/public .
+.It
+If the Git repositories served by
+.Nm
+do not receive changes from committers directly, they need to be kept
+up-to-date with a mechanism such as
+.Cm got fetch ,
+.Xr git-fetch 1 ,
+or
+.Xr rsync 1 ,
+scheduled by
+.Xr cron 8 .
+.El
+.Sh FILES
+.Bl -tag -width /var/www/got/public/ -compact
+.It Pa /etc/gotwebd.conf
+Default location of the
+.Xr gotwebd.conf 5
+configuration file.
+.It Pa /var/www/got/public/
+Default location for Git repositories served by
+.Nm .
+This location can be adjusted in the
+.Xr gotwebd.conf 5
+configuration file.
+.It Pa /var/www/bin/gotwebd/
+Directory containing statically linked
+.Xr got 1
+helper programs which are run by
+.Nm
+to read Git repositories.
+.It Pa /var/www/htdocs/gotwebd/
+Directory containing HTML, CSS, and image files used by
+.Nm .
+.It Pa /var/www/run/gotweb.sock
+Default location for the
+.Nm
+listening socket.
+.It Pa /var/run/gotweb-login.sock
+Default location for the
+.Nm
+login socket.
+.It Pa /var/run/gotwebd.sock
+Default location for the
+.Nm
+control socket.
+.Xr gotwebctl 8
+can be used to send commands to
+.Nm
+via this socket.
+.It Pa /tmp/
+Directory for temporary files created by
+.Nm .
+.El
+.Sh EXAMPLES
+Example configuration for
+.Xr httpd.conf 5
+which forwards all requests to
+.Nm :
+.Bd -literal -offset indent
+types { include "/usr/share/misc/mime.types" }
+
+server "example.com" {
+	listen on * port 80
+	fastcgi socket "/run/gotweb.sock"
+}
+.Ed
+.Pp
+The following
+.Xr httpd.conf 5
+example makes multiple
+.Nm gotwebd
+instances reachable via the same HTTP server under different URL path prefixes,
+with the first reached via the default
+.Ux Ns -domain socket ,
+and the second configured to listen on localhost port 9000:
+.Bd -literal -offset indent
+server "example.com" {
+	listen on * port 80
+
+	location "/gotwebd-unix/*" {
+		fastcgi socket "/run/gotweb.sock"
+	}
+
+	location "/gotwebd-tcp/*" {
+		fastcgi socket tcp localhost 9000
+	}
+
+	# Redirect requests which lack a trailing slash:
+
+	location "/gotwebd-unix" {
+		block return 302 \\
+			"$REQUEST_SCHEME://$HTTP_HOST$REQUEST_URI/"
+	}
+
+	location "/gotwebd-tcp" {
+		block return 302 \\
+			"$REQUEST_SCHEME://$HTTP_HOST$REQUEST_URI/"
+	}
+}
+.Ed
+.Pp
+When requests do not arrive at the root URL path
+.Dq / ,
+the URL path prefix also needs to be set in the
+.Xr gotwebd.conf 5
+file corresponding to each instance of
+.Nm .
+Following on from the previous example:
+.Pp
+.Xr gotwebd.conf 5
+for the
+.Ux Ns -domain socket
+instance of
+.Nm :
+.Bd -literal -offset indent
+listen on socket "/var/www/run/gotweb.sock"
+server "example.com" {
+	gotweb_url_root "/gotwebd-unix"
+}
+.Ed
+.Pp
+.Xr gotwebd.conf 5
+for the TCP instance of
+.Nm :
+.Bd -literal -offset indent
+listen on localhost port 9000
+server "example.com" {
+	gotweb_url_root "/gotwebd-tcp"
+}
+.Ed
+.Sh SEE ALSO
+.Xr got 1 ,
+.Xr git-repository 5 ,
+.Xr gotwebd.conf 5 ,
+.Xr httpd.conf 5 ,
+.Xr gotwebctl 8 ,
+.Xr httpd 8
+.Sh AUTHORS
+.An Omar Polo Aq Mt op@openbsd.org
+.An Stefan Sperling Aq Mt stsp@openbsd.org
+.An Tracey Emery Aq Mt tracey@traceyemery.net
