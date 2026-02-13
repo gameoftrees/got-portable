@@ -694,6 +694,41 @@ EOF
 	test_done "$testroot" "$ret"
 }
 
+test_cleanup_no_head_branch() {
+	local testroot=`test_init cleanup_no_head_branch`
+	local commit_id=`git_show_head $testroot/repo`
+
+	# create a dangling HEAD reference
+	echo 'ref: refs/heads/main' > $testroot/repo/.git/HEAD
+
+	# list references
+	got ref -r $testroot/repo -l > $testroot/stdout
+	cat > $testroot/stdout.expected <<EOF
+HEAD: refs/heads/main
+refs/heads/master: $commit_id
+EOF
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	# gotadmin cleanup should not fail if HEAD is pointing at
+	# a reference which cannot be resolved.
+	gotadmin cleanup -a -q -r $testroot/repo > $testroot/stdout \
+		2> $testroot/stderr
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "gotadmin cleanup failed unexpectedly" >&2
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	test_done "$testroot" "$ret"
+}
+
 test_parseargs "$@"
 run_test test_cleanup_unreferenced_loose_objects
 run_test test_cleanup_redundant_loose_objects
@@ -701,3 +736,4 @@ run_test test_cleanup_redundant_pack_files
 run_test test_cleanup_precious_objects
 run_test test_cleanup_missing_pack_file
 run_test test_cleanup_non_commit_ref
+run_test test_cleanup_no_head_branch

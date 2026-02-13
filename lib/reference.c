@@ -676,8 +676,11 @@ get_committer_time(struct got_reference *ref, struct got_repository *repo)
 	struct got_object_id *id = NULL;
 
 	err = got_ref_resolve(&id, repo, ref);
-	if (err)
+	if (err) {
+		if (err->code == GOT_ERR_NOT_REF && got_ref_is_symbolic(ref))
+			return NULL;
 		return err;
+	}
 
 	err = got_object_get_type(&obj_type, repo, id);
 	if (err)
