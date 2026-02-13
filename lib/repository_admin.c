@@ -96,8 +96,14 @@ get_reflist_object_ids(struct got_object_id ***ids, int *nobjects,
 		}
 
 		err = got_ref_resolve(&id, repo, re->ref);
-		if (err)
+		if (err) {
+			if (err->code == GOT_ERR_NOT_REF &&
+			    got_ref_is_symbolic(re->ref)) {
+				err = NULL;
+				continue;
+			}
 			goto done;
+		}
 
 		if (wanted_obj_type_mask != GOT_OBJ_TYPE_ANY) {
 			int obj_type;
