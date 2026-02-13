@@ -578,8 +578,8 @@ client_read(struct bufferevent *bev, void *d)
 		    !got_path_is_root_dir(srv->repos_url_path))
 			repos_path = srv->repos_url_path;
 	
-		if (evbuffer_add_printf(out, "ok https://%s%s%s%s/?login=%s\n",
-		    hostname, path ? path : "", path ? "/" : "",
+		if (evbuffer_add_printf(out, "ok https://%s%s%s/?login=%s\n",
+		    hostname, path ? path : "",
 		    repos_path ? repos_path : "", code) == -1) {
 			log_warnx("%s: evbuffer_add_printf failed", __func__);
 			client_err(bev, EVBUFFER_READ, client);
