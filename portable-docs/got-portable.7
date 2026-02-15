@@ -18,222 +18,119 @@
 .Os
 .Sh NAME
 .Nm got-portable
-.Nd Notes relevanr for the -portable version of Game of Trees
-.Sh SYNOPSIS
-.Nm
-.Op Fl dnv
-.Op Fl D Ar macro Ns = Ns Ar value
-.Op Fl f Ar file
-.Sh DESCRIPTION
-.Nm
-is a FastCGI server program which can display the contents of Git
-repositories via a web browser.
-The program has been designed to work out of the box with
-the
-.Xr httpd 8
-web server.
-.Pp
-.Nm
-provides the following options:
-.Bl -tag -width tenletters
-.It Fl D Ar macro Ns = Ns Ar value
-Define
-.Ar macro
-to be set to
-.Ar value .
-Overrides the definition of
-.Ar macro
-in the configuration file.
-.It Fl d
-Do not daemonize.
-Send log output to stderr.
-.It Fl f Ar file
-Set the path to the configuration file.
-If not specified, the file
-.Pa /etc/gotwebd.conf
+.Nd Notes relevant for the -portable version of Game of Trees
+.Sh GOTWEBD WITH AN HTTP SERVER
+In order to make use of
+.Xr gotwebd 8
+an HTTP server needs to be configured to send traffic to
+.Xr gotwebd 8 .
+For the purposes of illustrating this,
+.Xr nginx 1
 will be used.
-.It Fl n
-Parse the configuration file, report errors if any, and exit.
-.It Fl v
-Verbose mode.
-Verbosity increases if this option is used multiple times.
-.El
-.Pp
-Enabling
-.Nm
-requires the following steps:
-.Bl -enum
-.It
-The
-.Xr httpd.conf 5
-configuration file must be adjusted to run
-.Nm
-as a FastCGI helper program.
-The
-.Sx EXAMPLES
-section below contains an appropriate configuration file sample.
-.It
-httpd(8) must be enabled and started:
+.Ss Nginx Configuration
+Setting up nginx involves a server configuration similar to the following:
 .Bd -literal -offset indent
-  # rcctl enable httpd
-  # rcctl start httpd
-.Ed
-.It
-Optionally, the run-time behaviour of
-.Nm
-can be configured via the
-.Xr gotwebd.conf 5
-configuration file.
-.It
-Git repositories must be created.
-These repositories may reside anywhere in the filesystem and must
-be readable, but should
-.Em not
-be writable, by the user
-.Nm
-runs as.
-The default location for repositories published by
-.Nm
-is
-.Pa /var/www/got/public .
-.It
-If the Git repositories served by
-.Nm
-do not receive changes from committers directly, they need to be kept
-up-to-date with a mechanism such as
-.Cm got fetch ,
-.Xr git-fetch 1 ,
-or
-.Xr rsync 1 ,
-scheduled by
-.Xr cron 8 .
-.El
-.Sh FILES
-.Bl -tag -width /var/www/got/public/ -compact
-.It Pa /etc/gotwebd.conf
-Default location of the
-.Xr gotwebd.conf 5
-configuration file.
-.It Pa /var/www/got/public/
-Default location for Git repositories served by
-.Nm .
-This location can be adjusted in the
-.Xr gotwebd.conf 5
-configuration file.
-.It Pa /var/www/bin/gotwebd/
-Directory containing statically linked
-.Xr got 1
-helper programs which are run by
-.Nm
-to read Git repositories.
-.It Pa /var/www/htdocs/gotwebd/
-Directory containing HTML, CSS, and image files used by
-.Nm .
-.It Pa /var/www/run/gotweb.sock
-Default location for the
-.Nm
-listening socket.
-.It Pa /var/run/gotweb-login.sock
-Default location for the
-.Nm
-login socket.
-.It Pa /var/run/gotwebd.sock
-Default location for the
-.Nm
-control socket.
-.Xr gotwebctl 8
-can be used to send commands to
-.Nm
-via this socket.
-.It Pa /tmp/
-Directory for temporary files created by
-.Nm .
-.El
-.Sh EXAMPLES
-Example configuration for
-.Xr httpd.conf 5
-which forwards all requests to
-.Nm :
-.Bd -literal -offset indent
-types { include "/usr/share/misc/mime.types" }
+https {
+	server {
+		listen *:80;
+		root /var/www/htdocs;
 
-server "example.com" {
-	listen on * port 80
-	fastcgi socket "/run/gotweb.sock"
-}
-.Ed
-.Pp
-The following
-.Xr httpd.conf 5
-example makes multiple
-.Nm gotwebd
-instances reachable via the same HTTP server under different URL path prefixes,
-with the first reached via the default
-.Ux Ns -domain socket ,
-and the second configured to listen on localhost port 9000:
-.Bd -literal -offset indent
-server "example.com" {
-	listen on * port 80
+		location / {
+			index index.html;
+		}
 
-	location "/gotwebd-unix/*" {
-		fastcgi socket "/run/gotweb.sock"
-	}
-
-	location "/gotwebd-tcp/*" {
-		fastcgi socket tcp localhost 9000
-	}
-
-	# Redirect requests which lack a trailing slash:
-
-	location "/gotwebd-unix" {
-		block return 302 \\
-			"$REQUEST_SCHEME://$HTTP_HOST$REQUEST_URI/"
-	}
-
-	location "/gotwebd-tcp" {
-		block return 302 \\
-			"$REQUEST_SCHEME://$HTTP_HOST$REQUEST_URI/"
+		location /gotweb {
+			include fastcgi_params;
+			fastcgi_pass unix:/tmp/gotwebd.sock;
+		}
 	}
 }
 .Ed
 .Pp
-When requests do not arrive at the root URL path
-.Dq / ,
-the URL path prefix also needs to be set in the
-.Xr gotwebd.conf 5
-file corresponding to each instance of
-.Nm .
-Following on from the previous example:
+With this directive, port 80 is used.
+There is the location of
+.Dq /
+which is serving the page
+.Dq index.html .
 .Pp
+The location
+.Dq /gotweb
+includes the fastcgi parameters (because
+.Xr gotwebd 8
+is a FastCGI server, this must be included).
+Then, the rest of the requests are forwarded to
+.Xr gotwebd 8
+over the defined unix domain socket.
+Note that the path to the socket must match what's defined in
 .Xr gotwebd.conf 5
-for the
-.Ux Ns -domain socket
-instance of
-.Nm :
+.Ss Gotwebd Configuration
+The following example config shows a bare-minimum example of how to ensure
+.Xr gotwebd 8
+is listening on the appropriate port, and that the relevant parts from
+.Xr nginx 8
+are also referenced correctly.
+This is not meant as a complete tutorial for configuring
+.Xr gotwebd 8 .
+For that, see:
+.Xr gotwebd 8 and
+.Xr gotwebd.conf 5 .
+.Pp
+Note the in-line comments explaining how and why
+.Xr gotwebd 8
+is being configured in this way.
 .Bd -literal -offset indent
-listen on socket "/var/www/run/gotweb.sock"
-server "example.com" {
-	gotweb_url_root "/gotwebd-unix"
+
+# The "www user" line should match the user that's running nginx.
+www user "www-data"
+
+# This is the user which gotwebd should run as.
+#
+# Note that this user must have permission to read the repositories
+# set via `repos_path`.
+#
+# This should be an unprivileged user.
+user n6tadam
+
+# This is the unix domain socket gotwebd will create and listen on.
+# This must also be set correctly in nginx's configuration.
+listen on socket "/tmp/gotwebd.sock"
+
+# Because we told nginx that we wanted to serve up gotwebd traffic via
+# `/gotweb`, we should let gotwebd know this is also where traffic is coming
+# from.
+gotweb_url_root "/gotweb"
+
+# Matches the home directory of the "www user".
+#
+# Note that it is assumed that under this directory 
+chroot "/var/www"
+
+server "localhost" {
+	disable authentication
+	site_name "Public repos"
+	site_owner "Thomas Adam"
+	site_link "Thomas' Projects"
+
+	# This is where all the bare repos live.
+	repos_path "/home/n6tadam/p/got/root/repos"
 }
 .Ed
 .Pp
-.Xr gotwebd.conf 5
-for the TCP instance of
-.Nm :
-.Bd -literal -offset indent
-listen on localhost port 9000
-server "example.com" {
-	gotweb_url_root "/gotwebd-tcp"
-}
-.Ed
+Note that with the configuration above,
+.Xr gotwebd 8
+expects to serve up artefacts relative to the chroot path, which defaults to:
+.Dq htdocs/gotwebd .
+These files might be packaged already, and might live somewhere under
+.Dq /usr/share/got-portable/ .
+However, they are packaged in the release tarball, and the
+.Dq gotwebd/files/htdocs/gotwebd
+directory should be copied to
+.Dq htdocs/
+relative to the chroot line in gotwebd's configuration file.
 .Sh SEE ALSO
 .Xr got 1 ,
-.Xr git-repository 5 ,
 .Xr gotwebd.conf 5 ,
-.Xr httpd.conf 5 ,
 .Xr gotwebctl 8 ,
-.Xr httpd 8
+.Xr nginx 8
 .Sh AUTHORS
-.An Omar Polo Aq Mt op@openbsd.org
-.An Stefan Sperling Aq Mt stsp@openbsd.org
-.An Tracey Emery Aq Mt tracey@traceyemery.net
+.An Thomas Adam Aq Mt thomas@xteddy.org

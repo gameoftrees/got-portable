@@ -31,7 +31,10 @@ EXTRA_DIST = CHANGES \
 	     LICENCE \
 	     README.portable \
 	     regress \
-	     util/got-portable-ver.sh
+	     util/got-portable-ver.sh \
+	     portable-docs/got-portable.7
+
+man7_MANS = portable-docs/got-portable.7
 
 LDADD = $(LIBOBJS)
 if HOST_FREEBSD
