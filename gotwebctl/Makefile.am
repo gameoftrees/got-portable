@@ -9,6 +9,11 @@ gotwebctl_SOURCES = \
 		  $(top_srcdir)/lib/hash.c \
 		  gotwebctl.c
 
+if HOST_DARWIN
+gotwebctl_SOURCES += $(top_srcdir)/lib/portable-socket.c
+endif
+
+
 gotwebctl_DEPENDENCIES = $(top_builddir)/compat/libopenbsd-compat.a
 EXTRA_DIST = gotwebctl.8
 

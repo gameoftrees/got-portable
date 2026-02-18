@@ -14,6 +14,10 @@ got_fetch_http_SOURCES = got-fetch-http.c \
 	$(top_srcdir)/lib/object_qid.c \
 	$(top_srcdir)/lib/object_parse.c
 
+if HOST_DARWIN
+got_fetch_http_SOURCES += $(top_srcdir)/lib/portable-socket.c
+endif
+
 got_fetch_http_DEPENDENCIES = $(top_builddir)/compat/libopenbsd-compat.a
 
 LDADD = -L$(top_builddir)/compat -lopenbsd-compat

@@ -67,6 +67,10 @@ gotd_SOURCES = gotd.c \
 	session_read.c \
 	session_write.c
 
+if HOST_DARWIN
+gotd_SOURCES += $(top_srcdir)/lib/portable-socket.c
+endif
+
 if !HOST_OPENBSD
 gotd_SOURCES += chroot-notobsd.c
 else

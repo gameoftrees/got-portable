@@ -12,6 +12,10 @@ got_notify_http_SOURCES = got-notify-http.c \
 	$(top_srcdir)/lib/opentemp.c \
 	$(top_srcdir)/lib/pollfd.c
 
+if HOST_DARWIN
+got_notify_http_SOURCES += $(top_srcdir)/lib/portable-socket.c
+endif
+
 got_notify_http_DEPENDENCIES = $(top_builddir)/compat/libopenbsd-compat.a
 
 LDADD = -L$(top_builddir)/compat -lopenbsd-compat

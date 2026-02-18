@@ -8,6 +8,10 @@ got_notify_email_SOURCES = got-notify-email.c \
 	$(top_srcdir)/lib/log.c \
 	$(top_srcdir)/lib/pollfd.c
 
+if HOST_DARWIN
+got_notify_email_SOURCES += $(top_srcdir)/lib/portable-socket.c
+endif
+
 got_notify_email_DEPENDENCIES = $(top_builddir)/compat/libopenbsd-compat.a
 
 LDADD = -L$(top_builddir)/compat -lopenbsd-compat

@@ -18,6 +18,10 @@ got_index_pack_SOURCES = got-index-pack.c \
 	$(top_srcdir)/lib/ratelimit.c \
 	$(top_srcdir)/lib/hash.c
 
+if HOST_DARWIN
+got_index_pack_SOURCES += $(top_srcdir)/lib/portable-socket.c
+endif
+
 got_index_pack_DEPENDENCIES = $(top_builddir)/compat/libopenbsd-compat.a
 
 LDADD = -L$(top_builddir)/compat -lopenbsd-compat

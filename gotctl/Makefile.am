@@ -16,7 +16,11 @@ gotctl_SOURCES = gotctl.c \
 	$(top_srcdir)/lib/path.c \
 	$(top_srcdir)/lib/pollfd.c \
 	$(top_srcdir)/lib/reference_parse.c
-       
+
+if HOST_DARWIN
+gotctl_SOURCES += $(top_srcdir)/lib/portable-socket.c
+endif
+
 gotctl_DEPENDENCIES = $(top_builddir)/compat/libopenbsd-compat.a
 EXTRA_DIST = gotctl.8
 

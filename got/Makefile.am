@@ -66,6 +66,10 @@ EXTRA_DIST = $(top_srcdir)/compat/*.[ch] \
 	     $(top_srcdir)/include/*.[ch] \
 	     got.1 got.conf.5 git-repository.5 got-worktree.5
 
+if HOST_DARWIN
+got_SOURCES += $(top_srcdir)/lib/portable-socket.c
+endif
+
 got_DEPENDENCIES = $(top_builddir)/compat/libopenbsd-compat.a
 
 man1_MANS = got.1

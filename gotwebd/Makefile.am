@@ -74,6 +74,10 @@ gotwebd_SOURCES = config.c \
 		  parse.y \
 		  sockets.c
 
+if HOST_DARWIN
+gotwebd_SOURCES += $(top_srcdir)/lib/portable-socket.c
+endif
+
 gotwebd_DEPENDENCIES = $(top_builddir)/compat/libopenbsd-compat.a
 EXTRA_DIST = $(top_srcdir)/gotwebd/*.h \
 	     $(top_srcdir)/gotwebd/*.tmpl \

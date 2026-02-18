@@ -55,6 +55,10 @@ tog_SOURCES = tog.c \
 	$(top_srcdir)/lib/worktree.c \
 	$(top_srcdir)/lib/worktree_open.c
 
+if HOST_DARWIN
+tog_SOURCES += $(top_srcdir)/lib/portable-socket.c
+endif
+
 tog_DEPENDENCIES = $(top_builddir)/compat/libopenbsd-compat.a
 
 man1_MANS = tog.1

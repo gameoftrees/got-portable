@@ -43,6 +43,10 @@ gotadmin_SOURCES = gotadmin.c \
        $(top_srcdir)/lib/sigs.c \
        $(top_srcdir)/lib/worktree_open.c
 
+if HOST_DARWIN
+gotadmin_SOURCES += $(top_srcdir)/lib/portable-socket.c
+endif
+
 gotadmin_DEPENDENCIES = $(top_builddir)/compat/libopenbsd-compat.a
 EXTRA_DIST = gotadmin.1
 

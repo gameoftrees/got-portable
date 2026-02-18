@@ -18,6 +18,10 @@ got_read_pack_SOURCES = got-read-pack.c \
 	$(top_srcdir)/lib/pollfd.c \
 	$(top_srcdir)/lib/privsep.c
 
+if HOST_DARWIN
+got_read_pack_SOURCES += $(top_srcdir)/lib/portable-socket.c
+endif
+
 got_read_pack_DEPENDENCIES = $(top_builddir)/compat/libopenbsd-compat.a
 
 LDADD = -L$(top_builddir)/compat -lopenbsd-compat

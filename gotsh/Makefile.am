@@ -19,7 +19,11 @@ gotsh_SOURCES = gotsh.c \
 	$(top_srcdir)/lib/pollfd.c \
 	$(top_srcdir)/lib/reference_parse.c \
 	$(top_srcdir)/lib/serve.c
-       
+
+if HOST_DARWIN
+gotsh_SOURCES += $(top_srcdir)/lib/portable-socket.c
+endif
+
 gotsh_DEPENDENCIES = $(top_builddir)/compat/libopenbsd-compat.a
 EXTRA_DIST = gotsh.1
 

@@ -264,9 +264,17 @@ void uuid_to_string(uuid_t *, char **, uint32_t *);
 #define SHA1Final	SHA1_Final
 #endif
 
+#ifdef HAVE_SYS_SOCKET_H
+#include <sys/socket.h>
+#endif
+
 /* SOCK_NONBLOCK isn't available across BSDs... */
 #if !defined(SOCK_NONBLOCK) && !defined(__linux__)
 #define SOCK_NONBLOCK 00004000
+#endif
+
+#if !defined(SOCK_CLOEXEC) && !defined(__linux__)
+#define SOCK_CLOEXEC 0x80000
 #endif
 
 #ifndef HAVE_ASPRINTF
@@ -410,6 +418,23 @@ int	BSDgetopt(int, char *const *, const char *);
 #ifndef HAVE_MERGESORT
 /* mergesort.c */
 int mergesort(void *, size_t, size_t, int (*)(const void *, const void *));
+#endif
+
+/*
+ * Portable socket wrappers. SOCK_NONBLOCK and SOCK_CLOEXEC work directly
+ * on Linux but not on MacOS, which require fcntl() after creation.
+ */
+#if defined(__APPLE__)
+#include <fcntl.h>
+#include <unistd.h>
+
+int got_socket_compat(int, int, int);
+int got_socketpair_compat(int, int, int, int *);
+
+#define socket(domain, type, proto) \
+    got_socket_compat(domain, type, proto)
+#define socketpair(domain, type, proto, sv) \
+    got_socketpair_compat(domain, type, proto, sv)
 #endif
 #endif
 

@@ -17,6 +17,10 @@ gitwrapper_SOURCES = gitwrapper.c \
 		  $(top_srcdir)/lib/path.c \
 		  $(top_srcdir)/lib/reference_parse.c
 
+if HOST_DARWIN
+gitwrapper_SOURCES += $(top_srcdir)/lib/portable-socket.c
+endif
+
 gitwrapper_DEPENDENCIES = $(top_builddir)/compat/libopenbsd-compat.a
 EXTRA_DIST = gitwrapper.1
 
