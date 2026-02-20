@@ -699,12 +699,12 @@ test_cleanup_no_head_branch() {
 	local commit_id=`git_show_head $testroot/repo`
 
 	# create a dangling HEAD reference
-	echo 'ref: refs/heads/main' > $testroot/repo/.git/HEAD
+	echo 'ref: refs/heads/foo' > $testroot/repo/.git/HEAD
 
 	# list references
 	got ref -r $testroot/repo -l > $testroot/stdout
 	cat > $testroot/stdout.expected <<EOF
-HEAD: refs/heads/main
+HEAD: refs/heads/foo
 refs/heads/master: $commit_id
 EOF
 	cmp -s $testroot/stdout.expected $testroot/stdout
