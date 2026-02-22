@@ -1900,7 +1900,7 @@ are as follows:
 .It Fl I
 Add files even if they match an ignore pattern.
 See
-.Xs Ignore Patterns .
+.Sx Ignore Patterns .
 .It Fl R
 Permit recursion into directories.
 If this option is not specified,
@@ -3871,7 +3871,7 @@ Unlike
 does not support negated ignore patterns prefixed with
 .Dq \&! ,
 and does not match patterns at arbitrary depth relative to the
-.Pa .gitignore 
+.Pa .gitignore
 file unless they begin with
 .Dq **/ .
 For better
@@ -3899,7 +3899,8 @@ attempts to reject
 .Ev GOT_AUTHOR
 environment variables with a missing email address.
 .Pp
-.Ev GOT_AUTHOR will be overridden by configuration settings in
+.Ev GOT_AUTHOR
+will be overridden by configuration settings in
 .Xr got.conf 5
 or by Git's
 .Dv user.name
