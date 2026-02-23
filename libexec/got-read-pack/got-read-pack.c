@@ -52,6 +52,10 @@
 #define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0]))
 #endif
 
+#ifndef MINIMUM
+#define MINIMUM(a, b)	((a) < (b) ? (a) : (b))
+#endif
+
 static volatile sig_atomic_t sigint_received;
 
 static void
@@ -1279,21 +1283,23 @@ enumerate_tree(int *have_all_entries, struct imsgbuf *ibuf, size_t *totlen,
 		for (i = 0; i < nentries; i++) {
 			struct got_object_qid *eqid = NULL;
 			struct got_parsed_tree_entry *pte = &entries[i];
+			struct got_object_id id;
 			char *p;
 
 			if (!S_ISDIR(pte->mode))
 				continue;
 
+			id.algo = pte->algo;
+			memcpy(id.hash, pte->id,
+			    MINIMUM(pte->digest_len, sizeof(id.hash)));
+			if (got_object_idset_contains(idset, &id))
+				continue;
+
 			err = got_object_qid_alloc_partial(&eqid);
 			if (err)
 				goto done;
-			eqid->id.algo = pte->algo;
-			memcpy(eqid->id.hash, pte->id, pte->digest_len);
-
-			if (got_object_idset_contains(idset, &eqid->id)) {
-				got_object_qid_free(eqid);
-				continue;
-			}
+	
+			memcpy(&eqid->id, &id, sizeof(eqid->id));
 
 			if (asprintf(&p, "%s%s%s", path,
 			    got_path_is_root_dir(path) ? "" : "/",
