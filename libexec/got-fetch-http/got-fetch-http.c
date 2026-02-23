@@ -47,8 +47,6 @@
 #define MINIMUM(a, b)	((a) < (b) ? (a) : (b))
 #define hasprfx(str, p)	(strncasecmp(str, p, strlen(p)) == 0)
 
-FILE *tmp;
-
 static int	verbose;
 
 static char *
@@ -585,7 +583,6 @@ main(int argc, char **argv)
 
 	ungetc(ch, stdin);
 	if (upload_request(https, host, port, path, stdin) == -1) {
-		fflush(tmp);
 		errx(1, "failed to upload request");
 	}
 
