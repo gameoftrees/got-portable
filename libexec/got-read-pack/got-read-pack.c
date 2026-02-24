@@ -1989,10 +1989,6 @@ receive_pack(struct got_pack **packp, struct imsgbuf *ibuf)
 		goto done;
 	}
 
-	err = got_delta_cache_alloc(&pack->delta_cache);
-	if (err)
-		goto done;
-
 #ifndef GOT_PACK_NO_MMAP
 	if (pack->filesize > 0 && pack->filesize <= SIZE_MAX) {
 		pack->map = mmap(NULL, pack->filesize, PROT_READ, MAP_PRIVATE,
