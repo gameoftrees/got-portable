@@ -123,6 +123,12 @@ idset_hash(SIPHASH_KEY *key, struct got_object_id *id)
 	return SipHash24(key, id->hash, got_hash_digest_length(id->algo));
 }
 
+static uint64_t
+idset_hash_hash(SIPHASH_KEY *key, enum got_hash_algorithm algo, uint8_t *hash)
+{
+	return SipHash24(key, hash, got_hash_digest_length(algo));
+}
+
 static const struct got_error *
 idset_add(struct got_object_idset_bucket *bucket, struct got_object_id *id,
     void *data)
@@ -405,6 +411,47 @@ got_object_idset_contains(struct got_object_idset *set,
 	void *data_found;
 
 	find_element(&id_found, &data_found, set, id);
+	return id_found ? 1 : 0;
+}
+
+static void
+find_element_hash(struct got_object_id **id_found, void **data_found,
+    struct got_object_idset *set, enum got_hash_algorithm algo,
+    uint8_t *hash)
+{
+	uint64_t idx = idset_hash_hash(&set->key, algo, hash) % set->nbuckets;
+	struct got_object_idset_bucket *bucket = &set->buckets[idx];
+	struct got_object_qid *qid;
+
+	*id_found = NULL;
+	*data_found = NULL;
+
+	if (bucket->id.algo == GOT_OBJECT_IDSET_SLOT_EMPTY)
+		return;
+
+	if (got_hash_cmp(algo, bucket->id.hash, hash) == 0) {
+		*id_found = &bucket->id;
+		*data_found = bucket->data;
+		return;
+	}
+
+	STAILQ_FOREACH(qid, &bucket->ids, entry) {
+		if (got_hash_cmp(algo, qid->id.hash, hash) == 0) {
+			*id_found = &qid->id;
+			*data_found = qid->data;
+			return;
+		}
+	}
+}
+
+int
+got_object_idset_contains_hash(struct got_object_idset *set,
+    enum got_hash_algorithm algo, uint8_t *hash)
+{
+	struct got_object_id *id_found;
+	void *data_found;
+
+	find_element_hash(&id_found, &data_found, set, algo, hash);
 	return id_found ? 1 : 0;
 }
 
