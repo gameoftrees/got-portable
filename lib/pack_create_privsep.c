@@ -211,7 +211,6 @@ struct recv_painted_commit_arg {
 	struct got_ratelimit *rl;
 	got_cancel_cb cancel_cb;
 	void *cancel_arg;
-	struct got_object_qid **qid0;
 };
 
 static const struct got_error *
@@ -276,8 +275,7 @@ recv_painted_commit(void *arg, struct got_object_id *id, intptr_t color)
 }
 
 static const struct got_error *
-paint_packed_commits(struct got_object_qid **qid0,
-    struct got_pack *pack, intptr_t color,
+paint_packed_commits(struct got_pack *pack, intptr_t color,
     int *ncolored, int *nqueued, int *nskip, struct got_object_id_queue *ids,
     struct got_object_idset *keep, struct got_object_idset *drop,
     struct got_object_idset *skip, struct got_repository *repo,
@@ -312,7 +310,6 @@ paint_packed_commits(struct got_object_qid **qid0,
 	arg.rl = rl;
 	arg.cancel_cb = cancel_cb;
 	arg.cancel_arg = cancel_arg;
-	arg.qid0 = qid0;
 	err = got_privsep_recv_painted_commits(&next_ids,
 	    recv_painted_commit, &arg, pack->privsep_child->ibuf);
 	if (err)
@@ -428,34 +425,41 @@ got_pack_paint_commits(int *ncolored, struct got_object_id_queue *ids, int nids,
 			if (idx != -1) {
 				err = got_privsep_init_commit_painting(
 				    pack->privsep_child->ibuf);
-				if (err)
+				if (err) {
+					qid = NULL;
 					goto done;
+				}
 				err = send_idset(pack->privsep_child->ibuf,
 				    keep);
-				if (err)
+				if (err) {
+					qid = NULL;
 					goto done;
+				}
 				err = send_idset(pack->privsep_child->ibuf,
 				    drop);
-				if (err)
+				if (err) {
+					qid = NULL;
 					goto done;
+				}
 				err = send_idset(pack->privsep_child->ibuf,
 				    skip);
-				if (err)
+				if (err) {
+					qid = NULL;
 					goto done;
-				err = paint_packed_commits(&qid, pack,
+				}
+				err = paint_packed_commits(pack,
 				    color, ncolored, &nqueued, &nskip,
 				    ids, keep, drop, skip, repo,
 				    progress_cb, progress_arg, rl,
 				    cancel_cb, cancel_arg);
-				if (qid) {
-					STAILQ_REMOVE(ids, qid,
-					    got_object_qid, entry);
-					nqueued--;
-					got_object_qid_free(qid);
+				if (err) {
 					qid = NULL;
-				}
-				if (err)
 					goto done;
+				}
+				STAILQ_REMOVE(ids, qid, got_object_qid, entry);
+				nqueued--;
+				got_object_qid_free(qid);
+				qid = NULL;
 				continue;
 			}
 		}
