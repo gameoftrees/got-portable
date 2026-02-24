@@ -17,6 +17,7 @@
 enum got_hash_algorithm {
 	GOT_HASH_SHA1,
 	GOT_HASH_SHA256,
+	GOT_NUM_HASH_ALGOS,
 };
 
 struct got_object_id {

@@ -39,8 +39,19 @@
 
 #define GOT_OBJECT_IDSET_MIN_BUCKETS	64
 
+#define GOT_OBJECT_IDSET_SLOT_EMPTY	GOT_NUM_HASH_ALGOS
+
+struct got_object_idset_bucket {
+	/* The first element hashed into this bucket is stored inline. */
+	struct got_object_id id;
+	void *data;
+
+	/* List of further elements populated during hash collisions. */
+	struct got_object_id_queue ids;
+};
+
 struct got_object_idset {
-	struct got_object_id_queue *ids;
+	struct got_object_idset_bucket *buckets;
 	size_t nbuckets;
 	unsigned int totelem;
 	unsigned int flags;
@@ -49,23 +60,34 @@ struct got_object_idset {
 	SIPHASH_KEY key;
 };
 
+static void
+init_hash_buckets(struct got_object_idset_bucket *buckets, int nbuckets)
+{
+	int i;
+
+	for (i = 0; i < nbuckets; i++) {
+		buckets[i].id.algo = GOT_OBJECT_IDSET_SLOT_EMPTY;
+		STAILQ_INIT(&buckets[i].ids);
+	}
+}
+
 struct got_object_idset *
 got_object_idset_alloc(void)
 {
 	struct got_object_idset *set;
-	int i;
 
 	set = malloc(sizeof(*set));
 	if (set == NULL)
 		return NULL;
 
-	set->ids = calloc(GOT_OBJECT_IDSET_MIN_BUCKETS, sizeof(set->ids[0]));
-	if (set->ids == NULL) {
+	set->buckets = calloc(GOT_OBJECT_IDSET_MIN_BUCKETS,
+	    sizeof(set->buckets[0]));
+	if (set->buckets == NULL) {
 		free(set);
 		return NULL;
-	}
-	for (i = 0; i < GOT_OBJECT_IDSET_MIN_BUCKETS; i++)
-		STAILQ_INIT(&set->ids[i]);
+	} 
+
+	init_hash_buckets(set->buckets, GOT_OBJECT_IDSET_MIN_BUCKETS);
 
 	set->totelem = 0;
 	set->nbuckets = GOT_OBJECT_IDSET_MIN_BUCKETS;
@@ -81,31 +103,69 @@ got_object_idset_free(struct got_object_idset *set)
 	struct got_object_qid *qid;
 
 	for (i = 0; i < set->nbuckets; i++) {
-		while (!STAILQ_EMPTY(&set->ids[i])) {
-			qid = STAILQ_FIRST(&set->ids[i]);
-			STAILQ_REMOVE(&set->ids[i], qid, got_object_qid, entry);
+		while (!STAILQ_EMPTY(&set->buckets[i].ids)) {
+			qid = STAILQ_FIRST(&set->buckets[i].ids);
+			STAILQ_REMOVE(&set->buckets[i].ids, qid,
+			    got_object_qid, entry);
 			got_object_qid_free(qid);
 		}
 	}
 	/* User data should be freed by caller. */
-	free(set->ids);
+	free(set->buckets);
 	free(set);
 }
 
 static uint64_t
-idset_hash(struct got_object_idset *set, struct got_object_id *id)
+idset_hash(SIPHASH_KEY *key, struct got_object_id *id)
 {
-	return SipHash24(&set->key, id->hash, got_hash_digest_length(id->algo));
+	return SipHash24(key, id->hash, got_hash_digest_length(id->algo));
+}
+
+static const struct got_error *
+idset_add(struct got_object_idset_bucket *bucket, struct got_object_id *id,
+    void *data)
+{
+	const struct got_error *err;
+	struct got_object_qid *qid;
+
+	/*
+	 * The initial element added is stored in the array itself to
+	 * to save some malloc/free calls.
+	 j We overload id->algo as an 'empty slot' flag which works
+	 * because valid IDs always use a valid hash algorithm.
+	 */
+	if (id->algo == GOT_OBJECT_IDSET_SLOT_EMPTY)
+		return got_error_fmt(GOT_ERR_BAD_OBJ_ID, "%s", __func__);
+	if (bucket->id.algo == GOT_OBJECT_IDSET_SLOT_EMPTY) {
+		memcpy(&bucket->id, id, sizeof(bucket->id));
+		bucket->data = data;
+		return NULL;
+	}
+
+	/*
+	 * There is a hash collision. Append this element to the linked list
+	 * instead of storing it inline, paying the cost of malloc/free.
+	 */
+	err = got_object_qid_alloc_partial(&qid);
+	if (err)
+		return err;
+
+	memcpy(&qid->id, id, sizeof(qid->id));
+	qid->data = data;
+	STAILQ_INSERT_HEAD(&bucket->ids, qid, entry);
+	return NULL;
 }
 
 static const struct got_error *
 idset_resize(struct got_object_idset *set, size_t nbuckets)
 {
-	struct got_object_id_queue *ids;
+	const struct got_error *err = NULL;
+	struct got_object_idset_bucket *buckets;
+	SIPHASH_KEY key;
 	size_t i;
 
-	ids = calloc(nbuckets, sizeof(ids[0]));
-	if (ids == NULL) {
+	buckets = calloc(nbuckets, sizeof(buckets[0]));
+	if (buckets == NULL) {
 		if (errno != ENOMEM)
 			return got_error_from_errno("calloc");
 		/* Proceed with our current amount of hash buckets. */
@@ -113,25 +173,60 @@ idset_resize(struct got_object_idset *set, size_t nbuckets)
 		return NULL;
 	}
 
-	for (i = 0; i < nbuckets; i++)
-		STAILQ_INIT(&ids[i]);
+	init_hash_buckets(buckets, nbuckets);
 
-	arc4random_buf(&set->key, sizeof(set->key));
+	arc4random_buf(&key, sizeof(key));
 
 	for (i = 0; i < set->nbuckets; i++) {
-		while (!STAILQ_EMPTY(&set->ids[i])) {
+		uint64_t idx;
+	
+		if (set->buckets[i].id.algo == GOT_OBJECT_IDSET_SLOT_EMPTY)
+			continue;
+
+		/*
+		 * Copy collisions into the new table first since this
+		 * might free up some memory. The new larger hash table
+		 * should be able to store more elements inline.
+		 */
+		while (!STAILQ_EMPTY(&set->buckets[i].ids)) {
 			struct got_object_qid *qid;
-			uint64_t idx;
-			qid = STAILQ_FIRST(&set->ids[i]);
-			STAILQ_REMOVE(&set->ids[i], qid, got_object_qid, entry);
-			idx = idset_hash(set, &qid->id) % nbuckets;
-			STAILQ_INSERT_HEAD(&ids[idx], qid, entry);
+
+			qid = STAILQ_FIRST(&set->buckets[i].ids);
+			STAILQ_REMOVE(&set->buckets[i].ids, qid,
+			    got_object_qid, entry);
+			idx = idset_hash(&key, &qid->id) % nbuckets;
+
+			if (buckets[idx].id.algo ==
+			    GOT_OBJECT_IDSET_SLOT_EMPTY) {
+				memcpy(&buckets[idx].id, &qid->id,
+				    sizeof(buckets[idx].id));
+				buckets[idx].data = qid->data;
+				got_object_qid_free(qid);
+			} else {
+				STAILQ_INSERT_HEAD(&buckets[idx].ids, qid,
+				    entry);
+			}
 		}
+
+		/*
+		 * Now add the inline element. We will have to allocate memory
+		 * if there is a hash collision. We don't try to cope with
+		 * allocation failure here because our previous hash table
+		 * has already been partly destroyed and trying to rebuild
+		 * it would likely also fail.
+		 */
+		idx = idset_hash(&key, &set->buckets[i].id) % nbuckets;
+		err = idset_add(&buckets[idx], &set->buckets[i].id,
+		    set->buckets[i].data);
+		if (err)
+			return err;
+
 	}
 
-	free(set->ids);
-	set->ids = ids;
+	free(set->buckets);
+	set->buckets = buckets;
 	set->nbuckets = nbuckets;
+	memcpy(&set->key, &key, sizeof(set->key));
 	return NULL;
 }
 
@@ -140,7 +235,8 @@ idset_grow(struct got_object_idset *set)
 {
 	size_t nbuckets;
 
-	if (set->flags & GOT_OBJECT_IDSET_F_NOMEM)
+	if ((set->flags & GOT_OBJECT_IDSET_F_NOMEM) ||
+	    set->nbuckets == UINT_MAX)
 		return NULL;
 
 	if (set->nbuckets >= UINT_MAX / 2)
@@ -156,9 +252,8 @@ got_object_idset_add(struct got_object_idset *set, struct got_object_id *id,
     void *data)
 {
 	const struct got_error *err;
-	struct got_object_qid *qid;
 	uint64_t idx;
-	struct got_object_id_queue *head;
+	struct got_object_idset_bucket *bucket;
 
 	/* This function may resize the set. */
 	if (set->flags & GOT_OBJECT_IDSET_F_TRAVERSAL)
@@ -168,43 +263,56 @@ got_object_idset_add(struct got_object_idset *set, struct got_object_id *id,
 	if (set->totelem == UINT_MAX)
 		return got_error(GOT_ERR_NO_SPACE);
 
-	err = got_object_qid_alloc_partial(&qid);
+	idx = idset_hash(&set->key, id) % set->nbuckets;
+	bucket = &set->buckets[idx];
+	err = idset_add(bucket, id, data);
 	if (err)
 		return err;
-	memcpy(&qid->id, id, sizeof(qid->id));
-	qid->data = data;
-
-	idx = idset_hash(set, id) % set->nbuckets;
-	head = &set->ids[idx];
-	STAILQ_INSERT_HEAD(head, qid, entry);
 	set->totelem++;
 
-	if (set->nbuckets < set->totelem)
+	if (((uint64_t)set->nbuckets) * 3 < ((uint64_t)set->totelem) * 4)
 		err = idset_grow(set);
 
 	return err;
 }
 
-static struct got_object_qid *
-find_element(struct got_object_idset *set, struct got_object_id *id)
+static void
+find_element(struct got_object_id **id_found, void **data_found,
+    struct got_object_idset *set, struct got_object_id *id)
 {
-	uint64_t idx = idset_hash(set, id) % set->nbuckets;
-	struct got_object_id_queue *head = &set->ids[idx];
+	uint64_t idx = idset_hash(&set->key, id) % set->nbuckets;
+	struct got_object_idset_bucket *bucket = &set->buckets[idx];
 	struct got_object_qid *qid;
 
-	STAILQ_FOREACH(qid, head, entry) {
-		if (got_object_id_cmp(&qid->id, id) == 0)
-			return qid;
+	*id_found = NULL;
+	*data_found = NULL;
+
+	if (bucket->id.algo == GOT_OBJECT_IDSET_SLOT_EMPTY)
+		return;
+
+	if (got_object_id_cmp(&bucket->id, id) == 0) {
+		*id_found = id;
+		*data_found = bucket->data;
+		return;
 	}
 
-	return NULL;
+	STAILQ_FOREACH(qid, &bucket->ids, entry) {
+		if (got_object_id_cmp(&qid->id, id) == 0) {
+			*id_found = id;
+			*data_found = qid->data;
+			return;
+		}
+	}
 }
 
 void *
 got_object_idset_get(struct got_object_idset *set, struct got_object_id *id)
 {
-	struct got_object_qid *qid = find_element(set, id);
-	return qid ? qid->data : NULL;
+	struct got_object_id *id_found;
+	void *data_found;
+
+	find_element(&id_found, &data_found, set, id);
+	return id_found ? data_found : NULL;
 }
 
 const struct got_error *
@@ -212,8 +320,8 @@ got_object_idset_remove(void **data, struct got_object_idset *set,
     struct got_object_id *id)
 {
 	uint64_t idx;
-	struct got_object_id_queue *head;
-	struct got_object_qid *qid;
+	struct got_object_idset_bucket *bucket;
+	struct got_object_qid *qid = NULL;
 
 	if (data)
 		*data = NULL;
@@ -224,26 +332,64 @@ got_object_idset_remove(void **data, struct got_object_idset *set,
 	if (id == NULL) {
 		/* Remove a "random" element. */
 		for (idx = 0; idx < set->nbuckets; idx++) {
-			head = &set->ids[idx];
-			qid = STAILQ_FIRST(head);
-			if (qid)
+			bucket = &set->buckets[idx];
+			if (bucket->id.algo == GOT_OBJECT_IDSET_SLOT_EMPTY)	
+				continue;
+
+			if (STAILQ_EMPTY(&bucket->ids)) {
+				if (data)
+					*data = bucket->data;
+				bucket->data = NULL;
+				memset(&bucket->id, 0, sizeof(bucket->id));
+				bucket->id.algo = GOT_OBJECT_IDSET_SLOT_EMPTY;
 				break;
+			} else {
+				qid = STAILQ_FIRST(&bucket->ids);
+				STAILQ_REMOVE(&bucket->ids, qid,
+				    got_object_qid, entry);
+				if (data)
+					*data = qid->data;
+				got_object_qid_free(qid);
+				break;
+			}
 		}
 	} else {
-		idx = idset_hash(set, id) % set->nbuckets;
-		head = &set->ids[idx];
-		STAILQ_FOREACH(qid, head, entry) {
-			if (got_object_id_cmp(&qid->id, id) == 0)
-				break;
-		}
-		if (qid == NULL)
+		idx = idset_hash(&set->key, id) % set->nbuckets;
+		bucket = &set->buckets[idx];
+		if (bucket->id.algo == GOT_OBJECT_IDSET_SLOT_EMPTY)	
 			return got_error_no_obj(id);
+
+		if (got_object_id_cmp(&bucket->id, id) == 0) {
+			if (data)
+				*data = bucket->data;
+			if (STAILQ_EMPTY(&bucket->ids)) {
+				bucket->data = NULL;
+				memset(&bucket->id, 0, sizeof(bucket->id));
+				bucket->id.algo = GOT_OBJECT_IDSET_SLOT_EMPTY;
+			} else {
+				qid = STAILQ_FIRST(&bucket->ids);
+				STAILQ_REMOVE(&bucket->ids, qid,
+				    got_object_qid, entry);
+				memcpy(&bucket->id, &qid->id,
+				    sizeof(bucket->id));
+				bucket->data = qid->data;
+				got_object_qid_free(qid);
+			}
+		} else {
+			STAILQ_FOREACH(qid, &bucket->ids, entry) {
+				if (got_object_id_cmp(&qid->id, id) == 0)
+					break;
+			}
+			if (qid == NULL)
+				return got_error_no_obj(id);
+
+			STAILQ_REMOVE(&bucket->ids, qid, got_object_qid, entry);
+			if (data)
+				*data = qid->data;
+			got_object_qid_free(qid);
+		}
 	}
 
-	if (data)
-		*data = qid->data;
-	STAILQ_REMOVE(head, qid, got_object_qid, entry);
-	got_object_qid_free(qid);
 	set->totelem--;
 
 	return NULL;
@@ -253,8 +399,11 @@ int
 got_object_idset_contains(struct got_object_idset *set,
     struct got_object_id *id)
 {
-	struct got_object_qid *qid = find_element(set, id);
-	return qid ? 1 : 0;
+	struct got_object_id *id_found;
+	void *data_found;
+
+	find_element(&id_found, &data_found, set, id);
+	return id_found ? 1 : 0;
 }
 
 const struct got_error *
@@ -263,14 +412,22 @@ got_object_idset_for_each(struct got_object_idset *set,
     void *arg)
 {
 	const struct got_error *err = NULL;
-	struct got_object_id_queue *head;
+	struct got_object_idset_bucket *bucket;
 	struct got_object_qid *qid, *tmp;
 	size_t i;
 
 	set->flags |= GOT_OBJECT_IDSET_F_TRAVERSAL;
 	for (i = 0; i < set->nbuckets; i++) {
-		head = &set->ids[i];
-		STAILQ_FOREACH_SAFE(qid, head, entry, tmp) {
+		bucket = &set->buckets[i];
+	
+		if (bucket->id.algo == GOT_OBJECT_IDSET_SLOT_EMPTY)
+			continue;
+
+		err = (*cb)(&bucket->id, bucket->data, arg);
+		if (err)
+			break;
+
+		STAILQ_FOREACH_SAFE(qid, &bucket->ids, entry, tmp) {
 			err = (*cb)(&qid->id, qid->data, arg);
 			if (err)
 				goto done;
