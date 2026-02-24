@@ -775,13 +775,18 @@ got_pack_load_tree_entries(struct got_object_id_queue *ids, int want_meta,
 {
 	const struct got_error *err;
 	char *p = NULL;
-	int i;
+	int i, ret, psize = PATH_MAX;
 
 	(*ntrees)++;
 	err = got_pack_report_progress(progress_cb, progress_arg, rl,
 	    *ncolored, *nfound, *ntrees, 0L, 0, 0, 0, 0, 0);
 	if (err)
 		return err;
+
+	p = malloc(psize);
+	if (p == NULL)
+		return got_error_from_errno("malloc");
+	p[0] = '\0';
 
 	for (i = 0; i < got_object_tree_get_nentries(tree); i++) {
 		struct got_tree_entry *e = got_object_tree_get_entry(tree, i);
@@ -806,11 +811,35 @@ got_pack_load_tree_entries(struct got_object_id_queue *ids, int want_meta,
 		if (ids == NULL && S_ISDIR(mode))
 			continue;
 
-		if (asprintf(&p, "%s%s%s", dpath,
+		ret = snprintf(p, psize, "%s%s%s", dpath,
 		    got_path_is_root_dir(dpath) ? "" : "/",
-		    got_tree_entry_get_name(e)) == -1) {
-			err = got_error_from_errno("asprintf");
+		    got_tree_entry_get_name(e));
+		if (ret == -1) {
+			err = got_error_from_errno("snprintf");
 			break;
+		}
+		if (ret >= psize) {
+			char *s;
+
+			s = realloc(p, ret + 1);
+			if (s == NULL) {
+				err = got_error_from_errno("realloc");
+				break;
+			}
+			p = s;
+			psize = ret + 1;
+
+			ret = snprintf(p, psize, "%s%s%s", dpath,
+			    got_path_is_root_dir(dpath) ? "" : "/",
+			    got_tree_entry_get_name(e));
+			if (ret == -1) {
+				err = got_error_from_errno("snprintf");
+				break;
+			}
+			if (ret >= psize) { /* should not happen */
+				err = got_error(GOT_ERR_NO_SPACE);
+				break;
+			}
 		}
 
 		if (S_ISDIR(mode)) {
@@ -818,8 +847,11 @@ got_pack_load_tree_entries(struct got_object_id_queue *ids, int want_meta,
 			err = got_object_qid_alloc(&qid, id);
 			if (err)
 				break;
-			qid->data = p;
-			p = NULL;
+			qid->data = strdup(p);
+			if (qid->data == NULL) {
+				err = got_error_from_errno("strdup");
+				break;
+			}
 			STAILQ_INSERT_TAIL(ids, qid, entry);
 		} else if (S_ISREG(mode) || S_ISLNK(mode)) {
 			err = got_pack_add_object(want_meta,
@@ -829,11 +861,6 @@ got_pack_load_tree_entries(struct got_object_id_queue *ids, int want_meta,
 			    progress_cb, progress_arg, rl);
 			if (err)
 				break;
-			free(p);
-			p = NULL;
-		} else {
-			free(p);
-			p = NULL;
 		}
 	}
 
