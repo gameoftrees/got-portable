@@ -1633,7 +1633,7 @@ got_pack_dump_delta_chain_to_file(size_t *result_size,
 				free(delta_buf);
 			if (err)
 				goto done;
-			if (fulltext == NULL) {
+			if (pack->delta_cache && fulltext == NULL) {
 				err = got_delta_cache_add_fulltext(
 				    pack->delta_cache, delta->data_offset,
 				    accum_buf, accum_size);
@@ -1895,7 +1895,7 @@ got_pack_dump_delta_chain_to_mem(uint8_t **outbuf, size_t *outlen,
 		if (err)
 			goto done;
 
-		if (fulltext == NULL) {
+		if (pack->delta_cache && fulltext == NULL) {
 			err = got_delta_cache_add_fulltext(pack->delta_cache,
 			    delta->data_offset, accum_buf, accum_size);
 			if (err) {
