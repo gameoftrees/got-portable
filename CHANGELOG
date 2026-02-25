@@ -6,6 +6,23 @@ other than OpenBSD.
 
 All changes are on top of the versioned changes listed in CHANGES.
 
+# got-portable 0.123 (2026-02-25)
+
+* Changes from got-0.123
+
+  Plus:
+    - portable: add got-portable.7 man page
+
+      This introduces a new got-portable man page which has some helpful
+      information for the -portable versio of GoT.  Especially with
+      configuring services such as gotwebd(8).
+
+    - portable: MacOS: portably handle sockets
+
+      Socket handling on MacOS needed extra help with SOCK_NONBLOCK and
+      SOCK_CLOEXEC.  This is how handled via fcntl() in those cases.  This
+      applies across the code base.  This is just being used on MacOS.
+
 # got-portable 0.122 (2026-02-10)
 
 * Changes from got-0.122
