@@ -498,7 +498,7 @@ spawn_process(struct gotwebd *env, const char *argv0, struct imsgev *iev,
     enum gotwebd_proc_type proc_type, const char *username,
     const char *www_user, void (*handler)(int, short, void *))
 {
-	const char	*argv[10];
+	const char	*argv[12];
 	int		 argc = 0;
 	int		 p[2];
 	pid_t		 pid;
@@ -556,6 +556,10 @@ spawn_process(struct gotwebd *env, const char *argv0, struct imsgev *iev,
 	} else if (proc_type == GOTWEBD_PROC_GOTWEB) {
 		argv[argc++] = "-G";
 		argv[argc++] = usernames;
+	}
+	if (strcmp(env->httpd_chroot, D_HTTPD_CHROOT) != 0) {
+		argv[argc++] = "-C";
+		argv[argc++] = env->httpd_chroot;
 	}
 	if (strcmp(env->gotwebd_conffile, GOTWEBD_CONF) != 0) {
 		argv[argc++] = "-f";
@@ -923,11 +927,17 @@ main(int argc, char **argv)
 		fatal("%s: calloc", __func__);
 	config_init(env);
 
-	while ((ch = getopt(argc, argv, "A:D:dG:f:F:L:nS:vW:")) != -1) {
+	while ((ch = getopt(argc, argv, "A:C:D:dG:f:F:L:nS:vW:")) != -1) {
 		switch (ch) {
 		case 'A':
 			proc_type = GOTWEBD_PROC_AUTH;
 			get_usernames(&gotwebd_username, &www_username, optarg);
+			break;
+		case 'C':
+			if (strlcpy(env->httpd_chroot, optarg,
+			    sizeof(env->httpd_chroot)) >=
+			    sizeof(env->httpd_chroot))
+				fatalx("chroot path too long");
 			break;
 		case 'D':
 			if (cmdline_symset(optarg) < 0)
@@ -1051,6 +1061,8 @@ main(int argc, char **argv)
 			fatal("chroot %s", env->httpd_chroot);
 		if (chdir("/") == -1)
 			fatal("chdir /");
+
+		log_info("Using chroot: %s", env->httpd_chroot);
 
 		if (setgroups(1, &pw->pw_gid) == -1 ||
 		    setresgid(pw->pw_gid, pw->pw_gid, pw->pw_gid) == -1 ||
