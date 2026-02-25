@@ -1,3 +1,18 @@
+* got 0.123; 2026-02-25
+- make gotsys-write-conf configure clone-urls for all accessible repositories
+- ensure visitors see the repository index page after logging into gotwebd
+- make 'gotadmin cleanup' run even if HEAD points at a non-existent branch
+- gotsys.conf.5 and got.1 wording and markup fixes
+- replace obsolete tmppath pledge in got-notify-http with wpath+cpath & unveil
+- avoid a malloc/free dance per parsed tree entry in got-read-pack
+- stop using the pack delta-cache in got-read-pack, cache-less is faster here
+- fix double-free in error path of the 'gotadmin pack' commit coloring phase
+- store first-level object_idset hash table entries inline to avoid malloc/free
+- avoid doing asprintf/free per tree entry in got_pack_load_tree_entries()
+- avoid a per tree-entry memcpy() in got-read-pack enumerate_tree()
+- avoid deltifying packed delta-base objects to speed up pack file generation
+- cache fewer but larger deltas in delta-cache to speed up got-index-pack
+
 * got 0.122; 2026-02-10
 - fix gotd/gotsys-check trying to parse gotsys.conf from a non-zero file offset
 - fix setting of a custom HEAD reference during repository creation by gotsysd
