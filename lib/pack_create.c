@@ -595,6 +595,25 @@ pick_deltas(struct got_pack_meta **meta, int nmeta, int ncolored,
 			n->dtab = NULL;
 		}
 
+		/*
+		 * Do not deltify objects which are already packed and not
+		 * deltified. The object is likely a delta-base for deltas
+		 * we are reusing, and deltifying bases is a waste of time.
+		 * We can just copy them to our new pack file directly.
+		 * In the worst case we could end up using a bit more disk
+		 * space. But our newly created pack will be done sooner.
+		 *
+		 * We cannot skip deltified objects here because we cannot
+		 * tell whether their base object will be included in the
+		 * pack file we are generating.
+		 */
+		if ((raw->flags & GOT_RAW_OBJ_FLAG_PACKED) &&
+		    (raw->flags & GOT_RAW_OBJ_FLAG_DELTIFIED) == 0) {
+			got_object_raw_close(raw);
+			raw = NULL;
+			continue;
+		}
+
 		best_size = raw->size;
 		best_ndeltas = 0;
 		for (j = MAX(0, i - max_base_candidates); j < i; j++) {
