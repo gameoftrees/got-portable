@@ -78,7 +78,7 @@ send_raw_obj(struct imsgbuf *ibuf, struct got_object *obj,
 	if (err)
 		goto done;
 
-	err = got_privsep_send_raw_obj(ibuf, size, hdrlen, data);
+	err = got_privsep_send_raw_obj(ibuf, size, hdrlen, 0, data);
 done:
 	free(data);
 	if (close(fd) == -1 && err == NULL)

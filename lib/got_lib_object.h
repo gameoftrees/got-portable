@@ -45,6 +45,10 @@ struct got_raw_object {
 	size_t hdrlen;
 	int refcnt;		/* > 0 if open and/or cached */
 
+	int flags;
+#define GOT_RAW_OBJ_FLAG_PACKED		0x01
+#define GOT_RAW_OBJ_FLAG_DELTIFIED	0x02
+
 	got_object_raw_close_cb *close_cb;
 	void *close_arg;
 };

@@ -274,7 +274,7 @@ got_privsep_send_raw_obj_outfd(struct imsgbuf *ibuf, int outfd)
 
 const struct got_error *
 got_privsep_send_raw_obj(struct imsgbuf *ibuf, off_t size, size_t hdrlen,
-    uint8_t *data)
+    int flags, uint8_t *data)
 {
 	struct got_imsg_raw_obj iobj;
 	size_t len = sizeof(iobj);
@@ -283,6 +283,7 @@ got_privsep_send_raw_obj(struct imsgbuf *ibuf, off_t size, size_t hdrlen,
 	memset(&iobj, 0, sizeof(iobj));
 	iobj.hdrlen = hdrlen;
 	iobj.size = size;
+	iobj.flags = flags;
 
 	if (data && size + hdrlen <= GOT_PRIVSEP_INLINE_OBJECT_DATA_MAX)
 		len += (size_t)size + hdrlen;
@@ -305,7 +306,7 @@ got_privsep_send_raw_obj(struct imsgbuf *ibuf, off_t size, size_t hdrlen,
 
 const struct got_error *
 got_privsep_recv_raw_obj(uint8_t **outbuf, off_t *size, size_t *hdrlen,
-    struct imsgbuf *ibuf)
+    int *flags, struct imsgbuf *ibuf)
 {
 	const struct got_error *err = NULL;
 	struct imsg imsg;
@@ -329,6 +330,7 @@ got_privsep_recv_raw_obj(uint8_t **outbuf, off_t *size, size_t *hdrlen,
 		iobj = imsg.data;
 		*size = iobj->size;
 		*hdrlen = iobj->hdrlen;
+		*flags = iobj->flags;
 
 		if (datalen == sizeof(*iobj)) {
 			/* Data has been written to file descriptor. */

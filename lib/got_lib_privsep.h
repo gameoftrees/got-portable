@@ -301,6 +301,7 @@ struct got_imsg_blob {
 struct got_imsg_raw_obj {
 	off_t size;
 	size_t hdrlen;
+	int flags;
 
 	/*
 	 * If size <= GOT_PRIVSEP_INLINE_OBJECT_DATA_MAX, object data follows
@@ -740,9 +741,9 @@ const struct got_error *got_privsep_get_imsg_obj(struct got_object **,
 const struct got_error *got_privsep_recv_obj(struct got_object **,
     struct imsgbuf *);
 const struct got_error *got_privsep_send_raw_obj(struct imsgbuf *, off_t,
-    size_t, uint8_t *);
+    size_t, int, uint8_t *);
 const struct got_error *got_privsep_recv_raw_obj(uint8_t **, off_t *, size_t *,
-    struct imsgbuf *);
+    int *, struct imsgbuf *);
 const struct got_error *got_privsep_send_commit(struct imsgbuf *,
     struct got_commit_object *);
 const struct got_error *got_privsep_recv_commit(struct got_commit_object **,
