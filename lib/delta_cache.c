@@ -41,10 +41,11 @@
 #endif
 
 #define GOT_DELTA_CACHE_MIN_BUCKETS		64
-#define GOT_DELTA_CACHE_MAX_BUCKETS		2048
-#define GOT_DELTA_CACHE_MAX_CHAIN		2
-#define GOT_DELTA_CACHE_MAX_DELTA_SIZE		1024
-#define GOT_DELTA_CACHE_MAX_FULLTEXT_SIZE	524288
+#define GOT_DELTA_CACHE_MAX_BUCKETS		1024
+#define GOT_DELTA_CACHE_MAX_ELEM		768
+#define GOT_DELTA_CACHE_MAX_CHAIN		4
+#define GOT_DELTA_CACHE_MAX_DELTA_SIZE		524288
+#define GOT_DELTA_CACHE_MAX_FULLTEXT_SIZE	1048576
 
 
 struct got_cached_delta {
@@ -111,11 +112,13 @@ got_delta_cache_free(struct got_delta_cache *cache)
 	unsigned int i;
 
 #ifdef GOT_DELTA_CACHE_DEBUG
-	fprintf(stderr, "%s: delta cache: %u elements, %d searches, %d hits, "
-	    "%d fulltext hits, %d missed, %d evicted, %d too large (max %d), "
-	    "%d too large fulltext (max %d)\n",
+	fprintf(stderr, "%s: delta cache: %u elements, %d searches, %d "
+	    "hits (%d%%), %d fulltext hits (%d%%), %d missed, %d evicted, "
+	    "%d too large (max %d), %d too large fulltext (max %d)\n",
 	    getprogname(), cache->totelem, cache->cache_search,
-	    cache->cache_hit, cache->cache_hit_fulltext,
+	    cache->cache_hit, (cache->cache_hit * 100) / cache->cache_search,
+	    cache->cache_hit_fulltext,
+	    (cache->cache_hit_fulltext * 100) / cache->cache_search,
 	    cache->cache_miss, cache->cache_evict, cache->cache_toolarge,
 	    cache->cache_maxtoolarge,
 	    cache->cache_toolarge_fulltext,
@@ -228,6 +231,22 @@ got_delta_cache_add(struct got_delta_cache *cache,
 		err = delta_cache_grow(cache);
 		if (err)
 			return err;
+	}
+
+	if (cache->totelem >= GOT_DELTA_CACHE_MAX_ELEM) {
+		for (idx = 0; idx < cache->nbuckets; idx++) {
+			head = &cache->buckets[idx];
+			if (head->nchain < GOT_DELTA_CACHE_MAX_CHAIN / 2)
+				continue;
+			delta = &head->entries[head->nchain - 1];
+			free(delta->data);
+			free(delta->fulltext);
+			memset(delta, 0, sizeof(*delta));
+			head->nchain--;
+			cache->totelem--;
+			cache->cache_evict++;
+			break;
+		}
 	}
 
 	idx = delta_cache_hash(cache, delta_data_offset) % cache->nbuckets;
