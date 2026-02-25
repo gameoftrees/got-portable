@@ -191,8 +191,8 @@ wrap_fd(FILE **f, int wrapped_fd)
 
 static const struct got_error *
 read_packed_object_raw(uint8_t **outbuf, off_t *size, size_t *hdrlen,
-    int outfd, struct got_pack *pack, struct got_packidx *packidx, int idx,
-    struct got_object_id *id)
+    int *flags, int outfd, struct got_pack *pack,
+    struct got_packidx *packidx, int idx, struct got_object_id *id)
 {
 	const struct got_error *err = NULL;
 	uint64_t raw_size = 0;
@@ -202,6 +202,7 @@ read_packed_object_raw(uint8_t **outbuf, off_t *size, size_t *hdrlen,
 	*outbuf = NULL;
 	*size = 0;
 	*hdrlen = 0;
+	*flags = GOT_RAW_OBJ_FLAG_PACKED;
 
 	err = got_packfile_open_object(&obj, pack, packidx, idx, id);
 	if (err)
@@ -211,6 +212,7 @@ read_packed_object_raw(uint8_t **outbuf, off_t *size, size_t *hdrlen,
 		err = got_pack_get_max_delta_object_size(&raw_size, obj, pack);
 		if (err)
 			goto done;
+		*flags |= GOT_RAW_OBJ_FLAG_DELTIFIED;
 	} else
 		raw_size = obj->size;
 
@@ -276,6 +278,7 @@ got_object_raw_open(struct got_raw_object **obj, int *outfd,
 	off_t size = 0;
 	size_t hdrlen = 0;
 	char *path_packfile = NULL;
+	int flags = 0;
 
 	*obj = got_repo_get_cached_raw_object(repo, id);
 	if (*obj != NULL) {
@@ -303,7 +306,7 @@ got_object_raw_open(struct got_raw_object **obj, int *outfd,
 			if (err)
 				goto done;
 		}
-		err = read_packed_object_raw(&outbuf, &size, &hdrlen,
+		err = read_packed_object_raw(&outbuf, &size, &hdrlen, &flags,
 		    tempfd, pack, packidx, idx, id);
 		if (err)
 			goto done;
@@ -342,6 +345,8 @@ got_object_raw_open(struct got_raw_object **obj, int *outfd,
 	    GOT_DELTA_RESULT_SIZE_CACHED_MAX, hdrlen, size);
 	if (err)
 		goto done;
+	
+	(*obj)->flags = flags;
 
 	err = got_repo_cache_raw_object(repo, id, *obj);
 	if (err) {

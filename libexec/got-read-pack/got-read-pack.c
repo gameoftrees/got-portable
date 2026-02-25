@@ -833,6 +833,7 @@ raw_object_request(struct imsg *imsg, struct imsgbuf *ibuf,
 	struct got_object *obj;
 	struct got_object_id id;
 	size_t datalen;
+	int flags = GOT_RAW_OBJ_FLAG_PACKED;
 
 	datalen = imsg->hdr.len - IMSG_HEADER_SIZE;
 	if (datalen != sizeof(iobj))
@@ -858,6 +859,7 @@ raw_object_request(struct imsg *imsg, struct imsgbuf *ibuf,
 		err = got_pack_get_max_delta_object_size(&size, obj, pack);
 		if (err)
 			goto done;
+		flags |= GOT_RAW_OBJ_FLAG_DELTIFIED;
 	} else
 		size = obj->size;
 
@@ -870,7 +872,8 @@ raw_object_request(struct imsg *imsg, struct imsgbuf *ibuf,
 	if (err)
 		goto done;
 
-	err = got_privsep_send_raw_obj(ibuf, obj->size, obj->hdrlen, buf);
+	err = got_privsep_send_raw_obj(ibuf, obj->size, obj->hdrlen,
+	    flags, buf);
 done:
 	free(buf);
 	if (outfile && fclose(outfile) == EOF && err == NULL)

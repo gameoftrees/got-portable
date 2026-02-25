@@ -112,7 +112,8 @@ done:
 
 static const struct got_error *
 request_packed_object_raw(uint8_t **outbuf, off_t *size, size_t *hdrlen,
-    int outfd, struct got_pack *pack, int idx, struct got_object_id *id)
+    int *flags, int outfd, struct got_pack *pack, int idx,
+    struct got_object_id *id)
 {
 	const struct got_error *err = NULL;
 	struct imsgbuf *ibuf = pack->privsep_child->ibuf;
@@ -136,7 +137,7 @@ request_packed_object_raw(uint8_t **outbuf, off_t *size, size_t *hdrlen,
 	if (err)
 		return err;
 
-	err = got_privsep_recv_raw_obj(outbuf, size, hdrlen, ibuf);
+	err = got_privsep_recv_raw_obj(outbuf, size, hdrlen, flags, ibuf);
 	if (err)
 		return err;
 
@@ -161,8 +162,8 @@ read_packed_object_privsep(struct got_object **obj,
 
 static const struct got_error *
 read_packed_object_raw_privsep(uint8_t **outbuf, off_t *size, size_t *hdrlen,
-    int outfd, struct got_pack *pack, struct got_packidx *packidx, int idx,
-    struct got_object_id *id)
+    int *flags, int outfd, struct got_pack *pack, struct got_packidx *packidx,
+    int idx, struct got_object_id *id)
 {
 	const struct got_error *err = NULL;
 
@@ -172,8 +173,8 @@ read_packed_object_raw_privsep(uint8_t **outbuf, off_t *size, size_t *hdrlen,
 			return err;
 	}
 
-	return request_packed_object_raw(outbuf, size, hdrlen, outfd, pack,
-	    idx, id);
+	return request_packed_object_raw(outbuf, size, hdrlen, flags,
+	    outfd, pack, idx, id);
 }
 
 const struct got_error *
@@ -294,8 +295,8 @@ request_object(struct got_object **obj, struct got_object_id *id,
 }
 
 static const struct got_error *
-request_raw_object(uint8_t **outbuf, off_t *size, size_t *hdrlen, int outfd,
-    struct got_object_id *id, struct got_repository *repo, int infd)
+request_raw_object(uint8_t **outbuf, off_t *size, size_t *hdrlen, int *flags,
+    int outfd, struct got_object_id *id, struct got_repository *repo, int infd)
 {
 	const struct got_error *err = NULL;
 	struct imsgbuf *ibuf;
@@ -315,7 +316,7 @@ request_raw_object(uint8_t **outbuf, off_t *size, size_t *hdrlen, int outfd,
 	if (err)
 		return err;
 
-	return got_privsep_recv_raw_obj(outbuf, size, hdrlen, ibuf);
+	return got_privsep_recv_raw_obj(outbuf, size, hdrlen, flags, ibuf);
 }
 
 static const struct got_error *
@@ -410,21 +411,21 @@ got_object_read_header_privsep(struct got_object **obj,
 
 static const struct got_error *
 read_object_raw_privsep(uint8_t **outbuf, off_t *size, size_t *hdrlen,
-    int outfd, struct got_object_id *id, struct got_repository *repo,
-    int obj_fd)
+    int *flags, int outfd, struct got_object_id *id,
+    struct got_repository *repo, int obj_fd)
 {
 	const struct got_error *err;
 
 	if (repo->privsep_children[GOT_REPO_PRIVSEP_CHILD_OBJECT].imsg_fd != -1)
-		return request_raw_object(outbuf, size, hdrlen, outfd, id,
-		    repo, obj_fd);
+		return request_raw_object(outbuf, size, hdrlen, flags,
+		    outfd, id, repo, obj_fd);
 
 	err = start_child(repo, GOT_REPO_PRIVSEP_CHILD_OBJECT);
 	if (err)
 		return err;
 
-	return request_raw_object(outbuf, size, hdrlen, outfd, id, repo,
-	    obj_fd);
+	return request_raw_object(outbuf, size, hdrlen, flags,
+	    outfd, id, repo, obj_fd);
 }
 
 const struct got_error *
@@ -474,6 +475,7 @@ got_object_raw_open(struct got_raw_object **obj, int *outfd,
 	off_t size = 0;
 	size_t hdrlen = 0;
 	char *path_packfile = NULL;
+	int flags = 0;
 
 	*obj = got_repo_get_cached_raw_object(repo, id);
 	if (*obj != NULL) {
@@ -504,7 +506,7 @@ got_object_raw_open(struct got_raw_object **obj, int *outfd,
 				goto done;
 		}
 		err = read_packed_object_raw_privsep(&outbuf, &size, &hdrlen,
-		    *outfd, pack, packidx, idx, id);
+		    &flags, *outfd, pack, packidx, idx, id);
 		if (err)
 			goto done;
 	} else if (err->code == GOT_ERR_NO_OBJ) {
@@ -513,8 +515,8 @@ got_object_raw_open(struct got_raw_object **obj, int *outfd,
 		err = got_object_open_loose_fd(&fd, id, repo);
 		if (err)
 			goto done;
-		err = read_object_raw_privsep(&outbuf, &size, &hdrlen, *outfd,
-		    id, repo, fd);
+		err = read_object_raw_privsep(&outbuf, &size, &hdrlen, &flags,
+		    *outfd, id, repo, fd);
 		if (err)
 			goto done;
 	}
@@ -523,6 +525,8 @@ got_object_raw_open(struct got_raw_object **obj, int *outfd,
 	    GOT_DELTA_RESULT_SIZE_CACHED_MAX, hdrlen, size);
 	if (err)
 		goto done;
+
+	(*obj)->flags = flags;
 
 	err = got_repo_cache_raw_object(repo, id, *obj);
 done:
