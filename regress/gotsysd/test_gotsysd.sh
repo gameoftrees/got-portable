@@ -2439,6 +2439,107 @@ EOF
 	test_done "$testroot" "$ret"
 }
 
+test_no_gotsys_conf_in_pack() {
+	local testroot=`test_init no_gotsys_conf_in_pack 1`
+
+	got checkout -q $testroot/${GOTSYS_REPO} $testroot/wt >/dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got checkout failed unexpectedly" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	crypted_vm_pw=`echo ${GOTSYSD_VM_PASSWORD} | encrypt | tr -d '\n'`
+	crypted_pw=`echo ${GOTSYSD_DEV_PASSWORD} | encrypt | tr -d '\n'`
+	sshkey=`cat ${GOTSYSD_SSH_PUBKEY}`
+	cat > ${testroot}/wt/gotsys.conf <<EOF
+group slackers
+
+user ${GOTSYSD_TEST_USER} {
+	password "${crypted_vm_pw}" 
+	authorized key ${sshkey}
+}
+user ${GOTSYSD_DEV_USER} {
+	password "${crypted_pw}" 
+	authorized key ${sshkey}
+}
+repository gotsys.git {
+	permit rw ${GOTSYSD_TEST_USER}
+	permit rw ${GOTSYSD_DEV_USER}
+}
+EOF
+	(cd ${testroot}/wt && got commit -m "set gotsys.conf" \
+		>/dev/null)
+	local commit_id=`git_show_head $testroot/${GOTSYS_REPO}`
+
+	got send -q -i ${GOTSYSD_SSH_KEY} -r ${testroot}/${GOTSYS_REPO}
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got send failed unexpectedly" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	# Wait for gotsysd to apply the new configuration.
+	echo "$commit_id" > $testroot/stdout.expected
+	for i in 1 2 3 4 5; do
+		sleep 1
+		ssh -i ${GOTSYSD_SSH_KEY} root@${VMIP} \
+			cat /var/db/gotsysd/commit > $testroot/stdout
+		if cmp -s $testroot/stdout.expected $testroot/stdout; then
+			break;
+		fi
+	done
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "gotsysd failed to apply configuration" >&2
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	# Add an unrelated file and send it. gotd used to error out
+	# when gotsys.conf cannot be found in the uploaded pack file.
+	# But gotsys.conf is legitimately missing because it was not
+	# changed, and sending should succeed.
+	echo "unrelated-file" > $testroot/wt/unrelated-file
+	(cd $testroot/wt && got add unrelated-file > /dev/null)
+	(cd ${testroot}/wt && got commit -m "add an unrelated file" >/dev/null)
+	local commit_id=`git_show_head $testroot/${GOTSYS_REPO}`
+
+	got send -q -i ${GOTSYSD_SSH_KEY} -r ${testroot}/${GOTSYS_REPO}
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got send failed unexpectedly" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	# Wait for gotsysd to apply the new configuration.
+	echo "$commit_id" > $testroot/stdout.expected
+	for i in 1 2 3 4 5; do
+		sleep 1
+		ssh -i ${GOTSYSD_SSH_KEY} root@${VMIP} \
+			cat /var/db/gotsysd/commit > $testroot/stdout
+		if cmp -s $testroot/stdout.expected $testroot/stdout; then
+			break;
+		fi
+	done
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "gotsysd failed to apply configuration" >&2
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	test_done "$testroot" "$ret"
+}
+
+
 test_parseargs "$@"
 run_test test_user_add
 run_test test_user_mod
@@ -2458,3 +2559,4 @@ run_test test_override_all_user_access
 run_test test_http_notification
 run_test test_http_notification_hmac
 run_test test_email_notification
+run_test test_no_gotsys_conf_in_pack
