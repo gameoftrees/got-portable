@@ -2459,6 +2459,7 @@ get_content_from_packfile(struct gotd_imsgev *iev, struct imsg *imsg)
 	size_t len;
 	struct got_commit_object *commit = NULL;
 	struct got_tree_object *tree = NULL;
+	struct got_blob_object *blob = NULL;
 	FILE *outfile = NULL;
 
 	memset(&written_resp, 0, sizeof(written_resp));
@@ -2562,21 +2563,33 @@ get_content_from_packfile(struct gotd_imsgev *iev, struct imsg *imsg)
 		goto done;
 
 	idx = got_packidx_get_object_idx(client->packidx, content_id);
-	if (idx == -1) 
-		goto send_response;
+	if (idx == -1)  {
+		/* Fall back on content stored in the repository, if any. */
+		err = got_object_open_as_blob(&blob, repo_write.repo,
+		    content_id, 8192, repo_write.diff.fd1 /* XXX */);
+		if (err) {
+			if (err->code == GOT_ERR_NO_OBJ)
+				goto send_response;
+			goto done;
+		}
+		err = got_object_blob_dump_to_file(NULL, NULL, NULL, outfile,
+		    blob);
+		if (err)
+			goto done;
+	} else {
+		err = got_packfile_open_object(&obj, &client->pack,
+		    client->packidx, idx, content_id);
+		if (err)
+			goto done;
 
-	err = got_packfile_open_object(&obj, &client->pack, client->packidx,
-	   idx, content_id);
-	if (err)
-		goto done;
+		if (obj->type != GOT_OBJ_TYPE_BLOB)
+			goto send_response;
 
-	if (obj->type != GOT_OBJ_TYPE_BLOB)
-		goto send_response;
-
-	err = got_packfile_extract_object(&client->pack, obj, outfile,
-	    repo_write.base_file, repo_write.accum_file);
-	if (err)
-		goto done;
+		err = got_packfile_extract_object(&client->pack, obj, outfile,
+		    repo_write.base_file, repo_write.accum_file);
+		if (err)
+			goto done;
+	}
 	
 	written_resp.wrote_content = 1;	
 send_response:
@@ -2603,6 +2616,8 @@ done:
 		got_object_commit_close(commit);
 	if (tree)
 		got_object_tree_close(tree);
+	if (blob)
+		got_object_blob_close(blob);
 	return err;
 }
 
