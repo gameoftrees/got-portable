@@ -3916,7 +3916,7 @@ worktree_entries_reveal(struct tog_log_thread_args *a)
 	*_selected = *_first;						\
 } while (0)
 
-	if (first == NULL)
+	if (first == NULL || *first == NULL)
 		select_worktree_entry(first, select);
 	else if (*select == *first) {
 		if (wts == TOG_WORKTREE_CHANGES_LOCAL && (*first)->idx == 1)
