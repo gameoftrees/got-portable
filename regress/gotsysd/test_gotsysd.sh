@@ -2536,6 +2536,65 @@ EOF
 		return 1
 	fi
 
+	(cd $testroot/wt && got rm gotsys.conf > /dev/null)
+	(cd $testroot/wt && got commit -m "attempt to delete gotsys.conf" \
+		>/dev/null)
+	local commit_id=`git_show_head $testroot/${GOTSYS_REPO}`
+
+	got send -q -i ${GOTSYSD_SSH_KEY} -r ${testroot}/${GOTSYS_REPO} \
+		> $testroot/stdout 2> $testroot/stderr
+	ret=$?
+	if [ $ret -eq 0 ]; then
+		echo "got send succeeded unexpectedly" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	cat > ${testroot}/stderr.expected <<EOF
+git-receive-pack: gotsys.conf: no such entry found in tree
+got-send-pack: gotsys.conf: no such entry found in tree
+got: could not send pack file
+EOF
+	cmp -s $testroot/stderr.expected $testroot/stderr
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stderr.expected $testroot/stderr
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	(cd $testroot/wt && got update > /dev/null)
+	(cd $testroot/wt && got backout $commit_id > /dev/null)
+	(cd $testroot/wt && got commit -m "restore gotsys.conf" >/dev/null)
+	local commit_id=`git_show_head $testroot/${GOTSYS_REPO}`
+
+	got send -q -i ${GOTSYSD_SSH_KEY} -r ${testroot}/${GOTSYS_REPO}
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got send failed unexpectedly" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	# Wait for gotsysd to apply the new configuration.
+	echo "$commit_id" > $testroot/stdout.expected
+	for i in 1 2 3 4 5; do
+		sleep 1
+		ssh -i ${GOTSYSD_SSH_KEY} root@${VMIP} \
+			cat /var/db/gotsysd/commit > $testroot/stdout
+		if cmp -s $testroot/stdout.expected $testroot/stdout; then
+			break;
+		fi
+	done
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "gotsysd failed to apply configuration" >&2
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
 	test_done "$testroot" "$ret"
 }
 
