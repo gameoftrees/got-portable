@@ -2517,27 +2517,35 @@ get_content_from_packfile(struct gotd_imsgev *iev, struct imsg *imsg)
 	written_resp.ref_found = 1;	
 
 	idx = got_packidx_get_object_idx(client->packidx, &ref_update->new_id);
-	if (idx == -1) 
-		goto send_response;
+	if (idx == -1)  {
+		/* Fall back on commits stored in the repository, if any. */
+		err = got_object_open_as_commit(&commit, repo_write.repo,
+		    &ref_update->new_id);
+		if (err) {
+			if (err->code == GOT_ERR_OBJ_TYPE)
+				goto send_response;
+			goto done;
+		}
+	} else {
+		err = got_packfile_open_object(&obj, &client->pack,
+		    client->packidx, idx, &ref_update->new_id);
+		if (err)
+			goto done;
 
-	err = got_packfile_open_object(&obj, &client->pack, client->packidx,
-	   idx, &ref_update->new_id);
-	if (err)
-		goto done;
+		if (obj->type != GOT_OBJ_TYPE_COMMIT)
+			goto send_response;
 
-	if (obj->type != GOT_OBJ_TYPE_COMMIT)
-		goto send_response;
+		err = got_packfile_extract_object_to_mem(&buf, &len, obj,
+		    &client->pack);
+		if (err)
+			goto done;
+		got_object_close(obj);
+		obj = NULL;
 
-	err = got_packfile_extract_object_to_mem(&buf, &len, obj,
-	    &client->pack);
-	if (err)
-		goto done;
-	got_object_close(obj);
-	obj = NULL;
-	
-	err = got_object_parse_commit(&commit, buf, len, GOT_HASH_SHA1);
-	if (err)
-		goto done;
+		err = got_object_parse_commit(&commit, buf, len, GOT_HASH_SHA1);
+		if (err)
+			goto done;
+	}
 
 	tree_id = got_object_id_dup(commit->tree_id);
 	if (tree_id == NULL)
@@ -2550,12 +2558,20 @@ get_content_from_packfile(struct gotd_imsgev *iev, struct imsg *imsg)
 	len = 0;
 
 	idx = got_packidx_get_object_idx(client->packidx, tree_id);
-	if (idx == -1) 
-		goto send_response;
-
-	err = open_tree(&tree, &client->pack, client->packidx, idx, tree_id);
-	if (err)
-		goto done;
+	if (idx == -1) {
+		/* Fall back on trees stored in the repository, if any. */
+		err = got_object_open_as_tree(&tree, repo_write.repo, tree_id);
+		if (err) {
+			if (err->code == GOT_ERR_NO_OBJ)
+				goto send_response;
+			goto done;
+		}
+	} else {
+		err = open_tree(&tree, &client->pack, client->packidx,
+		    idx, tree_id);
+		if (err)
+			goto done;
+	}
 
 	err = find_id_by_path(&content_id, &client->pack, client->packidx,
 	    tree, path);
