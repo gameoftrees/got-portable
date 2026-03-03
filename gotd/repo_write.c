@@ -2601,6 +2601,8 @@ done:
 		got_object_close(obj);
 	if (commit)
 		got_object_commit_close(commit);
+	if (tree)
+		got_object_tree_close(tree);
 	return err;
 }
 
