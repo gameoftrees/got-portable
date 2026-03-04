@@ -13,8 +13,6 @@ got:
   'got fetch' is supposed to work. To make this easier, if the HEAD symref
   points to a non-existent reference it should be updated by 'got fetch'
   to match the HEAD symref sent by the server.
-- If invoked in a work tree, got fetch could default to fetching the work
-  tree's current branch, instead of fetching the remote repository's HEAD.
 - 'got patch' should be able to detect an already applied patch.
 - 'got patch' should ideally do more passes if a patch doesn't apply and
   try fancy things (like ignoring context and whitespaces) only in later
