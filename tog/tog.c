@@ -5938,7 +5938,7 @@ write_commit_info(struct got_diff_line **lines, size_t *nlines,
 	char *id_str = NULL, *logmsg = NULL, *s = NULL, *line;
 	time_t committer_time;
 	const char *author, *committer;
-	char *refs_str = NULL;
+	char *refs_str = NULL, *exstr = NULL;
 	off_t outoff = 0;
 	int n;
 
@@ -6039,11 +6039,16 @@ write_commit_info(struct got_diff_line **lines, size_t *nlines,
 		goto done;
 	s = logmsg;
 	while ((line = strsep(&s, "\n")) != NULL) {
-		n = fprintf(outfile, " %s\n", line);
+		err = expand_tab(&exstr, line);
+		if (err)
+			goto done;
+		n = fprintf(outfile, " %s\n", exstr);
 		if (n < 0) {
 			err = got_error_from_errno("fprintf");
 			goto done;
 		}
+		free(exstr);
+		exstr = NULL;
 		outoff += n;
 		err = add_line_metadata(lines, nlines, outoff,
 		    GOT_DIFF_LINE_LOGMSG);
@@ -6052,6 +6057,7 @@ write_commit_info(struct got_diff_line **lines, size_t *nlines,
 	}
 
 done:
+	free(exstr);
 	free(id_str);
 	free(logmsg);
 	free(refs_str);
