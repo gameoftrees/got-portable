@@ -1001,6 +1001,10 @@ gotd_request(int fd, short events, void *arg)
 			err = stop_gotd(client);
 			break;
 		case GOTD_IMSG_RELOAD_SECRETS:
+			if (client->euid != 0) {
+				err = got_error_set_errno(EPERM, "reload");
+				break;
+			}
 			if (have_reload_secrets) {
 				err = got_error(GOT_ERR_PRIVSEP_MSG);
 				break;
