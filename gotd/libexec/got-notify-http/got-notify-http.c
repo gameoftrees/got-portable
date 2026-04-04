@@ -109,9 +109,9 @@ escape(FILE *fp, const uint8_t *s)
 	uint32_t codepoint, state;
 	const uint8_t *start = s;
 
-	state = 0;
+	state = UTF8_ACCEPT;
 	for (; *s; ++s) {
-		switch (decode(&state, &codepoint, *s)) {
+		switch (utf8_decode(&state, &codepoint, *s)) {
 		case UTF8_ACCEPT:
 			switch (codepoint) {
 			case '"':
