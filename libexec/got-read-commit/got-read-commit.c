@@ -94,8 +94,10 @@ main(int argc, char *argv[])
 			break;
 		}
 
-		if (imsg.hdr.type == GOT_IMSG_STOP)
+		if (imsg.hdr.type == GOT_IMSG_STOP) {
+			imsg_free(&imsg);
 			break;
+		}
 
 		if (imsg.hdr.type != GOT_IMSG_COMMIT_REQUEST) {
 			err = got_error(GOT_ERR_PRIVSEP_MSG);
