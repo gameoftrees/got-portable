@@ -54,6 +54,7 @@
 #include "media.h"
 #include "gotwebd.h"
 #include "gotsys.h"
+#include "utf8d.h"
 
 #ifndef nitems
 #define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0]))
@@ -1392,6 +1393,7 @@ yylex(void)
 	unsigned char *p;
 	int quotec, next, c;
 	int token;
+	uint32_t cp, state = UTF8_ACCEPT;
 
 	p = buf;
 	c = lgetc(0);
@@ -1436,6 +1438,11 @@ yylex(void)
 			}
 			if (p + 1 >= buf + sizeof(buf) - 1) {
 				yyerror("string too long");
+				return (findeol());
+			}
+			if (utf8_decode(&state, &cp,
+			    (unsigned char)c) == UTF8_REJECT) {
+				yyerror("invalid UTF-8 string");
 				return (findeol());
 			}
 			*p++ = c;
