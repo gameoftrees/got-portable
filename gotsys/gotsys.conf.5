@@ -282,6 +282,33 @@ Additionally, the name may not contain the two-character sequences
 .Pp
 The available repository configuration directives are as follows:
 .Bl -tag -width Ds
+.It Ic description Ar string
+Sets the repository description shown on the
+.Xr gotwebd 8
+repository listing page.
+The
+.Ar string
+parameter can only contain one line of text in ASCII encoding,
+or in UTF-8 encoding if
+.Ar string
+is wrapped in quotes.
+.It Ic head Ar branch
+Point the repository's symbolic
+.Pa HEAD
+reference at the specified
+.Ar branch .
+If not specified,
+.Pa HEAD
+will point at the branch
+.Dq main ,
+regardless of whether this branch actually exists in the repository.
+.Pp
+If
+.Pa HEAD
+points at a non-existent branch then clients may fail to clone the repository
+because they rely on
+.Pa HEAD
+to determine which branch to fetch by default.
 .It Ic deny Ar identity
 Deny repository access to users with the username
 .Ar identity .
@@ -690,6 +717,12 @@ repository is hidden.
 Set the displayed site owner.
 If not set then no site owner will be displayed by
 .Xr gotwebd 8 .
+The
+.Ar name
+parameter can only contain one line of text in ASCII encoding,
+or in UTF-8 encoding if
+.Ar name
+is wrapped in quotes.
 .It Ic repositories url path Ar url-path
 Sets the URL path under which Git repositories will be displayed by
 .Xr gotwebd 8 .
