@@ -37,6 +37,7 @@
 #include "media.h"
 #include "gotwebd.h"
 #include "gotsys.h"
+#include "utf8d.h"
 
 #ifndef nitems
 #define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0]))
@@ -1330,16 +1331,24 @@ gotsys_conf_validate_mediatype(const char *s)
 const struct got_error *
 gotsys_conf_validate_string(const char *s)
 {
+	uint32_t cp, state = UTF8_ACCEPT;
 	int i;
 
 	for (i = 0; s[i] != '\0'; ++i) {
 		char x = s[i];
 
+		if (utf8_decode(&state, &cp, (unsigned char)x) == UTF8_REJECT) {
+			return got_error_msg(GOT_ERR_PARSE_CONFIG,
+			    "invalid UTF-8 string");
+		}
+
 		/*
 		 * Similar to gotwebd/parse.y allowed_in_string() while
-		 * allowing for spaces and tabs in quoted strings.
+		 * allowing for UTF-8, spaces, and tabs in quoted strings.
 		 */
-		if (isalnum((unsigned char)x) || x == ' ' || x == '\t' ||
+		if (isalnum((unsigned char)x) ||
+		    ((unsigned char)x & 0x80) == 0x80 ||
+		    x == ' ' || x == '\t' ||
 		    (ispunct((unsigned char)x) && x != '(' && x != ')' &&
 		    x != '{' && x != '}' &&
 		    x != '!' && x != '=' && x != '#' &&
@@ -1347,7 +1356,8 @@ gotsys_conf_validate_string(const char *s)
 			continue;
 
 		return got_error_fmt(GOT_ERR_PARSE_CONFIG,
-		    "character '%c' (0x%.2x) is not allowed in %s", x, x, s);
+		    "character '%c' (0x%x) is not allowed in %s", x,
+		        (unsigned char)x, s);
 	}
 
 	return NULL;
