@@ -1775,9 +1775,12 @@ gotsys_ref_name_is_valid(char *refname)
 	const char *s;
 	const char forbidden[] = { '\'', '"', '{' , '}', '=', '$', '#' };
 	size_t i;
+	uint32_t cp, state = UTF8_ACCEPT;
 
 	s = refname;
 	while (*s) {
+		if (utf8_decode(&state, &cp, (unsigned char)*s) == UTF8_REJECT)
+			return 0;
 		for (i = 0; i < nitems(forbidden); i++) {
 			if (*s == forbidden[i])
 				return 0;
