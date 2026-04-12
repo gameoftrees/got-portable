@@ -738,6 +738,150 @@ EOF
 		return 1
 	fi
 
+	# Test authentication via group membership.
+	crypted_vm_pw=`echo ${GOTSYSD_VM_PASSWORD} | encrypt | tr -d '\n'`
+	crypted_pw=`echo ${GOTSYSD_DEV_PASSWORD} | encrypt | tr -d '\n'`
+	sshkey=`cat ${GOTSYSD_SSH_PUBKEY}`
+	cat > ${testroot}/wt/gotsys.conf <<EOF
+group writers
+group devs
+group testers
+
+user ${GOTSYSD_TEST_USER} {
+	password "${crypted_vm_pw}" 
+	authorized key ${sshkey}
+	group writers
+	group testers
+}
+user ${GOTSYSD_DEV_USER} {
+	password "${crypted_pw}" 
+	authorized key ${sshkey}
+	group writers
+	group devs
+}
+repository gotsys.git {
+	permit rw :writers
+}
+repository public.git {
+	permit rw :writers
+}
+repository gottestdev.git {
+	permit rw :devs
+}
+repository gottest.git {
+	permit rw :testers
+}
+repository hidden.git {
+	permit rw :testers
+}
+web server "${VMIP}" {
+	repository public {
+		disable authentication
+	}
+	repository gottestdev.git {
+		permit :devs
+		deny :testers
+	}
+	repository gottest.git {
+		permit :testers
+	}
+	repository hidden {
+		permit :testers
+		deny :devs
+		hide repository on
+	}
+}
+EOF
+	(cd ${testroot}/wt && gotsys check -q)
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "bad gotsys.conf written by test" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	(cd ${testroot}/wt && got commit -m "use group auth" >/dev/null)
+	local commit_id=`git_show_head $testroot/${GOTSYS_REPO}`
+
+	got send -q -i ${GOTSYSD_SSH_KEY} -r ${testroot}/${GOTSYS_REPO}
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got send failed unexpectedly" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	# Wait for gotsysd to apply the new configuration.
+	echo "$commit_id" > $testroot/stdout.expected
+	for i in 1 2 3 4 5; do
+		sleep 1
+		ssh -i ${GOTSYSD_SSH_KEY} root@${VMIP} \
+			cat /var/db/gotsysd/commit > $testroot/stdout
+		if cmp -s $testroot/stdout.expected $testroot/stdout; then
+			break;
+		fi
+	done
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "gotsysd failed to apply configuration" >&2
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	# Obtain a login token over ssh.
+	ssh -q -i ${GOTSYSD_SSH_KEY} ${GOTSYSD_TEST_USER}@${VMIP} \
+		'gotsh -c weblogin' > $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "ssh login failed failed unexpectedly" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	url=$(cut -d: -f 2,3 < $testroot/stdout | sed -e 's/ https:/http:/')
+	w3m -cookie-jar "$testroot/cookies" "$url" -dump > $testroot/stdout
+	cat > $testroot/stdout.expected <<EOF
+[got]
+Logged in as: ${GOTSYSD_TEST_USER}  (Logout)
+Repositories
+Repository
+gottest.git
+summary | briefs | commits | tags | tree | rss
+-------------------------------------------------------------------------------
+public.git
+summary | briefs | commits | tags | tree | rss
+-------------------------------------------------------------------------------
+
+EOF
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	# Attempt to access the private repository's tree again with cookie
+	w3m -cookie-jar $testroot/cookies \
+		"http://${VMIP}/?action=tree&path=gottest.git" -dump \
+		> $testroot/stdout
+
+	cat > $testroot/stdout.expected <<EOF
+[got]
+Logged in as: ${GOTSYSD_TEST_USER}  (Logout)
+Repositories / gottest.git / tree /
+reference refs/heads/main not found
+
+EOF
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
 
 	test_done "$testroot" "$ret"
 }

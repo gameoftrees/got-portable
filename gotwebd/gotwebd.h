@@ -353,6 +353,7 @@ struct request {
 
 	uid_t				 client_uid;
 	char				 access_identifier[MAX_IDENTIFIER_SIZE];
+	char				 client_username[MAX_IDENTIFIER_SIZE];
 };
 TAILQ_HEAD(requestlist, request);
 
