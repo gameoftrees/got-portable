@@ -521,6 +521,7 @@ process_request(struct request *c)
 	const char *identifier = NULL;
 	char *request_path = NULL;
 	int is_repository_request = 0;
+	struct passwd *pw = NULL;
 
 	srv = gotweb_get_server(c->fcgi_params.server_name);
 	if (srv == NULL) {
@@ -687,6 +688,15 @@ permitted:
 		error = got_error_msg(GOT_ERR_NO_SPACE,
 		    "identifier too long");
 		goto done;
+	}
+	pw = getpwuid(uid);
+	if (pw) {
+		if (strlcpy(c->client_username, pw->pw_name,
+		    sizeof(c->client_username)) >= sizeof(c->client_username)) {
+			error = got_error_msg(GOT_ERR_NO_SPACE,
+			    "username too long");
+			goto done;
+		}
 	}
 
 	if (gotwebd_env->gotwebd_verbose > 0) {
