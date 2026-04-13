@@ -48,7 +48,6 @@
 /gotd/libexec/got-notify-http
 /gotd/libexec/got-notify-http/Makefile
 /gotd/libexec/got-notify-http/got-notify-http.c
-/gotd/libexec/got-notify-http/utf8d.h
 /gotd/libexec/gotsys-apply
 /gotd/libexec/gotsys-apply/Makefile
 /gotd/libexec/gotsys-apply/gotsys-apply.c
@@ -322,6 +321,7 @@
 /lib/serve.c
 /lib/sigs.c
 /lib/utf8.c
+/lib/utf8d.h
 /lib/worktree.c
 /lib/worktree_cvg.c
 /lib/worktree_open.c
@@ -449,8 +449,6 @@
 /regress/gotsysd/build-got.sh
 /regress/gotsysd/common.sh
 /regress/gotsysd/gotwebd-repos-www.conf
-/regress/gotsysd/gotwebd-www.conf
-/regress/gotsysd/gotwebd.conf
 /regress/gotsysd/http-server
 /regress/gotsysd/test_gotsysd.sh
 /regress/gotsysd/test_gotwebd.sh
