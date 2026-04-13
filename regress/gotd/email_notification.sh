@@ -326,7 +326,7 @@ test_branch_created() {
 	printf "\r\n" >> $testroot/stdout.expected
 	printf "commit $commit_id\n" >> $testroot/stdout.expected
 	printf "from: $GOT_AUTHOR\n" >> $testroot/stdout.expected
-	d=`date -u -r $author_time2 +"%a %b %e %X %Y UTC"`
+	d=`date -u -r $author_time +"%a %b %e %X %Y UTC"`
 	printf "date: $d\n" >> $testroot/stdout.expected
 	printf "messagelen: 27\n" >> $testroot/stdout.expected
 	printf " \n" >> $testroot/stdout.expected
