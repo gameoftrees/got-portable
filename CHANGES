@@ -1,3 +1,15 @@
+* got 0.124; 2026-04-13
+- make the chroot path directive in gotwebd.conf actually work
+- fix a segfault in tog while using the & search feature
+- plug a tree object leak in the gotd repo_write process
+- fix gotd wrongly complaining about a missing gotsys.conf in pack files
+- expand tabs in log messages displayed by tog diff to prevent misalignment
+- prevent non-root users from blocking gotctl reload requests
+- plug a memory leak in got-read-commit
+- allow UTF-8 in gotsys.conf site owner names and repository descriptions
+- reject non-UTF-8-encoded reference names in gotsys.conf
+- make gotwebd display logged-in usernames in case of group-membership auth
+
 * got 0.123; 2026-02-25
 - make gotsys-write-conf configure clone-urls for all accessible repositories
 - ensure visitors see the repository index page after logging into gotwebd
