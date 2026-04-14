@@ -2,7 +2,7 @@ libexec_PROGRAMS = got-notify-http
 
 include $(top_builddir)/Makefile.common
 
-EXTRA_DIST = utf8d.h
+EXTRA_DIST = $(top_srcdir)/lib/utf8d.h
 
 got_notify_http_SOURCES = got-notify-http.c \
 	$(top_srcdir)/lib/bufio.c \
@@ -10,7 +10,8 @@ got_notify_http_SOURCES = got-notify-http.c \
 	$(top_srcdir)/lib/hash.c \
 	$(top_srcdir)/lib/log.c \
 	$(top_srcdir)/lib/opentemp.c \
-	$(top_srcdir)/lib/pollfd.c
+	$(top_srcdir)/lib/pollfd.c \
+	$(top_srcdir)/lib/utf8.c
 
 if HOST_DARWIN
 got_notify_http_SOURCES += $(top_srcdir)/lib/portable-socket.c
