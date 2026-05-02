@@ -865,8 +865,7 @@ load_tree_entries(struct got_object_id_queue *ids,
 				break;
 		}
 
-		if (got_object_tree_entry_is_symlink(e) ||
-		    got_object_tree_entry_is_submodule(e) ||
+		if (got_object_tree_entry_is_submodule(e) ||
 		    got_object_idset_contains(traversed_ids, id))
 			continue;
 
@@ -882,7 +881,7 @@ load_tree_entries(struct got_object_id_queue *ids,
 			if (err)
 				break;
 			STAILQ_INSERT_TAIL(ids, qid, entry);
-		} else if (S_ISREG(mode)) {
+		} else if (S_ISREG(mode) || S_ISLNK(mode)) {
 			/* This blob is referenced. */
 			err = got_object_idset_add(traversed_ids, id, NULL);
 			if (err)
