@@ -340,16 +340,26 @@ test_send_merge_commit() {
 		return 1
 	fi
 
+	if ! got clone -b master -m -q "$testurl/repo" "$testroot/repo-dest"; \
+	then
+		echo "got clone command failed unexpectedly" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
 	echo 'upstream change' > $testroot/repo/alpha
 	git_commit $testroot/repo -m 'upstream change'
+	local commit_id_upstream=`git_show_head $testroot/repo`
 
 	got checkout $testroot/repo-clone $testroot/wt-clone > /dev/null
 	echo 'downstream change' > $testroot/wt-clone/beta
 	(cd $testroot/wt-clone && got commit -m 'downstream change' > /dev/null)
+	local commit_id_downstream=`git_show_head $testroot/repo-clone`
 
 	got fetch -q -r $testroot/repo-clone
 	(cd $testroot/wt-clone && got update > /dev/null)
 	(cd $testroot/wt-clone && got merge origin/master > /dev/null)
+	local commit_id_merge=`git_show_head $testroot/repo-clone`
 	ret=$?
 	if [ $ret -ne 0 ]; then
 		echo "got merge command failed unexpectedly" >&2
@@ -357,14 +367,30 @@ test_send_merge_commit() {
 		return 1
 	fi
 
-	git -C $testroot/repo config receive.denyCurrentBranch ignore
-
-	got send -q -r $testroot/repo-clone
+	cat >> $testroot/repo-clone/got.conf <<EOF
+remote "dest" {
+	server 127.0.0.1
+	protocol ssh
+	repository "$testroot/repo-dest"
+}
+EOF
+	got send -b master -q -r $testroot/repo-clone dest
 	ret=$?
 	if [ $ret -ne 0 ]; then
 		test_done "$testroot" "$ret"
 		return 1
 	fi
+
+	for commit_id in \
+		$commit_id_upstream $commit_id_downstream $commit_id_merge; do
+		got cat -r $testroot/repo-dest $commit_id > /dev/null
+		ret=$?
+		if [ $ret -ne 0 ]; then
+			echo "got cat $commit_id failed unexpectedly" >&2
+			test_done "$testroot" "$ret"
+			return 1
+		fi
+	done
 
 	test_done "$testroot" 0
 }
