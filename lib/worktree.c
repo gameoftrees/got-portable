@@ -1944,6 +1944,14 @@ update_blob(struct got_worktree *worktree,
 	int fd1 = -1, fd2 = -1;
 	int update_timestamps = 0;
 
+	err = got_fileindex_entry_relpath_allowed(path, strlen(path));
+	if (err) {
+		if (err->code != GOT_ERR_BAD_PATH)
+			return err;
+		return (*progress_cb)(progress_arg,
+		    GOT_STATUS_UNVERSIONED, path);
+	}
+
 	if (asprintf(&ondisk_path, "%s/%s", worktree->root_path, path) == -1)
 		return got_error_from_errno("asprintf");
 

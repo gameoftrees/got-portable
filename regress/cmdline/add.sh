@@ -485,6 +485,95 @@ test_add_symlink() {
 	test_done "$testroot" "$ret"
 }
 
+test_add_file_in_dotgit() {
+	local testroot=`test_init add_file_in_dotgit`
+
+	got checkout $testroot/repo $testroot/wt > /dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	mkdir -p $testroot/wt/.git
+	echo "new file" > $testroot/wt/.git/foo
+
+	(cd $testroot/wt && got add .git/foo \
+		> $testroot/stdout 2> $testroot/stderr)
+	ret=$?
+	if [ $ret -eq 0 ]; then
+		echo "got add succeeded unexpectedly" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	echo -n > $testroot/stdout.expected
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	cat > $testroot/stderr.expected <<EOF
+got: path '.git/foo' cannot be added to the file-index: bad path
+EOF
+	cmp -s $testroot/stderr.expected $testroot/stderr
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stderr.expected $testroot/stderr
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	test_done "$testroot" "$ret"
+}
+
+test_add_file_in_dotgot() {
+	local testroot=`test_init add_file_in_dotgot`
+
+	got checkout $testroot/repo $testroot/wt > /dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	echo "new file" > $testroot/wt/.got/foo
+
+	(cd $testroot/wt && got add .got/foo \
+		> $testroot/stdout 2> $testroot/stderr)
+	ret=$?
+	if [ $ret -eq 0 ]; then
+		echo "got add succeeded unexpectedly" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	echo -n > $testroot/stdout.expected
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	cat > $testroot/stderr.expected <<EOF
+got: path '.got/foo' cannot be added to the file-index: bad path
+EOF
+	cmp -s $testroot/stderr.expected $testroot/stderr
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stderr.expected $testroot/stderr
+		test_done "$testroot" 1
+		return 1
+	fi
+
+	test_done "$testroot" "$ret"
+}
+
 test_parseargs "$@"
 run_test test_add_basic
 run_test test_double_add
@@ -495,3 +584,5 @@ run_test test_add_force_delete_commit
 run_test test_add_directory
 run_test test_add_clashes_with_submodule
 run_test test_add_symlink
+run_test test_add_file_in_dotgit
+run_test test_add_file_in_dotgot

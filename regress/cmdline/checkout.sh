@@ -1075,6 +1075,55 @@ test_checkout_commit_keywords() {
 	test_done "$testroot" "$ret"
 }
 
+test_checkout_tree_with_dot_got() {
+	local testroot=`test_init checkout_tree_with_dot_got`
+
+	mkdir -p $testroot/repo/.got
+	echo 'foo' > $testroot/repo/.got/foo
+	git -C $testroot/repo add .got/foo
+	git_commit $testroot/repo -m "adding .got/foo"
+
+	local commit_id=`git_show_head $testroot/repo`
+
+	echo "?  $testroot/wt/.got/foo" > $testroot/stdout.expected
+	echo "A  $testroot/wt/alpha" >> $testroot/stdout.expected
+	echo "A  $testroot/wt/beta" >> $testroot/stdout.expected
+	echo "A  $testroot/wt/epsilon/zeta" >> $testroot/stdout.expected
+	echo "A  $testroot/wt/gamma/delta" >> $testroot/stdout.expected
+	echo "Checked out refs/heads/master: $commit_id" \
+		>> $testroot/stdout.expected
+	echo "Now shut up and hack" >> $testroot/stdout.expected
+
+	got checkout $testroot/repo $testroot/wt > $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	echo "alpha" > $testroot/content.expected
+	echo "beta" >> $testroot/content.expected
+	echo "zeta" >> $testroot/content.expected
+	echo "delta" >> $testroot/content.expected
+	cat $testroot/wt/alpha $testroot/wt/beta $testroot/wt/epsilon/zeta \
+	    $testroot/wt/gamma/delta > $testroot/content
+
+	cmp -s $testroot/content.expected $testroot/content
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/content.expected $testroot/content
+	fi
+	test_done "$testroot" "$ret"
+}
+
 test_parseargs "$@"
 run_test test_checkout_basic
 run_test test_checkout_dir_exists
@@ -1094,3 +1143,4 @@ run_test test_checkout_quiet
 run_test test_checkout_umask
 run_test test_checkout_ulimit_n
 run_test test_checkout_commit_keywords
+run_test test_checkout_tree_with_dot_got

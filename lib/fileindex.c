@@ -36,6 +36,15 @@
 #include "got_lib_hash.h"
 #include "got_lib_fileindex.h"
 #include "got_lib_worktree.h"
+#include "got_lib_delta.h"
+#include "got_lib_object.h"
+#include "got_lib_pack.h"
+#include "got_lib_object_cache.h"
+#include "got_lib_repository.h"
+
+#ifndef nitems
+#define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0]))
+#endif
 
 /* got_fileindex_entry flags */
 #define GOT_FILEIDX_F_PATH_LEN		0x00000fff
@@ -155,10 +164,41 @@ got_fileindex_entry_mark_skipped(struct got_fileindex_entry *ie)
 }
 
 const struct got_error *
+got_fileindex_entry_relpath_allowed(const char *relpath, size_t relpath_len)
+{
+	const char *forbidden[] = {
+		GOT_GIT_DIR,
+		GOT_WORKTREE_GOT_DIR,
+		GOT_WORKTREE_CVG_DIR
+	};
+	size_t i;
+
+	for (i = 0; i < nitems(forbidden); i++) {
+		if (got_path_cmp(relpath, forbidden[i],
+		    relpath_len, strlen(forbidden[i])) == 0 ||
+		    got_path_is_child(relpath, forbidden[i],
+		    strlen(forbidden[i]))) {
+			return got_error_fmt(GOT_ERR_BAD_PATH,
+			    "path '%s' cannot be added to the file-index",
+			    relpath);
+		}
+	}
+
+	return NULL;
+}
+
+const struct got_error *
 got_fileindex_entry_alloc(struct got_fileindex_entry **ie,
     const char *relpath)
 {
+	const struct got_error *err;
 	size_t len;
+
+	len = strlen(relpath);
+
+	err = got_fileindex_entry_relpath_allowed(relpath, len);
+	if (err)
+		return err;
 
 	*ie = calloc(1, sizeof(**ie));
 	if (*ie == NULL)
@@ -172,7 +212,6 @@ got_fileindex_entry_alloc(struct got_fileindex_entry **ie,
 		return err;
 	}
 
-	len = strlen(relpath);
 	if (len > GOT_FILEIDX_F_PATH_LEN)
 		len = GOT_FILEIDX_F_PATH_LEN;
 	(*ie)->flags |= len;
