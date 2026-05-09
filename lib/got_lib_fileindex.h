@@ -124,6 +124,8 @@ const struct got_error *got_fileindex_entry_update(struct got_fileindex_entry *,
 void got_fileindex_entry_mark_skipped(struct got_fileindex_entry *);
 const struct got_error *got_fileindex_entry_alloc(struct got_fileindex_entry **,
     const char *);
+const struct got_error *got_fileindex_entry_relpath_allowed(const char *,
+    size_t );
 void got_fileindex_entry_free(struct got_fileindex_entry *);
 
 struct got_fileindex *got_fileindex_alloc(enum got_hash_algorithm);
