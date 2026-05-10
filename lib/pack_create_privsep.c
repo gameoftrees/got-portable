@@ -677,7 +677,7 @@ load_packed_tree_ids(void *arg, struct got_tree_object *tree, time_t mtime,
 		return err;
 
 	return got_pack_load_tree_entries(NULL, a->want_meta, a->idset,
-	    a->idset_exclude, tree, dpath, mtime, a->seed, repo,
+	    a->idset_exclude, tree, id, dpath, mtime, a->seed, repo,
 	    a->loose_obj_only, a->ncolored, a->nfound, a->ntrees,
 	    a->progress_cb, a->progress_arg, a->rl,
 	    a->cancel_cb, a->cancel_arg);

@@ -6298,6 +6298,8 @@ print_tree(const char *path, struct got_commit_object *commit,
 			break;
 
 		te = got_object_tree_get_entry(tree, i);
+		if (te == NULL)
+			break;
 		if (show_ids) {
 			char *id_str;
 			err = got_object_id_str(&id_str,
@@ -14409,6 +14411,8 @@ cat_tree(struct got_object_id *id, struct got_repository *repo, FILE *outfile)
 		if (sigint_received || sigpipe_received)
 			break;
 		te = got_object_tree_get_entry(tree, i);
+		if (te == NULL)
+			break;
 		err = got_object_id_str(&id_str, got_tree_entry_get_id(te));
 		if (err)
 			break;

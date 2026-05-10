@@ -855,9 +855,25 @@ load_tree_entries(struct got_object_id_queue *ids,
 		return err;
 
 	for (i = 0; i < got_object_tree_get_nentries(tree); i++) {
-		struct got_tree_entry *e = got_object_tree_get_entry(tree, i);
-		struct got_object_id *id = got_tree_entry_get_id(e);
-		mode_t mode = got_tree_entry_get_mode(e);
+		struct got_tree_entry *e;
+		struct got_object_id *id;
+		mode_t mode;
+
+		e = got_object_tree_get_entry(tree, i);
+		if (e == NULL) {
+			char buf[GOT_HASH_DIGEST_STRING_MAXLEN];
+			char *id_str;
+
+			id_str = got_hash_digest_to_str(tree_id->hash, buf,
+			    sizeof(buf), tree_id->algo);
+			err = got_error_fmt(GOT_ERR_BAD_OBJ_DATA,
+			    "cannot get entry %d of %d in tree %s", i + 1,
+			    got_object_tree_get_nentries(tree), id_str);
+			break;
+		}
+
+		id = got_tree_entry_get_id(e);
+		mode = got_tree_entry_get_mode(e);
 
 		if (cancel_cb) {
 			err = (*cancel_cb)(cancel_arg);

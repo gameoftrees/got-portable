@@ -373,6 +373,50 @@ test_tree_insufficient_height()
 	test_done "$testroot" "$ret"
 }
 
+test_tree_empty()
+{
+	test_init tree_empty 48 8
+
+	(
+	cd $testroot/repo
+
+	blob="$(echo -n '' | git hash-object -w --stdin)"
+	tree="$(echo -n '' | git hash-object -w -t tree --stdin --literally)"
+
+	commit="$(echo cursed | git commit-tree "$tree")"
+	git update-ref refs/heads/main "$commit"
+	git symbolic-ref HEAD refs/heads/main
+	)
+
+	local head_id=`git_show_head $testroot/repo`
+
+	cat <<EOF >$TOG_TEST_SCRIPT
+SCREENDUMP
+EOF
+
+	cat <<EOF >$testroot/view.expected
+$(trim 48 "commit $head_id")
+[1/0] /
+
+
+
+
+
+
+EOF
+
+	cd $testroot/repo && tog tree
+	cmp -s $testroot/view.expected $testroot/view
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/view.expected $testroot/view
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	test_done "$testroot" "$ret"
+}
+
 test_parseargs "$@"
 run_test test_tree_basic
 run_test test_tree_vsplit_blame
@@ -380,3 +424,4 @@ run_test test_tree_hsplit_blame
 run_test test_tree_symlink
 run_test test_tree_commit_keywords
 run_test test_tree_insufficient_height
+run_test test_tree_empty

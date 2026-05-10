@@ -9025,6 +9025,8 @@ draw_tree_entries(struct tog_view *view, const char *parent_path)
 
 	if (s->first_displayed_entry == NULL) {
 		te = got_object_tree_get_first_entry(s->tree);
+		if (te == NULL)
+			return NULL;
 		if (s->selected == 0) {
 			if (view->focussed)
 				wstandout(view->window);
@@ -9049,6 +9051,8 @@ draw_tree_entries(struct tog_view *view, const char *parent_path)
 		mode_t mode;
 
 		te = got_object_tree_get_entry(s->tree, i);
+		if (te == NULL)
+			break;
 		mode = got_tree_entry_get_mode(te);
 
 		if (s->show_ids) {
@@ -9481,6 +9485,9 @@ search_next_tree_view(struct tog_view *view)
 				te = got_object_tree_get_first_entry(s->tree);
 			else
 				te = got_object_tree_get_last_entry(s->tree);
+
+			if (te == NULL)
+				break;
 		}
 
 		if (match_tree_entry(te, &view->regex)) {

@@ -122,7 +122,7 @@ got_pack_load_packed_object_ids(int *found_all_objects,
 const struct got_error *
 got_pack_load_tree_entries(struct got_object_id_queue *ids, int want_meta,
     struct got_object_idset *idset, struct got_object_idset *idset_exclude,
-    struct got_tree_object *tree,
+    struct got_tree_object *tree, const struct got_object_id *tree_id,
     const char *dpath, time_t mtime, uint32_t seed, struct got_repository *repo,
     int loose_obj_only, int *ncolored, int *nfound, int *ntrees,
     got_pack_progress_cb progress_cb, void *progress_arg,

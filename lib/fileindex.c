@@ -874,7 +874,13 @@ walk_tree(struct got_tree_entry **next, struct got_fileindex *fileindex,
     struct got_fileindex_diff_tree_cb *cb, void *cb_arg)
 {
 	const struct got_error *err = NULL;
-	struct got_tree_entry *te = got_object_tree_get_entry(tree, *tidx);
+	struct got_tree_entry *te;
+
+	*next = NULL;
+
+	te = got_object_tree_get_entry(tree, *tidx);
+	if (te == NULL)
+		return NULL;
 
 	if (!got_object_tree_entry_is_submodule(te) &&
 	    S_ISDIR(got_tree_entry_get_mode(te))) {
