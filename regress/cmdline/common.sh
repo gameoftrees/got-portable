@@ -239,11 +239,14 @@ test_init()
 test_cleanup()
 {
 	local testroot="$1"
+	local skip_fsck="$2"
 
-	git_fsck $testroot $testroot/repo
-	ret=$?
-	if [ $ret -ne 0 ]; then
-		return $ret
+	if [ -z "$skip_fsck" ]; then
+		git_fsck $testroot $testroot/repo
+		ret=$?
+		if [ $ret -ne 0 ]; then
+			return $ret
+		fi
 	fi
 
 	rm -rf "$testroot"
@@ -294,15 +297,16 @@ test_done()
 {
 	local testroot="$1"
 	local result="$2"
+	local skip_fsck="$3"
 	if [ "$result" = "0" ]; then
-		test_cleanup "$testroot" || return 1
+		test_cleanup "$testroot" "$skip_fsck" || return 1
 		if [ -z "$GOT_TEST_QUIET" ]; then
 			echo "ok"
 		fi
 	elif echo "$result" | grep -q "^xfail"; then
 		# expected test failure; test reproduces an unfixed bug
 		echo "$result"
-		test_cleanup "$testroot" || return 1
+		test_cleanup "$testroot" "$skip_fsck" || return 1
 	else
 		echo "test failed; leaving test data in $testroot"
 	fi

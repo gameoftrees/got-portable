@@ -1124,6 +1124,67 @@ test_checkout_tree_with_dot_got() {
 	test_done "$testroot" "$ret"
 }
 
+test_checkout_bad_tree_entry() {
+	local testroot=`test_init checkout_bad_tree_entry`
+
+	(
+	cd $testroot/repo
+
+	entry() {
+		mode="$1"
+		name="$2"
+		sha="$3"
+		printf '%s %s\0' "$mode" "$name"
+		printf '%s' "$sha" | xxd -r -p
+	}
+
+	blob="$(echo 'oh no' | git hash-object -w --stdin)"
+	tree="$(entry 100644 ../pwned "$blob" | git hash-object -w -t tree --stdin --literally)"
+
+	commit="$(echo cursed | git commit-tree "$tree")"
+	git update-ref refs/heads/main "$commit"
+	git symbolic-ref HEAD refs/heads/main
+	)
+
+	local commit_id=`git_show_head $testroot/repo`
+
+	got checkout $testroot/repo $testroot/wt > $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	echo "?  $testroot/wt/../pwned" > $testroot/stdout.expected
+	echo "Checked out refs/heads/main: $commit_id" \
+		>> $testroot/stdout.expected
+	echo "Now shut up and hack" >> $testroot/stdout.expected
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	(cd $testroot/wt && ls -a > $testroot/stdout)
+
+	cat > $testroot/stdout.expected <<EOF
+.
+..
+.got
+EOF
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	test_done "$testroot" "$ret" "1"
+}
+
 test_parseargs "$@"
 run_test test_checkout_basic
 run_test test_checkout_dir_exists
@@ -1144,3 +1205,4 @@ run_test test_checkout_umask
 run_test test_checkout_ulimit_n
 run_test test_checkout_commit_keywords
 run_test test_checkout_tree_with_dot_got
+run_test test_checkout_bad_tree_entry
