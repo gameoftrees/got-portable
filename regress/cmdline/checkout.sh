@@ -1125,28 +1125,12 @@ test_checkout_tree_with_dot_got() {
 }
 
 test_checkout_bad_tree_entry() {
-	local testroot=`test_init checkout_bad_tree_entry`
+	local testroot=`test_init checkout_bad_tree_entry 1`
 
-	(
-	cd $testroot/repo
-
-	entry() {
-		mode="$1"
-		name="$2"
-		sha="$3"
-		printf '%s %s\0' "$mode" "$name"
-		printf '%s' "$sha" | xxd -r -p
-	}
-
-	blob="$(echo 'oh no' | git hash-object -w --stdin)"
-	tree="$(entry 100644 ../pwned "$blob" | git hash-object -w -t tree --stdin --literally)"
-
-	commit="$(echo cursed | git commit-tree "$tree")"
-	git update-ref refs/heads/main "$commit"
-	git symbolic-ref HEAD refs/heads/main
-	)
-
-	local commit_id=`git_show_head $testroot/repo`
+	gotadmin load -q -r $testroot/repo < ./testdata/bad-tree-entry.bundle
+	local commit_id=d52a061702e571487aaa7419511966945f2a23da
+	git -C $testroot/repo update-ref refs/heads/main "$commit_id"
+	git -C $testroot/repo symbolic-ref HEAD refs/heads/main
 
 	got checkout $testroot/repo $testroot/wt > $testroot/stdout
 	ret=$?
