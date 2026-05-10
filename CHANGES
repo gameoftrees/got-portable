@@ -1,3 +1,9 @@
+* got 0.125; 2026-05-10
+- security fix: reject versioned files inside .git, .got, or .cvg directories
+- security fix: crafted tree entry names could cause writes outside work tree
+- fix redundant pack file cleanup when repository contains symlinks
+- prevent NULL pointer dereferences when empty tree objects are encountered
+
 * got 0.124; 2026-04-13
 - make the chroot path directive in gotwebd.conf actually work
 - fix a segfault in tog while using the & search feature
