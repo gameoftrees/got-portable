@@ -5422,6 +5422,8 @@ print_tree(const char *path, struct got_commit_object *commit,
 			break;
 
 		te = got_object_tree_get_entry(tree, i);
+		if (te == NULL)
+			break;
 		if (show_ids) {
 			char *id_str;
 			err = got_object_id_str(&id_str,

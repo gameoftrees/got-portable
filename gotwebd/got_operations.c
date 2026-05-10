@@ -715,6 +715,17 @@ got_output_repo_tree(struct request *c, char **readme,
 
 	for (i = 0; i < nentries; i++) {
 		te = got_object_tree_get_entry(tree, i);
+		if (te == NULL) {
+			char *id_str;
+
+			error = got_object_id_str(&id_str, tree_id);
+			if (error)
+				break;
+			log_warnx("%s: could not get entry %d of %d in tree %s",
+			    __func__, i + 1, nentries, id_str);
+			free(id_str);
+			break;
+		}
 
 		name = got_tree_entry_get_name(te);
 		mode = got_tree_entry_get_mode(te);

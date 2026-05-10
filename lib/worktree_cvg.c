@@ -2019,6 +2019,12 @@ write_tree(struct got_object_id **new_tree_id, int *nentries,
 			struct got_commitable *ct = NULL;
 
 			te = got_object_tree_get_entry(base_tree, i);
+			if (te == NULL) {
+				err = got_error_fmt(GOT_ERR_BAD_OBJ_DATA,
+				    "cannot get tree entry %d of %d", i + 1,
+				    nbase_entries);
+				goto done;
+			}
 			if (got_object_tree_entry_is_submodule(te)) {
 				/* Entry is a submodule; just copy it. */
 				err = got_object_tree_entry_dup(&new_te, te);

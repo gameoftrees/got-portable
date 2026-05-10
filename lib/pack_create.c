@@ -786,7 +786,7 @@ got_pack_add_object(int want_meta, struct got_object_idset *idset,
 const struct got_error *
 got_pack_load_tree_entries(struct got_object_id_queue *ids, int want_meta,
     struct got_object_idset *idset, struct got_object_idset *idset_exclude,
-    struct got_tree_object *tree,
+    struct got_tree_object *tree, const struct got_object_id *tree_id,
     const char *dpath, time_t mtime, uint32_t seed, struct got_repository *repo,
     int loose_obj_only, int *ncolored, int *nfound, int *ntrees,
     got_pack_progress_cb progress_cb, void *progress_arg,
@@ -808,9 +808,25 @@ got_pack_load_tree_entries(struct got_object_id_queue *ids, int want_meta,
 	p[0] = '\0';
 
 	for (i = 0; i < got_object_tree_get_nentries(tree); i++) {
-		struct got_tree_entry *e = got_object_tree_get_entry(tree, i);
-		struct got_object_id *id = got_tree_entry_get_id(e);
-		mode_t mode = got_tree_entry_get_mode(e);
+		struct got_tree_entry *e;
+		struct got_object_id *id;
+		mode_t mode;
+
+		e = got_object_tree_get_entry(tree, i);
+		if (e == NULL) {
+			char buf[GOT_HASH_DIGEST_STRING_MAXLEN];
+			char *id_str;
+
+			id_str = got_hash_digest_to_str(tree_id->hash, buf,
+			    sizeof(buf), tree_id->algo);
+			err = got_error_fmt(GOT_ERR_BAD_OBJ_DATA,
+			    "cannot get entry %d of %d in tree %s", i + 1,
+			    got_object_tree_get_nentries(tree), id_str);
+			break;
+		}
+
+		id = got_tree_entry_get_id(e);
+		mode = got_tree_entry_get_mode(e);
 
 		if (cancel_cb) {
 			err = (*cancel_cb)(cancel_arg);
@@ -956,7 +972,7 @@ got_pack_load_tree(int want_meta, struct got_object_idset *idset,
 		}
 
 		err = got_pack_load_tree_entries(&tree_ids, want_meta, idset,
-		    idset_exclude, tree, path, mtime, seed, repo,
+		    idset_exclude, tree, &qid->id, path, mtime, seed, repo,
 		    loose_obj_only, ncolored, nfound, ntrees,
 		    progress_cb, progress_arg, rl,
 		    cancel_cb, cancel_arg);

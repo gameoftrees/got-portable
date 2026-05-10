@@ -541,6 +541,18 @@ gotweb_serve_website(struct request *c, struct website *site,
 			};
 
 			te = got_object_tree_get_entry(tree, i);
+			if (te == NULL) {
+				char *id_str;
+
+				error = got_object_id_str(&id_str, obj_id);
+				if (error)
+					break;
+				error = got_error_fmt(GOT_ERR_BAD_OBJ_DATA,
+				    "could not get entry %d of %d in tree %s",
+				    i + 1, nentries, id_str);
+				free(id_str);
+				goto done;
+			}
 
 			name = got_tree_entry_get_name(te);
 			mode = got_tree_entry_get_mode(te);
