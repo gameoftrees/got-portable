@@ -1939,10 +1939,18 @@ update_blob(struct got_worktree *worktree,
 	const struct got_error *err = NULL;
 	struct got_blob_object *blob = NULL;
 	char *ondisk_path = NULL;
+	const char *te_name;
 	unsigned char status = GOT_STATUS_NO_CHANGE;
 	struct stat sb;
 	int fd1 = -1, fd2 = -1;
 	int update_timestamps = 0;
+
+	te_name = got_tree_entry_get_name(te);
+	if (strchr(te_name, '/') != NULL ||
+	    strcmp(te_name, ".") == 0 || strcmp(te_name, "..") == 0) {
+		return (*progress_cb)(progress_arg,
+		    GOT_STATUS_UNVERSIONED, path);
+	}
 
 	err = got_fileindex_entry_relpath_allowed(path, strlen(path));
 	if (err) {
