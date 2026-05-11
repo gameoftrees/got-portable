@@ -1151,6 +1151,12 @@ test_checkout_bad_tree_entry() {
 		return 1
 	fi
 
+	if [ -e $testroot/wt/../pwned ]; then
+		echo "unexpected file $testroot/wt/../pwned exists" >&2
+		test_done "$testroot" "1"
+		return 1
+	fi
+
 	(cd $testroot/wt && ls -a > $testroot/stdout)
 
 	cat > $testroot/stdout.expected <<EOF
