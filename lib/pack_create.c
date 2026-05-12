@@ -51,6 +51,7 @@
 #include "got_lib_delta.h"
 #include "got_lib_hash.h"
 #include "got_lib_object.h"
+#include "got_lib_object_qid.h"
 #include "got_lib_object_idset.h"
 #include "got_lib_object_cache.h"
 #include "got_lib_deflate.h"
@@ -1005,40 +1006,96 @@ load_commit(int want_meta, struct got_object_idset *idset,
     struct got_ratelimit *rl, got_cancel_cb cancel_cb, void *cancel_arg)
 {
 	const struct got_error *err;
-	struct got_commit_object *commit;
+	struct got_object_id_queue commit_ids;
+	struct got_object_qid *qid;
+	struct got_commit_object *commit = NULL;
+	const struct got_object_id_queue *parents = NULL;
 
-	if (got_object_idset_contains(idset, id) ||
-	    got_object_idset_contains(idset_exclude, id))
-		return NULL;
+	STAILQ_INIT(&commit_ids);
 
-	if (loose_obj_only) {
-		int is_packed;
-		err = search_packidx(&is_packed, id, repo);
-		if (err)
-			return err;
-		if (is_packed && want_meta)
-			return NULL;
-	}
-
-	err = got_object_open_as_commit(&commit, repo, id);
+	err = got_object_qid_alloc_partial(&qid);
 	if (err)
 		return err;
 
-	err = got_pack_add_object(want_meta,
-	    want_meta ? idset : idset_exclude, id, "", GOT_OBJ_TYPE_COMMIT,
-	    got_object_commit_get_committer_time(commit), seed,
-	    loose_obj_only, repo,
-	    ncolored, nfound, ntrees, progress_cb, progress_arg, rl);
-	if (err)
-		goto done;
+	memcpy(&qid->id, id, sizeof(qid->id));
+	STAILQ_INSERT_TAIL(&commit_ids, qid, entry);
 
-	err = got_pack_load_tree(want_meta, idset, idset_exclude,
-	    got_object_commit_get_tree_id(commit),
-	    "", got_object_commit_get_committer_time(commit), seed,
-	    repo, loose_obj_only, ncolored, nfound, ntrees,
-	    progress_cb, progress_arg, rl, cancel_cb, cancel_arg);
+	while (!STAILQ_EMPTY(&commit_ids)) {
+		err = cancel_cb(cancel_arg);
+		if (err)
+			goto done;
+
+		qid = STAILQ_FIRST(&commit_ids);
+		STAILQ_REMOVE_HEAD(&commit_ids, entry);
+
+		if (got_object_idset_contains(idset, &qid->id) ||
+		    got_object_idset_contains(idset_exclude, &qid->id)) {
+			got_object_qid_free(qid);
+			qid = NULL;
+			continue;
+		}
+
+		if (loose_obj_only) {
+			int is_packed;
+			err = search_packidx(&is_packed, &qid->id, repo);
+			if (err)
+				goto done;
+			if (is_packed && want_meta) {
+				got_object_qid_free(qid);
+				qid = NULL;
+				continue;
+			}
+		}
+
+		err = got_object_open_as_commit(&commit, repo, &qid->id);
+		if (err)
+			goto done;
+
+		err = got_pack_add_object(want_meta,
+		    want_meta ? idset : idset_exclude,
+		    &qid->id, "", GOT_OBJ_TYPE_COMMIT,
+		    got_object_commit_get_committer_time(commit), seed,
+		    loose_obj_only, repo,
+		    ncolored, nfound, ntrees, progress_cb, progress_arg, rl);
+		if (err)
+			goto done;
+
+		err = got_pack_load_tree(want_meta, idset, idset_exclude,
+		    got_object_commit_get_tree_id(commit),
+		    "", got_object_commit_get_committer_time(commit), seed,
+		    repo, loose_obj_only, ncolored, nfound, ntrees,
+		    progress_cb, progress_arg, rl, cancel_cb, cancel_arg);
+		if (err)
+			goto done;
+
+		got_object_qid_free(qid);
+		qid = NULL;
+
+		parents = got_object_commit_get_parent_ids(commit);
+		if (want_meta && parents) {
+			struct got_object_qid *pid;
+			STAILQ_FOREACH(pid, parents, entry) {
+				if (got_object_idset_contains(idset, &pid->id))
+					continue;
+				if (got_object_idset_contains(idset_exclude,
+				    &pid->id))
+					continue;
+				err = got_object_qid_alloc_partial(&qid);
+				if (err)
+					goto done;
+				memcpy(&qid->id, &pid->id, sizeof(qid->id));
+				STAILQ_INSERT_TAIL(&commit_ids, qid, entry);
+				qid = NULL;
+			}
+		}
+		got_object_commit_close(commit);
+		commit = NULL;
+	}
 done:
-	got_object_commit_close(commit);
+	got_object_qid_free(qid);
+	if (commit)
+		got_object_commit_close(commit);
+	got_object_id_queue_free(&commit_ids);
 	return err;
 }
 
