@@ -554,9 +554,192 @@ EOF
 	test_done "$testroot" 0
 }
 
+test_fetch_unrelated_history() {
+	local testroot=`test_init fetch_unrelated_history 1`
+
+	got clone -q ${GOTD_TEST_REPO_URL} $testroot/repo-clone
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got clone failed unexpectedly" >&2
+		test_done "$testroot" "1"
+		return 1
+	fi
+	local commit_id0=`git_show_head $testroot/repo-clone`
+	
+	mkdir $testroot/new-repo
+	git_init $testroot/new-repo
+	git -C $testroot/new-repo symbolic-ref HEAD refs/heads/main
+
+	echo 'new history with just one file' > $testroot/new-repo/alpha
+	git -C $testroot/new-repo add alpha
+	git_commit $testroot/new-repo -m "adding the test tree"
+	for i in 1 2 3; do
+		echo 'line $i' >> $testroot/new-repo/alpha
+		git -C $testroot/new-repo add alpha
+		git_commit $testroot/new-repo -m "more changes" 
+	done
+	got tag -r $testroot/new-repo -m "tagging 1.0" 1.0 >/dev/null
+	local commit_id2=`git_show_head $testroot/new-repo`
+	local tag_id=`got ref -r "$testroot/new-repo" -l refs/tags/1.0 | \
+		awk '{print $2}'`
+
+	cp $testroot/repo-clone/got.conf $testroot/new-repo/.git/got.conf
+
+	got send -q -b main -t 1.0 -r $testroot/new-repo -f
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got send failed unexpectedly" >&2
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	# Verify that the send operation worked fine.
+	got clone -q ${GOTD_TEST_REPO_URL} $testroot/repo-clone2
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got fetch failed unexpectedly" >&2
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	got tree -R -r $testroot/repo-clone2 > $testroot/stdout
+	cat > $testroot/stdout.expected <<EOF
+alpha
+EOF
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	# This test checks for server-side behaviour where progress output
+	# gets generated before any ACK or NAK arrive.
+	# To trigger the problem we should not be sending any refs the
+	# server already knows about. So delete the following:
+	got ref -d -r $testroot/repo-clone refs/tags/1.0 > /dev/null
+	got fetch -X -r $testroot/repo-clone origin > /dev/null
+
+	# Rewrite main branch hisotry to avoid sending a HAVE with a
+	# commit ID which the server can find locally.
+	got ref -r $testroot/repo-clone -d refs/heads/main > /dev/null
+	mkdir $testroot/import-tree
+	echo 'parallel universe alpha' > $testroot/import-tree/alpha
+
+	got import -r $testroot/repo-clone -b main -m init \
+		$testroot/import-tree > /dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got import failed unexpectedly" >&2
+		test_done "$testroot" 1
+		return 1
+	fi
+	local commit_id=`git_show_head $testroot/repo-clone`
+
+	cp -r $testroot/repo-clone $testroot/repo-clone3
+	cp $testroot/repo-clone/config $testroot/repo-clone3/config
+
+	# verify that unrelated history can be fetched into the initial clone.
+	# This used to fail with:
+	# got-fetch-pack: readpkt: 48:    [0x02]1 commits colored, \
+	#    0 objects found, deltify 0%[0x0d]
+	# got-fetch-pack: unexpected message from server
+	got fetch -q -r $testroot/repo-clone > $testroot/stdout \
+		2> $testroot/stderr
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got fetch command failed unexpectedly" >&2
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	echo -n > $testroot/stdout.expected
+
+	cmp -s $testroot/stdout $testroot/stdout.expected
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	got ref -l -r $testroot/repo-clone > $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got ref command failed unexpectedly" >&2
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	cat > $testroot/stdout.expected <<EOF
+HEAD: refs/heads/main
+refs/heads/main: $commit_id
+refs/remotes/origin/HEAD: refs/remotes/origin/main
+refs/remotes/origin/main: $commit_id2
+refs/tags/1.0: $tag_id
+EOF
+	cmp -s $testroot/stdout $testroot/stdout.expected
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	# Now try the same fetch operation against gotd with Git.
+	# This used to fail with:
+	# fatal: git fetch-pack: expected ACK/NAK, got '?1 commits colored, \
+	#     0 objects found, deltify 0%?'
+	git -C $testroot/repo-clone3 fetch > $testroot/stdout \
+		2> $testroot/stderr
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "git fetch command failed unexpectedly" >&2
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	echo -n > $testroot/stdout.expected
+
+	cmp -s $testroot/stdout $testroot/stdout.expected
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	got ref -l -r $testroot/repo-clone3 > $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got ref command failed unexpectedly" >&2
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	cat > $testroot/stdout.expected <<EOF
+HEAD: refs/heads/main
+refs/heads/main: $commit_id
+refs/remotes/origin/HEAD: refs/remotes/origin/main
+refs/remotes/origin/main: $commit_id2
+refs/tags/1.0: $tag_id
+EOF
+	cmp -s $testroot/stdout $testroot/stdout.expected
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	test_done "$testroot" "$ret"
+}
+
 test_parseargs "$@"
 run_test test_send_basic
 run_test test_fetch_more_history
 run_test test_send_new_empty_branch
 run_test test_delete_branch
 run_test test_rewind_branch
+run_test test_fetch_unrelated_history

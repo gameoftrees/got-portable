@@ -803,7 +803,7 @@ serve_read(int infd, int outfd, int gotd_sock, const char *repo_path,
 		STATE_DONE,
 	};
 	enum protostate curstate = STATE_EXPECT_WANT;
-	int have_ack = 0, use_sidebands = 0, seen_have = 0;
+	int have_ack = 0, use_sidebands = 0, seen_have = 0, sent_nak = 0;
 	int packfd = -1;
 	size_t pack_chunksize;
 
@@ -864,6 +864,7 @@ serve_read(int infd, int outfd, int gotd_sock, const char *repo_path,
 				err = send_nak(outfd, chattygot);
 				if (err)
 					goto done;
+				sent_nak = 1;
 			}
 			if (curstate == STATE_EXPECT_MORE_WANT)
 				curstate = STATE_EXPECT_HAVE_OR_DONE;
@@ -908,7 +909,7 @@ serve_read(int infd, int outfd, int gotd_sock, const char *repo_path,
 		}
 	}
 
-	if (!seen_have) {
+	if (!seen_have || (!have_ack && !sent_nak)) {
 		err = send_nak(outfd, chattygot);
 		if (err)
 			goto done;
