@@ -1594,7 +1594,8 @@ test_send_gitconfig() {
 	local testurl=ssh://127.0.0.1/$testroot
 	local commit_id=`git_show_head $testroot/repo`
 
-	git init -q --bare $testroot/upstream-repo
+	git init --q --bare --object-format="${GOT_TEST_ALGO}" \
+		$testroot/upstream-repo
 	ret=$?
 	if [ $ret -ne 0 ]; then
 		echo "git init failed unexpectedly" >&2
