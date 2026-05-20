@@ -19,7 +19,7 @@ SRCS +=		blame.c commit_graph.c delta.c diff.c \
 		sigs.c date.c \
 		object_open_privsep.c read_gitconfig_privsep.c \
 		read_gotconfig_privsep.c pollfd.c reference_parse.c \
-		object_qid.c log.c
+		object_qid.c log.c repository_gitconfig.c
 
 .if exists(${.CURDIR}/../template/obj/template)
 TEMPLATE = ${.CURDIR}/../template/obj/template

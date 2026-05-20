@@ -15,7 +15,7 @@ SRCS=		tog.c blame.c commit_graph.c delta.c diff.c \
 		diff_patience.c bloom.c murmurhash2.c sigs.c date.c \
 		object_open_privsep.c read_gitconfig_privsep.c \
 		read_gotconfig_privsep.c pollfd.c reference_parse.c \
-		object_qid.c keyword.c
+		object_qid.c keyword.c repository_gitconfig.c
 MAN =		${PROG}.1
 
 CPPFLAGS = -I${.CURDIR}/../include -I${.CURDIR}/../lib

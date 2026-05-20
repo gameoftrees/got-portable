@@ -129,9 +129,8 @@ got_repo_init_gitconfig(struct got_repository *repo,
 	const struct got_error *err;
 	char *path;
 
-	path = got_repo_get_path_gitconfig(repo);
-	if (path == NULL)
-		return got_error_from_errno("got_repo_get_path_gitconfig");
+	if (asprintf(&path, "%s/%s", repo->path_git_dir, GOT_GITCONFIG) == -1)
+		return NULL;
 
 	if (unlink(path) == -1) {
 		err = got_error_from_errno2("unlink", path);

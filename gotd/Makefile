@@ -22,7 +22,7 @@ SRCS=		gotd.c auth.c repo_read.c repo_write.c log.c privsep_stub.c \
 		object_qid.c notify.c commit_graph.c diffreg.c diff.c \
 		diff_main.c diff_atomize_text.c diff_myers.c diff_output.c \
 		diff_output_plain.c diff_output_unidiff.c \
-		diff_output_edscript.c diff_patience.c
+		diff_output_edscript.c diff_patience.c repository_gitconfig.c
 
 CLEANFILES = parse.h
 
