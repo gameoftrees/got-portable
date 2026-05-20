@@ -840,24 +840,6 @@ done:
 	return err;
 }
 
-void
-got_repo_free_gitconfig(struct got_repository *repo)
-{
-	size_t i;
-
-	free(repo->gitconfig_author_name);
-	free(repo->gitconfig_author_email);
-	for (i = 0; i < repo->ngitconfig_remotes; i++)
-		got_repo_free_remote_repo_data(&repo->gitconfig_remotes[i]);
-	free(repo->gitconfig_remotes);
-	for (i = 0; i < repo->nextensions; i++) {
-		free(repo->extnames[i]);
-		free(repo->extvals[i]);
-	}
-	free(repo->extnames);
-	free(repo->extvals);
-}
-
 const struct got_error *
 got_repo_close(struct got_repository *repo)
 {
@@ -1026,37 +1008,6 @@ done:
 		*newp = new;
 
 	return err;
-}
-
-void
-got_repo_free_remote_repo_data(struct got_remote_repo *repo)
-{
-	int i;
-
-	if (repo == NULL)
-		return;
-
-	free(repo->name);
-	repo->name = NULL;
-	free(repo->fetch_url);
-	repo->fetch_url = NULL;
-	free(repo->send_url);
-	repo->send_url = NULL;
-	for (i = 0; i < repo->nfetch_branches; i++)
-		free(repo->fetch_branches[i]);
-	free(repo->fetch_branches);
-	repo->fetch_branches = NULL;
-	repo->nfetch_branches = 0;
-	for (i = 0; i < repo->nsend_branches; i++)
-		free(repo->send_branches[i]);
-	free(repo->send_branches);
-	repo->send_branches = NULL;
-	repo->nsend_branches = 0;
-	for (i = 0; i < repo->nfetch_refs; i++)
-		free(repo->fetch_refs[i]);
-	free(repo->fetch_refs);
-	repo->fetch_refs = NULL;
-	repo->nfetch_refs = 0;
 }
 
 const struct got_error *
