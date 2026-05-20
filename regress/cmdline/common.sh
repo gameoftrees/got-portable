@@ -54,6 +54,8 @@ git_init()
 	# TODO: Update all tests to assume 'main' instead of 'master' and
 	# switch to main here, to match Got's own default.
 	echo "ref: refs/heads/master" > "$1/.git/HEAD"
+
+	git -C "$1" config set maintenance.auto false
 }
 
 maybe_pack_repo()
