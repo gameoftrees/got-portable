@@ -1195,4 +1195,4 @@ run_test test_checkout_umask
 run_test test_checkout_ulimit_n
 run_test test_checkout_commit_keywords
 run_test test_checkout_tree_with_dot_got
-run_test test_checkout_bad_tree_entry
+run_test test_checkout_bad_tree_entry		no-sha256
