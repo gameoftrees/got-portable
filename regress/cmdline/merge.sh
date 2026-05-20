@@ -2029,5 +2029,5 @@ run_test test_merge_imported_branch
 run_test test_merge_interrupt
 run_test test_merge_umask
 run_test test_merge_gitconfig_author
-run_test test_merge_fetched_branch		no-sha256 # need network
-run_test test_merge_fetched_branch_remote	no-sha256 # need network
+run_test test_merge_fetched_branch
+run_test test_merge_fetched_branch_remote

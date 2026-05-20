@@ -1279,7 +1279,7 @@ test_send_to_empty_repo() {
 	local testurl=ssh://127.0.0.1/$testroot
 	local commit_id=`git_show_head $testroot/repo`
 
-	gotadmin init $testroot/repo2
+	gotadmin init -A ${GOT_TEST_ALGO:-sha1} $testroot/repo2
 
 	ret=$?
 	if [ $ret -ne 0 ]; then
@@ -1856,20 +1856,20 @@ test_send_with_unknown_ref_on_server() {
 }
 
 test_parseargs "$@"
-run_test test_send_basic			no-sha256
-run_test test_send_rebase_required		no-sha256
-run_test test_send_rebase_required_overwrite	no-sha256
-run_test test_send_merge_commit			no-sha256
-run_test test_send_delete			no-sha256
-run_test test_send_clone_and_send		no-sha256
-run_test test_send_tags				no-sha256
-run_test test_send_tag_of_deleted_branch	no-sha256
-run_test test_send_new_branch			no-sha256
-run_test test_send_all_branches			no-sha256
-run_test test_send_to_empty_repo		no-sha256
-run_test test_send_and_fetch_config		no-sha256
-run_test test_send_config			no-sha256
-run_test test_send_gitconfig			no-sha256
-run_test test_send_rejected			no-sha256
-run_test test_send_basic_http			no-sha256
-run_test test_send_with_unknown_ref_on_server	no-sha256
+run_test test_send_basic
+run_test test_send_rebase_required
+run_test test_send_rebase_required_overwrite
+run_test test_send_merge_commit
+run_test test_send_delete
+run_test test_send_clone_and_send
+run_test test_send_tags
+run_test test_send_tag_of_deleted_branch
+run_test test_send_new_branch
+run_test test_send_all_branches
+run_test test_send_to_empty_repo
+run_test test_send_and_fetch_config
+run_test test_send_config
+run_test test_send_gitconfig
+run_test test_send_rejected
+run_test test_send_basic_http
+run_test test_send_with_unknown_ref_on_server
