@@ -1125,8 +1125,7 @@ fetch_progress(void *arg, const char *message, off_t packfile_size,
 	 * Once the server has sent information about its default branch
 	 * we have all required information.
 	 */
-	if (a->create_configs && !a->configs_created &&
-	    !RB_EMPTY(a->config_info.symrefs)) {
+	if (a->create_configs && !a->configs_created) {
 		if (a->config_info.expected_algo == -1 &&
 		    pack_hash->algo == GOT_HASH_SHA256) {
 			err = got_repo_init_gitconfig(a->repo,
