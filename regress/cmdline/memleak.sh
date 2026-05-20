@@ -83,4 +83,4 @@ EOF
 
 test_parseargs "$@"
 run_test test_memleak_add_basic
-run_test test_memleak_send_basic	no-sha256
+run_test test_memleak_send_basic

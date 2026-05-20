@@ -2255,22 +2255,22 @@ test_fetch_unrelated_history() {
 
 
 test_parseargs "$@"
-run_test test_fetch_basic			no-sha256
-run_test test_fetch_list			no-sha256
-run_test test_fetch_branch			no-sha256
-run_test test_fetch_all				no-sha256
-run_test test_fetch_empty_packfile		no-sha256
-run_test test_fetch_delete_branch		no-sha256
-run_test test_fetch_delete_branch_mirror	no-sha256
-run_test test_fetch_update_tag			no-sha256
-run_test test_fetch_reference			no-sha256
-run_test test_fetch_replace_symref		no-sha256
-run_test test_fetch_update_headref		no-sha256
-run_test test_fetch_headref_deleted_locally	no-sha256
-run_test test_fetch_gotconfig_remote_repo	no-sha256
-run_test test_fetch_gitconfig_remote_repo	no-sha256
-run_test test_fetch_delete_remote_refs		no-sha256
-run_test test_fetch_honor_wt_conf_bflag		no-sha256
-run_test test_fetch_from_out_of_date_remote	no-sha256
-run_test test_fetch_basic_http			no-sha256
-run_test test_fetch_unrelated_history		no-sha256
+run_test test_fetch_basic
+run_test test_fetch_list
+run_test test_fetch_branch
+run_test test_fetch_all
+run_test test_fetch_empty_packfile
+run_test test_fetch_delete_branch
+run_test test_fetch_delete_branch_mirror
+run_test test_fetch_update_tag
+run_test test_fetch_reference
+run_test test_fetch_replace_symref
+run_test test_fetch_update_headref
+run_test test_fetch_headref_deleted_locally
+run_test test_fetch_gotconfig_remote_repo
+run_test test_fetch_gitconfig_remote_repo
+run_test test_fetch_delete_remote_refs
+run_test test_fetch_honor_wt_conf_bflag
+run_test test_fetch_from_out_of_date_remote
+run_test test_fetch_basic_http
+run_test test_fetch_unrelated_history
