@@ -863,8 +863,10 @@ test_checkout_symlink_relative_wtpath() {
 test_checkout_repo_with_unknown_extension() {
 	local testroot=`test_init checkout_repo_with_unknown_extension`
 
-	git -C $testroot/repo config --add extensions.badExtension foobar
-	git -C $testroot/repo config --add extensions.otherBadExtension 0
+	git -C $testroot/repo config --add extensions.badExtension foobar \
+		2>/dev/null
+	git -C $testroot/repo config --add extensions.otherBadExtension 0 \
+		2> /dev/null
 
 	echo "got: badExtension: unsupported repository format extension" \
 		> $testroot/stderr.expected
@@ -883,7 +885,7 @@ test_checkout_repo_with_unknown_extension() {
 	if [ $ret -ne 0 ]; then
 		diff -u $testroot/stderr.expected $testroot/stderr
 	fi
-	test_done "$testroot" "$ret"
+	test_done "$testroot" "$ret" 1
 }
 
 test_checkout_quiet() {
@@ -1189,7 +1191,7 @@ run_test test_checkout_read_only
 run_test test_checkout_into_nonempty_dir
 run_test test_checkout_symlink
 run_test test_checkout_symlink_relative_wtpath
-run_test test_checkout_repo_with_unknown_extension	no-sha256 # XXX git fsck fails?
+run_test test_checkout_repo_with_unknown_extension
 run_test test_checkout_quiet
 run_test test_checkout_umask
 run_test test_checkout_ulimit_n
