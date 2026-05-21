@@ -50,6 +50,7 @@ tog_SOURCES = tog.c \
 	$(top_srcdir)/lib/reference.c \
 	$(top_srcdir)/lib/reference_parse.c \
 	$(top_srcdir)/lib/repository.c \
+	$(top_srcdir)/lib/repository_gitconfig.c \
 	$(top_srcdir)/lib/sigs.c \
 	$(top_srcdir)/lib/utf8.c \
 	$(top_srcdir)/lib/worktree.c \

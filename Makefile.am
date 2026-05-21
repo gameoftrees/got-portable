@@ -125,6 +125,7 @@ regress-delta:
 		$(top_srcdir)/lib/reference.c \
 		$(top_srcdir)/lib/reference_parse.c \
 		$(top_srcdir)/lib/repository.c \
+		$(top_srcdir)/lib/repository_gitconfig.c \
 		$(top_srcdir)/lib/sigs.c \
 		$(top_srcdir)/regress/delta/delta_test.c \
 		-L$(top_builddir)/compat -lopenbsd-compat $(LIBS) && \
@@ -166,6 +167,7 @@ regress-deltify:
 		$(top_srcdir)/lib/reference.c \
 		$(top_srcdir)/lib/reference_parse.c \
 		$(top_srcdir)/lib/repository.c \
+		$(top_srcdir)/lib/repository_gitconfig.c \
 		$(top_srcdir)/lib/sigs.c \
 		$(top_srcdir)/regress/deltify/deltify_test.c \
 		-L$(top_builddir)/compat -lopenbsd-compat $(LIBS) && \
@@ -209,6 +211,7 @@ regress-fetch:
 		$(top_srcdir)/lib/reference.c \
 		$(top_srcdir)/lib/reference_parse.c \
 		$(top_srcdir)/lib/repository.c \
+		$(top_srcdir)/lib/repository_gitconfig.c \
 		$(top_srcdir)/lib/sigs.c \
 		$(top_srcdir)/regress/fetch/fetch_test.c \
 		-L$(top_builddir)/compat -lopenbsd-compat $(LIBS) -lm && \
@@ -252,6 +255,7 @@ regress-idset:
 		$(top_srcdir)/lib/reference.c \
 		$(top_srcdir)/lib/reference_parse.c \
 		$(top_srcdir)/lib/repository.c \
+		$(top_srcdir)/lib/repository_gitconfig.c \
 		$(top_srcdir)/lib/sigs.c \
 		$(top_srcdir)/regress/idset/idset_test.c \
 		-L$(top_builddir)/compat -lopenbsd-compat $(LIBS) && \
@@ -295,6 +299,7 @@ regress-path:
 		$(top_srcdir)/lib/reference.c \
 		$(top_srcdir)/lib/reference_parse.c \
 		$(top_srcdir)/lib/repository.c \
+		$(top_srcdir)/lib/repository_gitconfig.c \
 		$(top_srcdir)/lib/sigs.c \
 		$(top_srcdir)/regress/path/path_test.c \
 		-L$(top_builddir)/compat -lopenbsd-compat $(LIBS) && \

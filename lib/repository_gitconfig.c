@@ -14,12 +14,10 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <sys/tree.h>
+#include "got_compat.h"
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <sha1.h>
-#include <sha2.h>
 #include <time.h>
 #include <zlib.h>
 #include <imsg.h>

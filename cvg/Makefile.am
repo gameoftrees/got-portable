@@ -54,6 +54,7 @@ cvg_SOURCES = cvg.c \
 	$(top_srcdir)/lib/reference.c \
 	$(top_srcdir)/lib/reference_parse.c \
 	$(top_srcdir)/lib/repository.c \
+	$(top_srcdir)/lib/repository_gitconfig.c \
 	$(top_srcdir)/lib/repository_init.c \
 	$(top_srcdir)/lib/send.c \
 	$(top_srcdir)/lib/sigs.c \
