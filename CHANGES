@@ -1,3 +1,10 @@
+* got 0.126; 2026-05-21
+- remove dependency on xxd from the test suite (dep was added in got-0.125)
+- really add all relevant parent commits to newly created pack files
+- fix serving a branch of entirely unrelated history with gotd
+- fix test failures when tests are run with Git 2.54
+- initial sha256 support in the network protocol for got clone/fetch/send
+
 * got 0.125; 2026-05-10
 - security fix: reject versioned files inside .git, .got, or .cvg directories
 - security fix: crafted tree entry names could cause writes outside work tree
