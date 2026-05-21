@@ -316,6 +316,7 @@
 /lib/reference_parse.c
 /lib/repository.c
 /lib/repository_admin.c
+/lib/repository_gitconfig.c
 /lib/repository_init.c
 /lib/send.c
 /lib/serve.c
@@ -407,6 +408,8 @@
 /regress/cmdline/stage.sh
 /regress/cmdline/status.sh
 /regress/cmdline/tag.sh
+/regress/cmdline/testdata
+/regress/cmdline/testdata/bad-tree-entry.bundle
 /regress/cmdline/tree.sh
 /regress/cmdline/unstage.sh
 /regress/cmdline/update.sh
