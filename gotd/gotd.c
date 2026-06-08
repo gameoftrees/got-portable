@@ -40,7 +40,9 @@
 #include <string.h>
 #include <syslog.h>
 #include <unistd.h>
+#include <getopt.h>
 
+#include "got_version.h"
 #include "got_error.h"
 #include "got_opentemp.h"
 #include "got_path.h"
@@ -3462,7 +3464,7 @@ main(int argc, char **argv)
 {
 	const struct got_error *error = NULL;
 	struct gotd_secrets *secrets = NULL;
-	int ch, daemonize = 1, verbosity = 0, noaction = 0;
+	int ch, daemonize = 1, verbosity = 0, noaction = 0, version_flag = 0;
 	const char *confpath = GOTD_CONF_PATH;
 	char *secretspath = NULL;
 	char *argv0 = argv[0];
@@ -3479,12 +3481,16 @@ main(int argc, char **argv)
 	FILE *diff_f1 = NULL, *diff_f2 = NULL, *tmp_f1 = NULL, *tmp_f2 = NULL;
 	int diff_fd1 = -1, diff_fd2 = -1, tmp_fd = -1;
 	const char *errstr;
-
+	static const struct option longopts[] = {
+		{ "version", no_argument, NULL, 'V' },
+		{ NULL, 0, NULL, 0 }
+	};
+	
 	TAILQ_INIT(&procs);
 
 	log_init(1, LOG_DAEMON); /* Log to stderr until daemonized. */
 
-	while ((ch = getopt(argc, argv, "df:nP:s:T:v")) != -1) {
+	while ((ch = getopt_long(argc, argv, "df:nP:s:T:vV", longopts, NULL)) != -1) {
 		switch (ch) {
 		case 'd':
 			daemonize = 0;
@@ -3539,6 +3545,9 @@ main(int argc, char **argv)
 			if (verbosity < 3)
 				verbosity++;
 			break;
+		case 'V':
+			version_flag = 1;
+			break;
 		default:
 			usage();
 		}
@@ -3550,6 +3559,10 @@ main(int argc, char **argv)
 	if (argc != 0)
 		usage();
 
+	if (version_flag) {
+		got_version_print_str();
+		return 0;
+	}
 	if (geteuid() && proc_id == GOTD_PROC_GOTD)
 		fatalx("need root privileges");
 	if (geteuid() == 0 && proc_id != GOTD_PROC_GOTD)
