@@ -42,7 +42,9 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <util.h>
+#include <getopt.h>
 
+#include "got_version.h"
 #include "got_opentemp.h"
 #include "got_reference.h"
 #include "got_object.h"
@@ -907,7 +909,7 @@ main(int argc, char **argv)
 	struct gotwebd		*env;
 	struct passwd		*pw;
 	int			 ch, i, gotwebd_ngroups = NGROUPS_MAX;
-	int			 no_action = 0;
+	int			 no_action = 0, version_flag = 0;
 	int			 proc_type = GOTWEBD_PROC_PARENT;
 	const char		*conffile = GOTWEBD_CONF;
 	const char		*gotwebd_username = GOTWEBD_DEFAULT_USER;
@@ -915,6 +917,10 @@ main(int argc, char **argv)
 	gid_t			 gotwebd_groups[NGROUPS_MAX];
 	gid_t			 www_gid;
 	const char		*argv0, *errstr;
+	static const struct option longopts[] = {
+		{ "version", no_argument, NULL, 'V' },
+		{ NULL, 0, NULL, 0 }
+	};
 
 	if ((argv0 = argv[0]) == NULL)
 		argv0 = "gotwebd";
@@ -927,7 +933,7 @@ main(int argc, char **argv)
 		fatal("%s: calloc", __func__);
 	config_init(env);
 
-	while ((ch = getopt(argc, argv, "A:C:D:dG:f:F:L:nS:vW:")) != -1) {
+	while ((ch = getopt_long(argc, argv, "A:C:D:dG:f:F:L:nS:vVW:", longopts, NULL)) != -1) {
 		switch (ch) {
 		case 'A':
 			proc_type = GOTWEBD_PROC_AUTH;
@@ -978,6 +984,9 @@ main(int argc, char **argv)
 			if (env->gotwebd_verbose < 3)
 				env->gotwebd_verbose++;
 			break;
+		case 'V':
+			version_flag = 1;
+			break;
 		default:
 			usage();
 		}
@@ -987,6 +996,10 @@ main(int argc, char **argv)
 	if (argc > 0)
 		usage();
 
+	if (version_flag) {
+		got_version_print_str();
+		return 0;
+	}				
 	gotwebd_env = env;
 	env->gotwebd_conffile = conffile;
 
