@@ -36,6 +36,7 @@
 #include <syslog.h>
 #include <unistd.h>
 
+#include "got_version.h"
 #include "got_error.h"
 #include "got_path.h"
 #include "got_object.h"
@@ -1683,11 +1684,15 @@ main(int argc, char **argv)
 	uid_t uid;
 	const char *errstr;
 	char *commit_id_str = NULL;
-	int ch, fd = -1, daemonize = 1, verbosity = 0, noaction = 0;
+	int ch, fd = -1, daemonize = 1, verbosity = 0, noaction = 0, version_flag = 0;
+	static const struct option longopts[] = {
+		{ "version", no_argument, NULL, 'V' },
+		{ NULL, 0, NULL, 0 }
+	};
 
 	log_init(1, LOG_DAEMON); /* Log to stderr until daemonized. */
 
-	while ((ch = getopt(argc, argv, "df:nT:v")) != -1) {
+	while ((ch = getopt_long(argc, argv, "df:nT:vV", longopts, NULL)) != -1) {
 		switch (ch) {
 		case 'd':
 			daemonize = 0;
@@ -1723,6 +1728,9 @@ main(int argc, char **argv)
 			if (verbosity < 3)
 				verbosity++;
 			break;
+		case 'V':
+			version_flag = 1;
+			break;
 		default:
 			usage();
 		}
@@ -1737,6 +1745,11 @@ main(int argc, char **argv)
 		commit_id_str = argv[0];
 	} else if (argc != 0)
 		usage();
+	
+	if (version_flag) {
+		got_version_print_str();
+		return 0;
+	}
 
 	if (geteuid() && (proc_id == GOTSYSD_PROC_GOTSYSD ||
 	    proc_id == GOTSYSD_PROC_LISTEN || proc_id == GOTSYSD_PROC_PRIV))
