@@ -10075,68 +10075,6 @@ close_ref_view(struct tog_view *view)
 }
 
 static const struct got_error *
-resolve_reflist_entry(struct got_object_id **commit_id,
-    struct tog_reflist_entry *re, struct got_repository *repo)
-{
-	const struct got_error *err = NULL;
-	struct got_object_id *obj_id;
-	struct got_tag_object *tag = NULL;
-	int obj_type;
-
-	*commit_id = NULL;
-
-	err = got_ref_resolve(&obj_id, repo, re->ref);
-	if (err)
-		return err;
-
-	err = got_object_get_type(&obj_type, repo, obj_id);
-	if (err)
-		goto done;
-
-	switch (obj_type) {
-	case GOT_OBJ_TYPE_COMMIT:
-		break;
-	case GOT_OBJ_TYPE_TAG:
-		/*
-		 * Git allows nested tags that point to tags; keep peeling
-		 * till we reach the bottom, which is always a non-tag ref.
-		 */
-		do {
-			if (tag != NULL)
-				got_object_tag_close(tag);
-			err = got_object_open_as_tag(&tag, repo, obj_id);
-			if (err)
-				goto done;
-			free(obj_id);
-			obj_id = got_object_id_dup(
-			    got_object_tag_get_object_id(tag));
-			if (obj_id == NULL) {
-				err = got_error_from_errno("got_object_id_dup");
-				goto done;
-			}
-			err = got_object_get_type(&obj_type, repo, obj_id);
-			if (err)
-				goto done;
-		} while (obj_type == GOT_OBJ_TYPE_TAG);
-		if (obj_type != GOT_OBJ_TYPE_COMMIT)
-			err = got_error(GOT_ERR_OBJ_TYPE);
-		break;
-	default:
-		err = got_error(GOT_ERR_OBJ_TYPE);
-		break;
-	}
-
-done:
-	if (tag)
-		got_object_tag_close(tag);
-	if (err == NULL)
-		*commit_id = obj_id;
-	else
-		free(obj_id);
-	return err;
-}
-
-static const struct got_error *
 log_ref_entry(struct tog_view **new_view, int begin_y, int begin_x,
     struct tog_reflist_entry *re, struct got_repository *repo)
 {
@@ -10146,7 +10084,7 @@ log_ref_entry(struct tog_view **new_view, int begin_y, int begin_x,
 
 	*new_view = NULL;
 
-	err = resolve_reflist_entry(&commit_id, re, repo);
+	err = got_ref_resolve_commit_or_tag(&commit_id, repo, re->ref);
 	if (err)
 		return err;
 
@@ -10469,7 +10407,7 @@ browse_ref_tree(struct tog_view **new_view, int begin_y, int begin_x,
 
 	*new_view = NULL;
 
-	err = resolve_reflist_entry(&commit_id, re, repo);
+	err = got_ref_resolve_commit_or_tag(&commit_id, repo, re->ref);
 	if (err)
 		return err;
 

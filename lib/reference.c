@@ -611,6 +611,69 @@ got_ref_resolve(struct got_object_id **id, struct got_repository *repo,
 	return ref_resolve(id, repo, ref, GOT_REF_RECURSE_MAX);
 }
 
+const struct got_error *
+got_ref_resolve_commit_or_tag(struct got_object_id **commit_id,
+    struct got_repository *repo, struct got_reference *ref)
+{
+	const struct got_error *err = NULL;
+	struct got_object_id *obj_id;
+	struct got_tag_object *tag = NULL;
+	int obj_type;
+
+	*commit_id = NULL;
+
+	err = got_ref_resolve(&obj_id, repo, ref);
+	if (err)
+		return err;
+
+	err = got_object_get_type(&obj_type, repo, obj_id);
+	if (err)
+		goto done;
+
+	switch (obj_type) {
+	case GOT_OBJ_TYPE_COMMIT:
+		break;
+	case GOT_OBJ_TYPE_TAG:
+		/*
+		 * Git allows nested tags that point to tags; keep peeling
+		 * till we reach the bottom, which is always a non-tag ref.
+		 */
+		do {
+			if (tag != NULL)
+				got_object_tag_close(tag);
+			err = got_object_open_as_tag(&tag, repo, obj_id);
+			if (err)
+				goto done;
+			free(obj_id);
+			obj_id = got_object_id_dup(
+			    got_object_tag_get_object_id(tag));
+			if (obj_id == NULL) {
+				err = got_error_from_errno("got_object_id_dup");
+				goto done;
+			}
+			err = got_object_get_type(&obj_type, repo, obj_id);
+			if (err)
+				goto done;
+		} while (obj_type == GOT_OBJ_TYPE_TAG);
+		if (obj_type != GOT_OBJ_TYPE_COMMIT)
+			err = got_error(GOT_ERR_OBJ_TYPE);
+		break;
+	default:
+		err = got_error(GOT_ERR_OBJ_TYPE);
+		break;
+	}
+
+done:
+	if (tag)
+		got_object_tag_close(tag);
+	if (err == NULL)
+		*commit_id = obj_id;
+	else
+		free(obj_id);
+	return err;
+}
+
+
 char *
 got_ref_to_str(struct got_reference *ref)
 {
