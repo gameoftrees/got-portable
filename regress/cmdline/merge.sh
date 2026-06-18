@@ -2012,6 +2012,112 @@ test_merge_fetched_branch_remote() {
 	test_done "$testroot" "$ret"
 }
 
+test_merge_tag() {
+	local testroot=`test_init merge_tag`
+	local commit0=`git_show_head $testroot/repo`
+	local commit0_author_time=`git_show_author_time $testroot/repo`
+
+	git -C $testroot/repo checkout -q -b newbranch
+	echo "modified delta on branch" > $testroot/repo/gamma/delta
+	git_commit $testroot/repo -m "committing to delta on newbranch"
+	local branch_commit=`git_show_branch_head $testroot/repo newbranch`
+
+	got checkout -b master $testroot/repo $testroot/wt > /dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got checkout failed unexpectedly" >&2
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	# create a divergent commit
+	git -C $testroot/repo checkout -q master
+	echo "modified zeta on master" > $testroot/repo/epsilon/zeta
+	git_commit $testroot/repo -m "committing to zeta on master"
+	local master_commit=`git_show_head $testroot/repo`
+
+
+	# tag the branch
+	got tag -r $testroot/repo -c newbranch -m "1.0" 1.0 > /dev/null
+
+	# need an up-to-date work tree for 'got merge'
+	(cd $testroot/wt && got update > /dev/null)
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got update failed unexpectedly" >&2
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	(cd $testroot/wt && got merge 1.0 > $testroot/stdout)
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got merge failed unexpectedly" >&2
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	local merge_commit=`git_show_head $testroot/repo`
+
+	echo "G  gamma/delta" >> $testroot/stdout.expected
+	echo -n "Merged refs/tags/1.0 into refs/heads/master: " \
+		>> $testroot/stdout.expected
+	echo $merge_commit >> $testroot/stdout.expected
+
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	echo "modified delta on branch" > $testroot/content.expected
+	cat $testroot/wt/gamma/delta > $testroot/content
+	cmp -s $testroot/content.expected $testroot/content
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/content.expected $testroot/content
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+
+	(cd $testroot/wt && got status > $testroot/stdout)
+
+	echo -n > $testroot/stdout.expected
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	(cd $testroot/wt && got log -l3 | grep ^commit > $testroot/stdout)
+	echo "commit $merge_commit (master)" > $testroot/stdout.expected
+	echo "commit $master_commit" >> $testroot/stdout.expected
+	echo "commit $commit0" >> $testroot/stdout.expected
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	# We should have created a merge commit with two parents.
+	(cd $testroot/wt && got log -l1 | grep ^parent > $testroot/stdout)
+	echo "parent 1: $master_commit" > $testroot/stdout.expected
+	echo "parent 2: $branch_commit" >> $testroot/stdout.expected
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+	fi
+	test_done "$testroot" "$ret"
+}
+
 test_parseargs "$@"
 run_test test_merge_basic
 run_test test_merge_forward
@@ -2031,3 +2137,4 @@ run_test test_merge_umask
 run_test test_merge_gitconfig_author
 run_test test_merge_fetched_branch
 run_test test_merge_fetched_branch_remote
+run_test test_merge_tag

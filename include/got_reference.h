@@ -91,6 +91,16 @@ const struct got_error *got_ref_resolve(struct got_object_id **,
     struct got_repository *, struct got_reference *);
 
 /*
+ * Attempt to resolve a reference (symbolic or not) to an object ID,
+ * assuming the reference points at a commit or tag object. If the reference
+ * points at a tag then return the commit ID which the tag resolves to.
+ * Object types other than commit and tag result in GOT_ERR_OBJ_TYPE.
+ * 
+ */
+const struct got_error *got_ref_resolve_commit_or_tag(struct got_object_id **,
+    struct got_repository *, struct got_reference *);
+
+/*
  * Return a string representation of a reference.
  * The caller must dispose of it with free(3).
  */

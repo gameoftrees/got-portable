@@ -13928,7 +13928,8 @@ cmd_merge(int argc, char *argv[])
 			error = got_error_from_errno("strdup");
 			goto done;
 		}
-		error = got_ref_resolve(&branch_tip, repo, branch);
+		error = got_ref_resolve_commit_or_tag(&branch_tip, repo,
+		    branch);
 		if (error)
 			goto done;
 	}
