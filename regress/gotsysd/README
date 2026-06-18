@@ -44,10 +44,11 @@ the VM can be shut down from the host:
 
   # vmctl stop gotsysd-test
 
-The gotsysd test suite also tests gotwebd user authentication. These tests
-require the w3m browser to be installed:
+The gotsysd test suite depends on git(1). Additionally, tests for gotwebd user
+authentication and notifications require the w3m browser and Perl's
+Digest::HMAC module, respectively:
 
-  # pkg_add w3m
+  # pkg_add git w3m p5-Digest-HMAC
 
 Now the actual test suite can be run with:
 
