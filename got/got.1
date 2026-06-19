@@ -3404,14 +3404,35 @@ or reverted with
 Merge the specified
 .Ar branch
 into the current branch of the work tree.
-If the branches have diverged, merge changes into the work tree
-and create a merge commit.
-Otherwise, if the specified
+.Pp
+If the branches have not diverged, i.e. if the specified
 .Ar branch
-is already based on the work tree's current branch, make the work tree's
-current branch equivalent to the specified
+is already based on the work tree's current branch, and the
+.Fl M
+option is not used, make the work tree's current branch equivalent to the
+specified
 .Ar branch
 and update files in the work tree accordingly.
+(This is known as a
+.Dq fast-forward
+merge in Git terminology.)
+.Pp
+If the branches have diverged, and there are no merge conflicts,
+and the
+.Fl n
+option is not used, immediately create a generated merge commit in the
+repository with a log message that mentions the
+.Ar branch
+reference name as the merge source.
+.Pp
+If the
+.Ar branch
+argument is a reference which points at a tag object, a branch resolved via
+this tag will be merged, and the name of the tag will be mentioned as the
+merge source in the log message of the generated merge commit.
+If the tag does not resolve to a commit object then
+.Cm got merge
+will raise an error.
 .Pp
 Merge commits are commits based on multiple parent commits.
 The tip commit of the work tree's current branch will be used as the
