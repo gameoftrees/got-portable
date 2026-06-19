@@ -667,6 +667,7 @@ int	gotweb_render_blame(struct template *);
 int	gotweb_render_patch(struct template *);
 int	gotweb_render_rss(struct template *);
 int	gotweb_render_unauthorized(struct template *);
+int	gotweb_render_fake_redirect(struct template *);
 
 /* parse.y */
 struct gotwebd_repo * gotwebd_new_repo(const char *);

@@ -291,7 +291,6 @@ do_login(struct request *c)
 	char *token = NULL;
 	const char *identifier = NULL;
 	const time_t validity = 24 * 60 * 60; /* 1 day */
-	struct gotweb_url url;
 	struct gotwebd_repo *repo;
 
 	int r;
@@ -398,9 +397,10 @@ logged_in:
 		goto err;
 	}
 
-	memset(&url, 0, sizeof(url));
-	url.action = INDEX;
-	gotweb_reply(c, 307, "text/html", &url);
+	if (gotweb_reply(c, 200, "text/html", NULL) == -1)
+		return;
+	gotweb_render_fake_redirect(c->tp);
+
 	return;
 
 err:

@@ -1468,3 +1468,21 @@ date: {{ datebuf }} {{ " UTC" }} {{ "\n" }}
 {{ define gotweb_render_unauthorized(struct template *tp) }}
 <p>Wrong or missing authentication code</p>
 {{ end }}
+
+{{ define gotweb_render_fake_redirect(struct template *tp) }}
+{!
+	struct gotweb_url url;
+	memset(&url, 0, sizeof(url));
+	url.action = INDEX;
+!}
+<html>
+<head>
+  <meta http-equiv="refresh" content="0;url={{ render gotweb_render_url(tp->tp_arg, &url) }}">
+</head>
+<body>
+<p>
+  Please <a href="{{ render gotweb_render_url(tp->tp_arg, &url) }}">click here</a>
+  {{ " " }} if the page does not redirect automatically.
+</body>
+</html>
+{{ end }}
