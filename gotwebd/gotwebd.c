@@ -39,7 +39,6 @@
 #include <syslog.h>
 #include <unistd.h>
 #include <ctype.h>
-#include <util.h>
 #include <getopt.h>
 
 #include "got_version.h"
