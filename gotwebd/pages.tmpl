@@ -1471,13 +1471,41 @@ date: {{ datebuf }} {{ " UTC" }} {{ "\n" }}
 
 {{ define gotweb_render_fake_redirect(struct template *tp) }}
 {!
-	struct gotweb_url url;
+	struct request		*c = tp->tp_arg;
+	struct server		*srv = c->srv;
+	char			 prefix[MAX_DOCUMENT_URI * 2];
+	const char		*css = srv->custom_css;
+	const char		*url_root, *url_path;
+	struct gotweb_url	url;
+
+	strlcpy(prefix, "/", sizeof(prefix));
+
+	url_root = srv->gotweb_url_root;
+	while (url_root[0] == '/')
+		url_root++;
+	if (url_root[0] != '\0')
+		strlcat(prefix, url_root, sizeof(prefix));
+
+	url_path = srv->repos_url_path;
+	while (url_path[0] == '/')
+		url_path++;
+	if (url_path[0] != '\0') {
+		if (url_root[0] != '\0') {
+			got_path_strip_trailing_slashes(prefix);
+			strlcat(prefix, "/", sizeof(prefix));
+		}
+		strlcat(prefix, url_path, sizeof(prefix));
+	}
+
+	got_path_strip_trailing_slashes(prefix);
+
 	memset(&url, 0, sizeof(url));
 	url.action = INDEX;
 !}
 <html>
 <head>
   <meta http-equiv="refresh" content="0;url={{ render gotweb_render_url(tp->tp_arg, &url) }}">
+  <link rel="stylesheet" type="text/css" href="{{ prefix }}/{{ css }}" />
 </head>
 <body>
 <p>
