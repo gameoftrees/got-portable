@@ -8439,7 +8439,7 @@ cmd_remove(int argc, char *argv[])
 	struct got_pathlist_head paths;
 	struct got_pathlist_entry *pe;
 	int ch, delete_local_mods = 0, can_recurse = 0, keep_on_disk = 0, i;
-	int ignore_missing_paths = 0;
+	int ignore_missing_paths = 0, delete_unversioned = 0;
 	int *pack_fds = NULL;
 
 	RB_INIT(&paths);
@@ -8470,6 +8470,9 @@ cmd_remove(int argc, char *argv[])
 					break;
 				case GOT_STATUS_MISSING:
 					ignore_missing_paths = 1;
+					break;
+				case GOT_STATUS_UNVERSIONED:
+					delete_unversioned = 1;
 					break;
 				default:
 					errx(1, "invalid status code '%c'",
@@ -8552,7 +8555,7 @@ cmd_remove(int argc, char *argv[])
 
 	error = got_worktree_schedule_delete(worktree, &paths,
 	    delete_local_mods, status_codes, print_remove_status, NULL,
-	    repo, keep_on_disk, ignore_missing_paths);
+	    repo, keep_on_disk, ignore_missing_paths, delete_unversioned);
 done:
 	if (repo) {
 		const struct got_error *close_err = got_repo_close(repo);

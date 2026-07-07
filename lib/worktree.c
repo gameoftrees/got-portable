@@ -4551,6 +4551,7 @@ struct schedule_deletion_args {
 	int delete_local_mods;
 	int keep_on_disk;
 	int ignore_missing_paths;
+	int delete_unversioned;
 	const char *status_path;
 	size_t status_path_len;
 	const char *status_codes;
@@ -4577,28 +4578,32 @@ schedule_for_deletion(void *arg, unsigned char status,
 	if (status == GOT_STATUS_UNVERSIONED) {
 		if (a->keep_on_disk)
 			return NULL;
-		return got_error_path(relpath, GOT_ERR_FILE_STATUS);
-	}
+		if (!a->delete_unversioned)
+			return got_error_path(relpath, GOT_ERR_FILE_STATUS);
+	} else {
+		ie = got_fileindex_entry_get(a->fileindex, relpath,
+		    strlen(relpath));
+		if (ie == NULL)
+			return got_error_path(relpath, GOT_ERR_FILE_STATUS);
 
-	ie = got_fileindex_entry_get(a->fileindex, relpath, strlen(relpath));
-	if (ie == NULL)
-		return got_error_path(relpath, GOT_ERR_FILE_STATUS);
-
-	staged_status = get_staged_status(ie);
-	if (staged_status != GOT_STATUS_NO_CHANGE) {
-		if (staged_status == GOT_STATUS_DELETE)
-			return NULL;
-		return got_error_path(relpath, GOT_ERR_FILE_STAGED);
+		staged_status = get_staged_status(ie);
+		if (staged_status != GOT_STATUS_NO_CHANGE) {
+			if (staged_status == GOT_STATUS_DELETE)
+				return NULL;
+			return got_error_path(relpath, GOT_ERR_FILE_STAGED);
+		}
 	}
 
 	if (asprintf(&ondisk_path, "%s/%s", a->worktree->root_path,
 	    relpath) == -1)
 		return got_error_from_errno("asprintf");
 
-	err = get_file_status(&status, &sb, ie, ondisk_path, dirfd, de_name,
-	    a->repo);
-	if (err)
-		goto done;
+	if (ie) {
+		err = get_file_status(&status, &sb, ie, ondisk_path, dirfd, de_name,
+		    a->repo);
+		if (err)
+			goto done;
+	}
 
 	if (a->status_codes) {
 		size_t ncodes = strlen(a->status_codes);
@@ -4613,7 +4618,8 @@ schedule_for_deletion(void *arg, unsigned char status,
 			return NULL;
 		}
 		if (a->status_codes[i] != GOT_STATUS_MODIFY &&
-		    a->status_codes[i] != GOT_STATUS_MISSING) {
+		    a->status_codes[i] != GOT_STATUS_MISSING &&
+		    a->status_codes[i] != GOT_STATUS_UNVERSIONED) {
 			static char msg[64];
 			snprintf(msg, sizeof(msg),
 			    "invalid status code '%c'", a->status_codes[i]);
@@ -4633,8 +4639,13 @@ schedule_for_deletion(void *arg, unsigned char status,
 			err = got_error_set_errno(ENOENT, relpath);
 			goto done;
 		}
+		if (status == GOT_STATUS_UNVERSIONED && !a->delete_unversioned) {
+			err = got_error_path(relpath, GOT_ERR_FILE_STATUS);
+			goto done;
+		}
 		if (status != GOT_STATUS_MODIFY &&
-		    status != GOT_STATUS_MISSING) {
+		    status != GOT_STATUS_MISSING &&
+		    status != GOT_STATUS_UNVERSIONED)  {
 			err = got_error_path(relpath, GOT_ERR_FILE_STATUS);
 			goto done;
 		}
@@ -4678,10 +4689,12 @@ schedule_for_deletion(void *arg, unsigned char status,
 		    strlen(ondisk_path), root_len) != 0);
 	}
 
-	if (got_fileindex_entry_has_blob(ie))
-		got_fileindex_entry_mark_deleted_from_disk(ie);
-	else
-		got_fileindex_entry_remove(a->fileindex, ie);
+	if (ie) {
+		if (got_fileindex_entry_has_blob(ie))
+			got_fileindex_entry_mark_deleted_from_disk(ie);
+		else
+			got_fileindex_entry_remove(a->fileindex, ie);
+	}
 done:
 	free(ondisk_path);
 	if (err)
@@ -4697,7 +4710,8 @@ got_worktree_schedule_delete(struct got_worktree *worktree,
     struct got_pathlist_head *paths, int delete_local_mods,
     const char *status_codes,
     got_worktree_delete_cb progress_cb, void *progress_arg,
-    struct got_repository *repo, int keep_on_disk, int ignore_missing_paths)
+    struct got_repository *repo, int keep_on_disk, int ignore_missing_paths,
+    int delete_unversioned)
 {
 	struct got_fileindex *fileindex = NULL;
 	char *fileindex_path = NULL;
@@ -4722,6 +4736,7 @@ got_worktree_schedule_delete(struct got_worktree *worktree,
 	sda.delete_local_mods = delete_local_mods;
 	sda.keep_on_disk = keep_on_disk;
 	sda.ignore_missing_paths = ignore_missing_paths;
+	sda.delete_unversioned = delete_unversioned;
 	sda.status_codes = status_codes;
 
 	RB_FOREACH(pe, got_pathlist_head, paths) {

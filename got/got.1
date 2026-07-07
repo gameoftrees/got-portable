@@ -1918,7 +1918,7 @@ is a directory.
 .Ar path ...
 .Xc
 .Dl Pq alias: Cm rm
-Remove versioned files from a work tree and schedule them for deletion
+Remove files from a work tree and schedule versioned files for deletion
 from the repository in the next commit.
 .Pp
 By default, only files tracked under version control are removed, and
@@ -1954,7 +1954,14 @@ The following status codes may be specified:
 .Fl f
 option)
 .It ! Ta versioned file expected on disk but missing
+.It ? Ta unversioned file (deletion is permanent!)
 .El
+.Pp
+The
+.Fl s\ ?
+option in combination with
+.Fl k
+results in a no-op since the unversioned files will be kept on disk.
 .El
 .Tg pa
 .It Xo
