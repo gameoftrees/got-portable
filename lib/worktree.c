@@ -4577,6 +4577,12 @@ schedule_for_deletion(void *arg, unsigned char status,
 		return got_error_set_errno(ENOENT, relpath);
 	}
 
+	if (status == GOT_STATUS_UNVERSIONED) {
+		if (a->keep_on_disk)
+			return NULL;
+		return got_error_path(relpath, GOT_ERR_FILE_STATUS);
+	}
+
 	ie = got_fileindex_entry_get(a->fileindex, relpath, strlen(relpath));
 	if (ie == NULL)
 		return got_error_path(relpath, GOT_ERR_FILE_STATUS);
