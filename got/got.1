@@ -1921,6 +1921,9 @@ is a directory.
 Remove versioned files from a work tree and schedule them for deletion
 from the repository in the next commit.
 .Pp
+By default, only files tracked under version control are removed, and
+attempts to remove unversioned files result in errors.
+.Pp
 The options for
 .Cm got remove
 are as follows:
@@ -1932,6 +1935,7 @@ and do not raise an error if a specified
 does not exist on disk.
 .It Fl k
 Keep affected files on disk.
+Silently ignore unversioned files encountered during file removal.
 .It Fl R
 Permit recursion into directories.
 If this option is not specified,
