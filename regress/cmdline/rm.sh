@@ -614,6 +614,121 @@ test_rm_status_code() {
 		return 1
 	fi
 
+	(cd $testroot/wt && got revert -R . > /dev/null)
+
+	# Test deletion of unversioned files via "-s ?".
+	touch $testroot/wt/unversioned
+	touch $testroot/wt/epsilon/unversioned
+
+	echo '?  epsilon/unversioned' > $testroot/stdout.expected
+	echo '?  unversioned' >> $testroot/stdout.expected
+	(cd $testroot/wt && got status > $testroot/stdout)
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	# Unversioned files should never be removed without -s ?.
+	for flag in "" "-k" "-f" "-R"; do
+		(cd $testroot/wt && got rm $flag unversioned \
+			>$testroot/stdout 2>$testroot/stderr)
+
+		echo -n > $testroot/stdout.expected
+		cmp -s $testroot/stdout.expected $testroot/stdout
+		ret=$?
+		if [ $ret -ne 0 ]; then
+			diff -u $testroot/stdout.expected $testroot/stdout
+			test_done "$testroot" "1"
+			return 1
+		fi
+
+		if [ -n "$flag" -a "$flag" = "-k" ]; then
+			echo -n > $testroot/stderr.expected
+		else
+			echo "got: unversioned: file has unexpected status" \
+				> $testroot/stderr.expected
+		fi
+
+		cmp -s $testroot/stderr.expected $testroot/stderr
+		ret=$?
+		if [ $ret -ne 0 ]; then
+			diff -u $testroot/stderr.expected $testroot/stderr
+			test_done "$testroot" "1"
+			return 1
+		fi
+
+		echo '?  epsilon/unversioned' > $testroot/stdout.expected
+		echo '?  unversioned' >> $testroot/stdout.expected
+		(cd $testroot/wt && got status > $testroot/stdout)
+		cmp -s $testroot/stdout.expected $testroot/stdout
+		ret=$?
+		if [ $ret -ne 0 ]; then
+			diff -u $testroot/stdout.expected $testroot/stdout
+			test_done "$testroot" "1"
+			return 1
+		fi
+	done
+
+	# -k takes priority over -s ?, such that files are kept on disk.
+	(cd $testroot/wt && got rm -k -s ? unversioned \
+		>$testroot/stdout 2>$testroot/stderr)
+
+	echo -n > $testroot/stdout.expected
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	echo -n > $testroot/stderr.expected
+	cmp -s $testroot/stderr.expected $testroot/stderr
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stderr.expected $testroot/stderr
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	# Remove all unversioned files from the work tree with -R -s ?
+	(cd $testroot/wt && got rm -R -s ? . \
+		>$testroot/stdout 2>$testroot/stderr)
+
+	echo "D  epsilon/unversioned" > $testroot/stdout.expected
+	echo "D  unversioned" >> $testroot/stdout.expected
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	echo -n > $testroot/stderr.expected
+	cmp -s $testroot/stderr.expected $testroot/stderr
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stderr.expected $testroot/stderr
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	if [ -e "$testroot/wt/unversioned" ]; then
+		echo "file $testroot/wt/unversioned still exists on disk" &>2
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	if [ -e "$testroot/wt/epsilon/unversioned" ]; then
+		echo "file $testroot/wt/epsilon/unversioned still exists on disk" &>2
+		test_done "$testroot" "1"
+		return 1
+	fi
+
 	test_done "$testroot" "$ret"
 }
 
