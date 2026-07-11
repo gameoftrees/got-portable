@@ -4886,11 +4886,23 @@ log_mark_commit(struct tog_log_view_state *s)
 }
 
 static const struct got_error *
+set_tog_base_commit(struct got_worktree *worktree)
+{
+	tog_base_commit.id = got_object_id_dup(
+	    got_worktree_get_base_commit_id(worktree));
+	if (tog_base_commit.id == NULL)
+		return got_error_from_errno( "got_object_id_dup");
+
+	return NULL;
+}
+
+static const struct got_error *
 input_log_view(struct tog_view **new_view, struct tog_view *view, int ch)
 {
 	const struct got_error *err = NULL;
 	struct tog_log_view_state *s = &view->state.log;
 	int eos, nscroll;
+	char *cwd = NULL;
 
 	if (s->thread_args.load_all) {
 		if (ch == CTRL('g') || ch == KEY_BACKSPACE)
@@ -5051,6 +5063,29 @@ input_log_view(struct tog_view **new_view, struct tog_view *view, int ch)
 		} else /* 'B' */
 			s->log_branches = !s->log_branches;
 
+		cwd = getcwd(NULL, 0);
+		if (cwd) {
+			struct got_worktree *worktree;
+
+			err = got_worktree_open(&worktree, cwd, NULL);
+			free(cwd);
+			cwd = NULL;
+			if (err && err->code != GOT_ERR_NOT_WORKTREE)
+				return err;
+			if (worktree) {
+				err = got_worktree_get_state(
+				    &tog_base_commit.marker, s->repo,
+				    worktree, NULL, NULL);
+				if (err) {
+					got_worktree_close(worktree);
+					return err;
+				}
+				err  = set_tog_base_commit(worktree);
+				got_worktree_close(worktree);
+				if (err)
+					return err;
+			}
+		}
 		if (s->thread_args.pack_fds == NULL) {
 			err = got_repo_pack_fds_open(&s->thread_args.pack_fds);
 			if (err)
@@ -5218,17 +5253,6 @@ init_curses(void)
 }
 
 static const struct got_error *
-set_tog_base_commit(struct got_repository *repo, struct got_worktree *worktree)
-{
-	tog_base_commit.id = got_object_id_dup(
-	    got_worktree_get_base_commit_id(worktree));
-	if (tog_base_commit.id == NULL)
-		return got_error_from_errno( "got_object_id_dup");
-
-	return NULL;
-}
-
-static const struct got_error *
 get_in_repo_path_from_argv0(char **in_repo_path, int argc, char *argv[],
     struct got_repository *repo, struct got_worktree *worktree)
 {
@@ -5382,7 +5406,7 @@ cmd_log(int argc, char *argv[])
 	}
 
 	if (worktree) {
-		error = set_tog_base_commit(repo, worktree);
+		error = set_tog_base_commit(worktree);
 		if (error != NULL)
 			goto done;
 	}
@@ -7756,7 +7780,7 @@ cmd_diff(int argc, char *argv[])
 	}
 
 	if (worktree) {
-		error = set_tog_base_commit(repo, worktree);
+		error = set_tog_base_commit(worktree);
 		if (error != NULL)
 			goto done;
 
@@ -8921,7 +8945,7 @@ cmd_blame(int argc, char *argv[])
 	}
 
 	if (worktree) {
-		error = set_tog_base_commit(repo, worktree);
+		error = set_tog_base_commit(worktree);
 		if (error != NULL)
 			goto done;
 
@@ -9926,7 +9950,7 @@ cmd_tree(int argc, char *argv[])
 	}
 
 	if (worktree) {
-		error = set_tog_base_commit(repo, worktree);
+		error = set_tog_base_commit(worktree);
 		if (error != NULL)
 			goto done;
 
@@ -10720,7 +10744,7 @@ cmd_ref(int argc, char *argv[])
 		goto done;
 
 	if (worktree) {
-		error = set_tog_base_commit(repo, worktree);
+		error = set_tog_base_commit(worktree);
 		if (error != NULL)
 			goto done;
 
