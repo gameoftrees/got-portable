@@ -6777,7 +6777,7 @@ cmd_remove(int argc, char *argv[])
 
 	error = got_worktree_schedule_delete(worktree, &paths,
 	    delete_local_mods, status_codes, print_remove_status, NULL,
-	    repo, keep_on_disk, ignore_missing_paths, 0);
+	    repo, keep_on_disk, ignore_missing_paths, 0, 0);
 done:
 	if (repo) {
 		const struct got_error *close_err = got_repo_close(repo);
