@@ -1913,7 +1913,7 @@ is a directory.
 .Tg rm
 .It Xo
 .Cm remove
-.Op Fl fkR
+.Op Fl fIkR
 .Op Fl s Ar status-codes
 .Ar path ...
 .Xc
@@ -1922,7 +1922,7 @@ Remove files from a work tree and schedule versioned files for deletion
 from the repository in the next commit.
 .Pp
 By default, only files tracked under version control are removed, and
-attempts to remove unversioned files result in errors.
+attempts to remove unversioned or ignored files result in errors.
 .Pp
 The options for
 .Cm got remove
@@ -1933,6 +1933,12 @@ Perform the operation even if a file contains local modifications,
 and do not raise an error if a specified
 .Ar path
 does not exist on disk.
+.It Fl I
+With
+.Fl s\ ? ,
+remove unversioned files even if they match an ignore pattern.
+See
+.Sx Ignore Patterns .
 .It Fl k
 Keep affected files on disk.
 Silently ignore unversioned files encountered during file removal.

@@ -694,12 +694,15 @@ test_rm_status_code() {
 		return 1
 	fi
 
-	# Remove all unversioned files from the work tree with -R -s ?
+	# Remove all unversioned files from the work tree with -R -s ?.
+	# Ignored files will not be removed unless -I is passed as well.
+	echo 'epsilon/*' > $testroot/wt/.gitignore
+	(cd $testroot/wt && got add $testroot/wt/.gitignore > /dev/null)
+
 	(cd $testroot/wt && got rm -R -s ? . \
 		>$testroot/stdout 2>$testroot/stderr)
 
-	echo "D  epsilon/unversioned" > $testroot/stdout.expected
-	echo "D  unversioned" >> $testroot/stdout.expected
+	echo "D  unversioned" > $testroot/stdout.expected
 	cmp -s $testroot/stdout.expected $testroot/stdout
 	ret=$?
 	if [ $ret -ne 0 ]; then
@@ -723,8 +726,56 @@ test_rm_status_code() {
 		return 1
 	fi
 
+	if [ ! -e "$testroot/wt/epsilon/unversioned" ]; then
+		echo "ignored file $testroot/wt/epsilon/unversioned was deleted" &>2
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	echo 'A  .gitignore' > $testroot/stdout.expected
+	echo '?  epsilon/unversioned' >> $testroot/stdout.expected
+	(cd $testroot/wt && got status -I > $testroot/stdout)
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	(cd $testroot/wt && got rm -R -s ? -I . \
+		>$testroot/stdout 2>$testroot/stderr)
+
+	echo "D  epsilon/unversioned" > $testroot/stdout.expected
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	echo -n > $testroot/stderr.expected
+	cmp -s $testroot/stderr.expected $testroot/stderr
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stderr.expected $testroot/stderr
+		test_done "$testroot" "1"
+		return 1
+	fi
+
 	if [ -e "$testroot/wt/epsilon/unversioned" ]; then
 		echo "file $testroot/wt/epsilon/unversioned still exists on disk" &>2
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	echo 'A  .gitignore' > $testroot/stdout.expected
+	(cd $testroot/wt && got status -I > $testroot/stdout)
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
 		test_done "$testroot" "1"
 		return 1
 	fi

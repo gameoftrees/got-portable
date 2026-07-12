@@ -4711,7 +4711,7 @@ got_worktree_schedule_delete(struct got_worktree *worktree,
     const char *status_codes,
     got_worktree_delete_cb progress_cb, void *progress_arg,
     struct got_repository *repo, int keep_on_disk, int ignore_missing_paths,
-    int delete_unversioned)
+    int delete_unversioned, int delete_ignored)
 {
 	struct got_fileindex *fileindex = NULL;
 	char *fileindex_path = NULL;
@@ -4751,7 +4751,9 @@ got_worktree_schedule_delete(struct got_worktree *worktree,
 		sda.status_path = ondisk_status_path;
 		sda.status_path_len = strlen(ondisk_status_path);
 		err = worktree_status(worktree, pe->path, fileindex, repo,
-			schedule_for_deletion, &sda, NULL, NULL, 1, 1);
+			schedule_for_deletion, &sda, NULL, NULL,
+			(delete_unversioned && !delete_ignored) ? 0 : 1,
+			1);
 		free(ondisk_status_path);
 		if (err)
 			break;

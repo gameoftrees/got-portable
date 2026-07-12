@@ -8409,7 +8409,7 @@ __dead static void
 usage_remove(int status)
 {
 	FILE *fp = (status == 0) ? stdout : stderr;
-	fprintf(fp, "usage: %s remove [-fkR] [-s status-codes] path ...\n",
+	fprintf(fp, "usage: %s remove [-fIkR] [-s status-codes] path ...\n",
 	    getprogname());
 	exit(status);
 }
@@ -8440,6 +8440,7 @@ cmd_remove(int argc, char *argv[])
 	struct got_pathlist_entry *pe;
 	int ch, delete_local_mods = 0, can_recurse = 0, keep_on_disk = 0, i;
 	int ignore_missing_paths = 0, delete_unversioned = 0;
+	int delete_ignored = 0;
 	int *pack_fds = NULL;
 
 	RB_INIT(&paths);
@@ -8450,11 +8451,15 @@ cmd_remove(int argc, char *argv[])
 		err(1, "pledge");
 #endif
 
-	while ((ch = getopt(argc, argv, "fkRs:")) != -1) {
+	while ((ch = getopt(argc, argv, "fIkRs:")) != -1) {
 		switch (ch) {
 		case 'f':
 			delete_local_mods = 1;
 			ignore_missing_paths = 1;
+			break;
+		case 'I':
+			/* Used in combination with "-s ?". */
+			delete_ignored = 1;
 			break;
 		case 'k':
 			keep_on_disk = 1;
@@ -8555,7 +8560,8 @@ cmd_remove(int argc, char *argv[])
 
 	error = got_worktree_schedule_delete(worktree, &paths,
 	    delete_local_mods, status_codes, print_remove_status, NULL,
-	    repo, keep_on_disk, ignore_missing_paths, delete_unversioned);
+	    repo, keep_on_disk, ignore_missing_paths, delete_unversioned,
+	    delete_ignored);
 done:
 	if (repo) {
 		const struct got_error *close_err = got_repo_close(repo);
