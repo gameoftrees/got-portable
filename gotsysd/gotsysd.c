@@ -35,6 +35,7 @@
 #include <string.h>
 #include <syslog.h>
 #include <unistd.h>
+#include <getopt.h>
 
 #include "got_version.h"
 #include "got_error.h"
