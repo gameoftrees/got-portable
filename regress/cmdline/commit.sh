@@ -107,6 +107,59 @@ test_commit_subdir() {
 	test_done "$testroot" "$ret"
 }
 
+test_commit_subdirs() {
+	local testroot=`test_init commit_subdir`
+
+	# trailing slash for -p on purpose, we used to have a bug
+	# that was triggered by the presence of trailing slashes.
+	got checkout -p epsilon/ $testroot/repo $testroot/wt > /dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	mkdir -p $testroot/wt/foo/bar
+	mkdir -p $testroot/wt/foo/baz
+
+	echo omega > $testroot/wt/foo/bar/omega
+	echo kappa > $testroot/wt/foo/bar/kappa
+
+	(cd $testroot/wt && got add -R foo >$testroot/stdout)
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got add failed unexpectedly" >&2
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	echo "A  foo/bar/kappa" > $testroot/stdout.expected
+	echo "A  foo/bar/omega" >>$testroot/stdout.expected
+
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	(cd $testroot/wt && \
+		got commit -m 'test commit_subdirs' > $testroot/stdout)
+
+	local head_rev=`git_show_head $testroot/repo`
+	echo "A  foo/bar/kappa" > $testroot/stdout.expected
+	echo "A  foo/bar/omega" >>$testroot/stdout.expected
+	echo "Created commit $head_rev" >> $testroot/stdout.expected
+
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+	fi
+	test_done "$testroot" "$ret"
+}
+
 test_commit_single_file() {
 	local testroot=`test_init commit_single_file`
 
@@ -2117,6 +2170,7 @@ test_parseargs "$@"
 run_test test_commit_basic
 run_test test_commit_new_subdir
 run_test test_commit_subdir
+run_test test_commit_subdirs
 run_test test_commit_single_file
 run_test test_commit_out_of_date
 run_test test_commit_added_subdirs

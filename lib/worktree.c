@@ -180,7 +180,13 @@ got_worktree_init(const char *path, struct got_reference *head_ref,
 	if (!got_path_is_absolute(prefix)) {
 		if (asprintf(&absprefix, "/%s", prefix) == -1)
 			return got_error_from_errno("asprintf");
+	} else {
+		absprefix = strdup(prefix);
+		if (absprefix == NULL)
+			return got_error_from_errno("strdup");
 	}
+	if (!got_path_is_root_dir(absprefix))
+		got_path_strip_trailing_slashes(absprefix);
 
 	/* Create top-level directory (may already exist). */
 	if (mkdir(path, GOT_DEFAULT_DIR_MODE) == -1 && errno != EEXIST) {
@@ -229,8 +235,7 @@ got_worktree_init(const char *path, struct got_reference *head_ref,
 		goto done;
 
 	/* Store in-repository path prefix. */
-	err = create_meta_file(path_got, GOT_WORKTREE_PATH_PREFIX,
-	    absprefix ? absprefix : prefix);
+	err = create_meta_file(path_got, GOT_WORKTREE_PATH_PREFIX, absprefix);
 	if (err)
 		goto done;
 
@@ -273,13 +278,21 @@ got_worktree_match_path_prefix(int *match, struct got_worktree *worktree,
     const char *path_prefix)
 {
 	char *absprefix = NULL;
+	const char *a, *b;
+	size_t al, bl;
 
 	if (!got_path_is_absolute(path_prefix)) {
 		if (asprintf(&absprefix, "/%s", path_prefix) == -1)
 			return got_error_from_errno("asprintf");
 	}
-	*match = (strcmp(absprefix ? absprefix : path_prefix,
-	    worktree->path_prefix) == 0);
+
+	a = absprefix ? absprefix : path_prefix;
+	al = strlen(a);
+
+	b = worktree->path_prefix;
+	bl = strlen(b);
+
+	*match = (got_path_cmp(a, b, al, bl) == 0);
 	free(absprefix);
 	return NULL;
 }

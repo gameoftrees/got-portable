@@ -195,6 +195,8 @@ open_worktree(struct got_worktree **worktree, const char *path,
 	    GOT_WORKTREE_PATH_PREFIX);
 	if (err)
 		goto done;
+	if (!got_path_is_root_dir((*worktree)->path_prefix))
+		got_path_strip_trailing_slashes((*worktree)->path_prefix);
 
 	err = read_meta_file(&base_commit_id_str, path_meta,
 	    GOT_WORKTREE_BASE_COMMIT);
