@@ -6108,7 +6108,7 @@ insert_tree_entry(struct got_tree_entry *new_te,
 	if (err)
 		return err;
 	if (new_pe == NULL)
-		return got_error(GOT_ERR_TREE_DUP_ENTRY);
+		return got_error_path(new_te->name, GOT_ERR_TREE_DUP_ENTRY);
 	return NULL;
 }
 
@@ -6865,7 +6865,6 @@ got_worktree_commit(struct got_object_id **new_commit_id,
 		    head_commit_id, repo, GOT_ERR_COMMIT_OUT_OF_DATE);
 		if (err)
 			goto done;
-
 	}
 
 	err = commit_worktree(new_commit_id, &commitable_paths,
