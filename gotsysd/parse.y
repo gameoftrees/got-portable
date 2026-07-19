@@ -119,6 +119,7 @@ typedef struct {
 %token	HTDOCS INSECURE PORT PREFORK SERVER NAME SOCKET WWW HINT SHOW_REPO_AGE
 %token	ERROR LISTEN ON USER GOTD DIRECTORY REPOSITORY UID RANGE PERMIT
 %token	DENY RO RW WEB GOTSYSD_LOGIN ENABLE DISABLE HIDE REPOSITORIES
+%token	REDIRECT_METHOD PAGE_REFRESH STATUS_CODE 
 
 %token	<v.string>	STRING
 %token	<v.number>	NUMBER
@@ -604,6 +605,14 @@ webopts1	: GOTSYSD_CONTROL SOCKET STRING {
 			}
 			gotsysd->web.auth_config = GOTSYSD_WEB_AUTH_INSECURE;
 		}
+		| REDIRECT_METHOD PAGE_REFRESH {
+			gotsysd->web.redirect_method =
+			    GOTSYSD_WEB_REDIRECT_METHOD_PAGE_REFRESH;
+		}
+		| REDIRECT_METHOD STATUS_CODE {
+			gotsysd->web.redirect_method =
+			    GOTSYSD_WEB_REDIRECT_METHOD_STATUS_CODE;
+		}
 		;
 
 webopts2	: webopts2 webopts1 nl
@@ -781,10 +790,12 @@ lookup(char *s)
 		{ "login",			GOTSYSD_LOGIN },
 		{ "name",			NAME },
 		{ "on",				ON },
+		{ "page_refresh",		PAGE_REFRESH },
 		{ "permit",			PERMIT },
 		{ "port",			PORT },
 		{ "prefork",			PREFORK },
 		{ "range",			RANGE },
+		{ "redirect_method",		REDIRECT_METHOD },
 		{ "repositories",		REPOSITORIES },
 		{ "repository",			REPOSITORY },
 		{ "ro",				RO },
@@ -792,6 +803,7 @@ lookup(char *s)
 		{ "server",			SERVER },
 		{ "show_repo_age",		SHOW_REPO_AGE },
 		{ "socket",			SOCKET },
+		{ "status_code",		STATUS_CODE },
 		{ "uid",			UID },
 		{ "user",			USER },
 		{ "web",			WEB },

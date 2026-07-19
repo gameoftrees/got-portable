@@ -1018,6 +1018,7 @@ gotsysd_web_config_init(struct gotsysd_web_config *webcfg)
 	TAILQ_INIT(&webcfg->listen_addrs);
 	STAILQ_INIT(&webcfg->servers);
 	webcfg->auth_config = GOTSYSD_WEB_AUTH_UNSET;
+	webcfg->redirect_method = GOTSYSD_WEB_REDIRECT_METHOD_PAGE_REFRESH;
 }
 
 const struct got_error *

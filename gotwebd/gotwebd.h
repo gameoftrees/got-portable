@@ -96,6 +96,7 @@
 #define D_MAXSLCOMMDISP		 10
 #define D_MAXCOMMITDISP		 25
 #define D_MAXSLTAGDISP		 3
+#define D_REDIRECT_METHOD	 GOTWEBD_REDIRECT_METHOD_PAGE_REFRESH
 
 #define BUF			 8192
 
@@ -136,6 +137,12 @@
 struct got_blob_object;
 struct got_tree_entry;
 struct got_reflist_head;
+
+enum gotwebd_redirect_method {
+	GOTWEBD_REDIRECT_METHOD_UNSET,
+	GOTWEBD_REDIRECT_METHOD_PAGE_REFRESH,
+	GOTWEBD_REDIRECT_METHOD_STATUS_CODE,
+};
 
 enum gotwebd_proc_type {
 	GOTWEBD_PROC_PARENT,
@@ -463,6 +470,8 @@ struct server {
 	enum gotwebd_auth_config auth_config;
 	struct gotwebd_access_rule_list access_rules;
 
+	enum gotwebd_redirect_method redirect_method;
+
 	struct gotwebd_repolist	 repos;
 	struct got_pathlist_head websites;
 };
@@ -547,6 +556,8 @@ struct gotwebd {
 
 	char		 login_hint_user[MAX_IDENTIFIER_SIZE];
 	char		 login_hint_port[GOTWEBD_MAXPORT];
+
+	enum gotwebd_redirect_method redirect_method;
 };
 
 /*

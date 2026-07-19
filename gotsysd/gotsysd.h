@@ -107,6 +107,11 @@ enum gotsysd_web_auth_config {
 	GOTSYSD_WEB_AUTH_INSECURE	= 0x0f7f7f00
 };
 
+enum gotsysd_web_redirect_method {
+	GOTSYSD_WEB_REDIRECT_METHOD_PAGE_REFRESH,
+	GOTSYSD_WEB_REDIRECT_METHOD_STATUS_CODE
+};
+
 enum gotsysd_web_address_family {
 	GOTSYSD_LISTEN_ADDR_UNIX = 0,
 	GOTSYSD_LISTEN_ADDR_INET,
@@ -168,6 +173,7 @@ struct gotsysd_web_config {
 	char login_hint_user[MAX_IDENTIFIER_SIZE];
 	char login_hint_port[8];
 
+	enum gotsysd_web_redirect_method redirect_method;
 	enum gotsysd_web_auth_config auth_config;
 	struct gotsysd_web_addresslist listen_addrs;
 	struct gotsysd_web_serverlist servers;

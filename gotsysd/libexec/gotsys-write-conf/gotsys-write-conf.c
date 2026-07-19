@@ -1368,6 +1368,27 @@ write_gotwebd_conf(void)
 		
 	}
 
+	switch (webcfg.redirect_method) {
+	case GOTSYSD_WEB_REDIRECT_METHOD_PAGE_REFRESH:
+		ret = dprintf(fd, "redirect_method page_refresh\n");
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		if (ret != 29) {
+			return got_error_fmt(GOT_ERR_IO, "short write to %s",
+			    path);
+		}
+		break;
+	case GOTSYSD_WEB_REDIRECT_METHOD_STATUS_CODE:
+		ret = dprintf(fd, "redirect_method status_code\n");
+		if (ret == -1) 
+			return got_error_from_errno2("dprintf", path);
+		if (ret != 28) {
+			return got_error_fmt(GOT_ERR_IO, "short write to %s",
+			    path);
+		}
+		break;
+	}
+
 	switch (webcfg.auth_config) {
 	case GOTSYSD_WEB_AUTH_UNSET:
 		break;

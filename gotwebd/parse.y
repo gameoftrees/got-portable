@@ -156,6 +156,7 @@ mediatype_ok(const char *s)
 %token	WEBSITE PATH BRANCH REPOS_URL_PATH DESCRIPTION
 %token	TYPES INCLUDE GOTWEBD_CONTROL
 %token	SSH_HOSTKEY_ECDSA SSH_HOSTKEY_ED25519 SSH_HOSTKEY_RSA
+%token	REDIRECT_METHOD STATUS_CODE PAGE_REFRESH
 
 %token	<v.string>	STRING
 %token	<v.number>	NUMBER
@@ -559,6 +560,14 @@ main		: PREFORK NUMBER {
 			}
 
 			free($2);
+		}
+		| REDIRECT_METHOD STATUS_CODE {
+			gotwebd->redirect_method =
+			    GOTWEBD_REDIRECT_METHOD_STATUS_CODE;
+		}
+		| REDIRECT_METHOD PAGE_REFRESH {
+			gotwebd->redirect_method =
+			    GOTWEBD_REDIRECT_METHOD_PAGE_REFRESH;
 		}
 		;
 
@@ -1307,10 +1316,12 @@ lookup(char *s)
 		{ "max_commits_display",	MAX_COMMITS_DISPLAY },
 		{ "max_repos_display",		MAX_REPOS_DISPLAY },
 		{ "on",				ON },
+		{ "page_refresh",		PAGE_REFRESH },
 		{ "path",			PATH },
 		{ "permit",			PERMIT },
 		{ "port",			PORT },
 		{ "prefork",			PREFORK },
+		{ "redirect_method",		REDIRECT_METHOD },
 		{ "repos_path",			REPOS_PATH },
 		{ "repos_url_path",		REPOS_URL_PATH },
 		{ "repositories",		REPOSITORIES },
@@ -1329,6 +1340,7 @@ lookup(char *s)
 		{ "ssh_hostkey_ecdsa",		SSH_HOSTKEY_ECDSA},
 		{ "ssh_hostkey_ed25519",	SSH_HOSTKEY_ED25519},
 		{ "ssh_hostkey_rsa",		SSH_HOSTKEY_RSA},
+		{ "status_code",		STATUS_CODE },
 		{ "summary_commits_display",	SUMMARY_COMMITS_DISPLAY },
 		{ "summary_tags_display",	SUMMARY_TAGS_DISPLAY },
 		{ "types",			TYPES },
@@ -1977,6 +1989,19 @@ parse_config(const char *filename, struct gotwebd *env)
 				return -1;
 			}
 		}
+
+		/*
+		 * The redirect method is not configurable on a per-server
+		 * basis in gotwebd.conf so currently it will always be UNSET.
+		 *
+		 * And gotwebd child processes will not see fields that are
+		 * set in our global env, unless we copy them across manually.
+		 * For now, let this field ride along in per-server config.
+		 * Maybe it will become configurable on a per-server basis
+		 * eventually, in which case this code remains correct.
+		 */
+		if (srv->redirect_method == GOTWEBD_REDIRECT_METHOD_UNSET)
+			srv->redirect_method = env->redirect_method;
 	}
 
 	TAILQ_FOREACH(srv, &env->servers, entry) {
@@ -2097,6 +2122,8 @@ conf_new_server(const char *name)
 	STAILQ_INIT(&srv->access_rules);
 	TAILQ_INIT(&srv->repos);
 	RB_INIT(&srv->websites);
+
+	srv->redirect_method = GOTWEBD_REDIRECT_METHOD_UNSET;
 
 	TAILQ_INSERT_TAIL(&gotwebd->servers, srv, entry);
 

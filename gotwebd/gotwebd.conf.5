@@ -111,6 +111,48 @@ are served directly from
 .Xr httpd 8 .
 .Pp
 This setting can also be configured on a per-server basis.
+.It Ic redirect_method Ar method
+Set the
+.Ar method
+used by
+.Xr gotwebd 8
+when redirecting clients to another page, such as from the login page
+to the summary page.
+.Pp
+The available methods are:
+.Bl -tag -width Ds
+.It page_refresh
+Send HTTP response status code 200 (success) and serve a
+.Dv meta  
+tag in the HTML response body with the
+.Dv http-equiv
+attribute set to
+.Dq refresh
+and a new URL in the
+.Dv url
+attribute.
+.Pp
+This method is the default and provides good browser compatibility overall.
+.pp
+This method can get in the way of scripts trying to navigate through a
+.Xr gotsh 1
+.Cm weblogin
+link, which is usually desirable, but not always.
+.It status_code
+Send HTTP response status code 307 (redirect) with a target URL in HTTP
+headers and with an empty response body.
+.Pp
+This method generally works as expected.
+In some situations browsers fail to follow the redirect and display the
+redirecting page instead.
+For example,
+.Xr gotsh 1
+.Cm weblogin 
+links have been known to fail loading the summary page if the redirecting
+link is opened by an external application asking Mozilla Firefox to open
+the login link, even though the redirect is followed as expected when
+the login link is visited via the browser's address bar.
+.El
 .It Ic repos_url_path Ar path
 Sets the URL path under which Git repositories will be displayed by
 .Xr gotwebd 8 .
