@@ -1468,7 +1468,7 @@ date: {{ datebuf }} {{ " UTC" }} {{ "\n" }}
 <p>Wrong or missing authentication code</p>
 {{ end }}
 
-{{ define gotweb_render_fake_redirect(struct template *tp) }}
+{{ define gotweb_render_refresh_redirect(struct template *tp) }}
 {!
 	struct request		*c = tp->tp_arg;
 	struct server		*srv = c->srv;
