@@ -58,6 +58,8 @@ config_init(struct gotwebd *env)
 	strlcpy(env->htdocs_path, D_HTDOCS_PATH, sizeof(env->htdocs_path));
 	strlcpy(env->gotweb_url_root, "/", sizeof(env->gotweb_url_root));
 
+	env->redirect_method = D_REDIRECT_METHOD;
+
 	env->prefork = GOTWEBD_NUMPROC;
 	TAILQ_INIT(&env->servers);
 	TAILQ_INIT(&env->sockets);
