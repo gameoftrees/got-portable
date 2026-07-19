@@ -399,7 +399,7 @@ logged_in:
 
 	if (gotweb_reply(c, 200, "text/html", NULL) == -1)
 		return;
-	gotweb_render_fake_redirect(c->tp);
+	gotweb_render_refresh_redirect(c->tp);
 
 	return;
 
