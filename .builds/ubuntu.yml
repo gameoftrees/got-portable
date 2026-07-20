@@ -1,0 +1,29 @@
+submitter:
+  git.st.ht:
+    enabled: false
+
+image: ubuntu/resolute
+packages:
+  - athena-jot
+  - autoconf
+  - autotools-dev
+  - bison
+  - build-essential
+  - ed
+  - git
+  - libbsd-dev
+  - libevent-dev
+  - libncurses5-dev
+  - libssl-dev
+  - libtls-dev
+  - pkg-config
+  - uuid-dev
+  - zlib1g-dev
+sources:
+  - https://github.com/gameoftrees/got-portable.git
+tasks:
+  - build: |
+      cd got-portable
+      ./autogen.sh || exit 1
+      ./configure || exit 1
+      make

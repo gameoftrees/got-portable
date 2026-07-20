@@ -1,0 +1,19 @@
+submitter:
+  git.st.ht:
+    enabled: false
+
+image: freebsd/current
+packages:
+  - automake
+  - git
+  - libevent
+  - libretls
+  - pkgconf
+sources:
+  - https://github.com/gameoftrees/got-portable.git
+tasks:
+  - build: |
+      cd got-portable
+      ./autogen.sh || exit 1
+      ./configure || exit 1
+      make

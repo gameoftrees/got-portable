@@ -1,0 +1,31 @@
+name: macOS Build
+
+on: push
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install packages
+        run: |
+          brew update
+          brew install \
+            autoconf \
+            automake \
+            bison \
+            pkg-config \
+            ncurses \
+            ossp-uuid \
+            git \
+            libevent \
+            libretls
+
+      - name: Build
+        run: |
+          ./autogen.sh
+          ./configure
+          make

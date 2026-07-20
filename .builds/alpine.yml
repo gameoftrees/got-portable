@@ -1,0 +1,31 @@
+submitter:
+  git.st.ht:
+    enabled: false
+
+image: alpine/edge
+packages:
+  - autoconf
+  - automake
+  - bison
+  - bsd-compat-headers
+  - build-base
+  - git
+  - libbsd-dev
+  - libevent-dev
+  - libressl-dev
+  - make
+  - ncurses-dev
+  - util-linux-dev
+  - zlib-dev
+sources:
+  - https://github.com/gameoftrees/got-portable.git
+tasks:
+  - build: |
+      cd got-portable
+      ./autogen.sh || exit 1
+      ./configure || exit 1
+      make
+  - build-out-tree: |
+      cd got-portable
+      git clean -dfx
+      ./autogen.sh && mkdir build && (cd build && ../configure && make)
