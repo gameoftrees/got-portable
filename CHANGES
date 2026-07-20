@@ -1,3 +1,15 @@
+* got 0.127; 2026-07-20
+- re-add cmdline tests to 'make regress' target (regression from 0.126)
+- add version flag (-V, --version) to gotd, gotwebd, and gotsysd 
+- make 'got merge' accept tags as merge source argument
+- do not raise errors when unversioned files are found during got rm -k
+- add rm -s ? option for deleting unversioned files from the work tree
+- add rm -I option for also deleting ignored unversioned files with rm -s ?
+- make 'tog log' reload the work tree's base-commit info during Ctrl-L refresh
+- fix failures due to trailing slashes in checkout -p path-prefix argument
+- gotwebd: use <meta http-equiv="refresh"> tag to redirect browser after login
+- gotwebd.conf: add option which restores legacy redirect using http status 307
+
 * got 0.126; 2026-05-21
 - remove dependency on xxd from the test suite (dep was added in got-0.125)
 - really add all relevant parent commits to newly created pack files
