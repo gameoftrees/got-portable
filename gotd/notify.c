@@ -411,8 +411,8 @@ notify_dispatch_session(int fd, short event, void *arg)
 	for (;;) {
 		const struct got_error *err = NULL;
 
-		if ((n = imsg_get(ibuf, &imsg)) == -1)
-			fatal("%s: imsg_get error", __func__);
+		if ((n = imsgbuf_get(ibuf, &imsg)) == -1)
+			fatal("%s: imsgbuf_get error", __func__);
 		if (n == 0)	/* No more messages. */
 			break;
 
@@ -559,8 +559,8 @@ notify_dispatch(int fd, short event, void *arg)
 	for (;;) {
 		const struct got_error *err = NULL;
 
-		if ((n = imsg_get(imsgbuf, &imsg)) == -1)
-			fatal("%s: imsg_get error", __func__);
+		if ((n = imsgbuf_get(imsgbuf, &imsg)) == -1)
+			fatal("%s: imsgbuf_get error", __func__);
 		if (n == 0)	/* No more messages. */
 			break;
 

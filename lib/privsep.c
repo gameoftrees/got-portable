@@ -126,17 +126,17 @@ got_privsep_recv_imsg(struct imsg *imsg, struct imsgbuf *ibuf,
 	const struct got_error *err;
 	ssize_t n;
 
-	n = imsg_get(ibuf, imsg);
+	n = imsgbuf_get(ibuf, imsg);
 	if (n == -1)
-		return got_error_from_errno("imsg_get");
+		return got_error_from_errno("imsgbuf_get");
 
 	while (n == 0) {
 		err = read_imsg(ibuf);
 		if (err)
 			return err;
-		n = imsg_get(ibuf, imsg);
+		n = imsgbuf_get(ibuf, imsg);
 		if (n == -1)
-			return got_error_from_errno("imsg_get");
+			return got_error_from_errno("imsgbuf_get");
 	}
 
 	if (imsg->hdr.type == GOT_IMSG_ERROR) {

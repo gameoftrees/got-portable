@@ -386,9 +386,9 @@ cmd_apply(int argc, char *argv[])
 			goto done;
 		}
 
-		n = imsg_get(&ibuf, &imsg);
+		n = imsgbuf_get(&ibuf, &imsg);
 		if (n == -1) {
-			err = got_error_from_errno("imsg_get");
+			err = got_error_from_errno("imsgbuf_get");
 			goto done;
 		}
 		if (n == 0) {

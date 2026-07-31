@@ -226,8 +226,8 @@ session_dispatch_repo_child(int fd, short event, void *arg)
 		uint32_t client_id = 0;
 		int do_disconnect = 0;
 
-		if ((n = imsg_get(ibuf, &imsg)) == -1)
-			fatal("%s: imsg_get error", __func__);
+		if ((n = imsgbuf_get(ibuf, &imsg)) == -1)
+			fatal("%s: imsgbuf_get error", __func__);
 		if (n == 0)	/* No more messages. */
 			break;
 
@@ -493,9 +493,9 @@ session_dispatch_client(int fd, short events, void *arg)
 	}
 
 	while (err == NULL) {
-		n = imsg_get(ibuf, &imsg);
+		n = imsgbuf_get(ibuf, &imsg);
 		if (n == -1) {
-			err = got_error_from_errno("imsg_get");
+			err = got_error_from_errno("imsgbuf_get");
 			break;
 		}
 		if (n == 0)
@@ -794,8 +794,8 @@ session_dispatch(int fd, short event, void *arg)
 		uint32_t client_id = 0;
 		int do_disconnect = 0, do_list_refs = 0;
 
-		if ((n = imsg_get(ibuf, &imsg)) == -1)
-			fatal("%s: imsg_get error", __func__);
+		if ((n = imsgbuf_get(ibuf, &imsg)) == -1)
+			fatal("%s: imsgbuf_get error", __func__);
 		if (n == 0)	/* No more messages. */
 			break;
 
