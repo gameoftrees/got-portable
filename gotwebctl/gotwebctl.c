@@ -161,9 +161,9 @@ cmd_info(int argc, char *argv[], int gotwebd_sock)
 		if (n == 0)
 			break;
 
-		n = imsg_get(&ibuf, &imsg);
+		n = imsgbuf_get(&ibuf, &imsg);
 		if (n == -1) {
-			err = got_error_from_errno("imsg_get");
+			err = got_error_from_errno("imsgbuf_get");
 			break;
 		}
 
@@ -235,9 +235,9 @@ cmd_stop(int argc, char *argv[], int gotwebd_sock)
 			break;
 		}
 
-		n = imsg_get(&ibuf, &imsg);
+		n = imsgbuf_get(&ibuf, &imsg);
 		if (n == -1) {
-			err = got_error_from_errno("imsg_get");
+			err = got_error_from_errno("imsgbuf_get");
 			break;
 		}
 

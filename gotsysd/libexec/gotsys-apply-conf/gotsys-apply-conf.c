@@ -145,8 +145,8 @@ dispatch_gotd(int fd, short event, void *arg)
 	}
 
 	for (;;) {
-		if ((n = imsg_get(ibuf, &imsg)) == -1) {
-			warn("%s: imsg_get", __func__);
+		if ((n = imsgbuf_get(ibuf, &imsg)) == -1) {
+			warn("%s: imsgbuf_get", __func__);
 			goto fatal;
 		}
 		if (n == 0)	/* No more messages. */
@@ -212,8 +212,8 @@ dispatch_gotsysd(int fd, short event, void *arg)
 	}
 
 	for (;;) {
-		if ((n = imsg_get(ibuf, &imsg)) == -1) {
-			warn("%s: imsg_get", __func__);
+		if ((n = imsgbuf_get(ibuf, &imsg)) == -1) {
+			warn("%s: imsgbuf_get", __func__);
 			goto fatal;
 		}
 		if (n == 0)	/* No more messages. */

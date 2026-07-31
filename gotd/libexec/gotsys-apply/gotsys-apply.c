@@ -326,9 +326,9 @@ gotsys_apply(struct gotd_imsgev *iev)
 		goto done;
 	}
 
-	n = imsg_get(&ibuf, &imsg);
+	n = imsgbuf_get(&ibuf, &imsg);
 	if (n == -1) {
-		err = got_error_from_errno("imsg_get");
+		err = got_error_from_errno("imsgbuf_get");
 		goto done;
 	}
 	if (n == 0) {
@@ -415,8 +415,8 @@ dispatch_event(int fd, short event, void *arg)
 	}
 
 	while (err == NULL && !flush_and_exit) {
-		if ((n = imsg_get(ibuf, &imsg)) == -1) {
-			warn("%s: imsg_get", __func__);
+		if ((n = imsgbuf_get(ibuf, &imsg)) == -1) {
+			warn("%s: imsgbuf_get", __func__);
 			goto fatal;
 		}
 		if (n == 0)	/* No more messages. */

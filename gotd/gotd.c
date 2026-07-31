@@ -699,8 +699,8 @@ gotd_dispatch_reload(int fd, short event, void *arg)
 	for (;;) {
 		const struct got_error *err = NULL;
 
-		if ((n = imsg_get(ibuf, &imsg)) == -1)
-			fatal("%s: imsg_get error", __func__);
+		if ((n = imsgbuf_get(ibuf, &imsg)) == -1)
+			fatal("%s: imsgbuf_get error", __func__);
 		if (n == 0)	/* No more messages. */
 			break;
 
@@ -985,9 +985,9 @@ gotd_request(int fd, short events, void *arg)
 	}
 
 	while (err == NULL && !do_disconnect) {
-		n = imsg_get(ibuf, &imsg);
+		n = imsgbuf_get(ibuf, &imsg);
 		if (n == -1) {
-			err = got_error_from_errno("imsg_get");
+			err = got_error_from_errno("imsgbuf_get");
 			break;
 		}
 		if (n == 0)
@@ -1577,8 +1577,8 @@ gotd_dispatch_listener(int fd, short event, void *arg)
 		uint32_t client_id = 0;
 		int do_disconnect = 0;
 
-		if ((n = imsg_get(ibuf, &imsg)) == -1)
-			fatal("%s: imsg_get error", __func__);
+		if ((n = imsgbuf_get(ibuf, &imsg)) == -1)
+			fatal("%s: imsgbuf_get error", __func__);
 		if (n == 0)	/* No more messages. */
 			break;
 
@@ -1862,8 +1862,8 @@ gotd_dispatch_notifier(int fd, short event, void *arg)
 	}
 
 	for (;;) {
-		if ((n = imsg_get(ibuf, &imsg)) == -1)
-			fatal("%s: imsg_get error", __func__);
+		if ((n = imsgbuf_get(ibuf, &imsg)) == -1)
+			fatal("%s: imsgbuf_get error", __func__);
 		if (n == 0)	/* No more messages. */
 			break;
 
@@ -2038,8 +2038,8 @@ gotd_dispatch_auth_child(int fd, short event, void *arg)
 	if (client->auth->iev.ibuf.fd != fd)
 		fatalx("%s: unexpected fd %d", __func__, fd);
 
-	if ((n = imsg_get(ibuf, &imsg)) == -1)
-		fatal("%s: imsg_get error", __func__);
+	if ((n = imsgbuf_get(ibuf, &imsg)) == -1)
+		fatal("%s: imsgbuf_get error", __func__);
 	if (n == 0)	/* No more messages. */
 		return;
 
@@ -2244,8 +2244,8 @@ dispatch_gotsys_check(int fd, short event, void *arg)
 		const struct got_error *err = NULL;
 		int do_disconnect = 0;
 
-		if ((n = imsg_get(ibuf, &imsg)) == -1)
-			fatal("%s: imsg_get error", __func__);
+		if ((n = imsgbuf_get(ibuf, &imsg)) == -1)
+			fatal("%s: imsgbuf_get error", __func__);
 		if (n == 0)	/* No more messages. */
 			break;
 
@@ -2383,8 +2383,8 @@ dispatch_gotsys_apply(int fd, short event, void *arg)
 		const struct got_error *err = NULL;
 		int do_notify = 0;
 
-		if ((n = imsg_get(ibuf, &imsg)) == -1)
-			fatal("%s: imsg_get error", __func__);
+		if ((n = imsgbuf_get(ibuf, &imsg)) == -1)
+			fatal("%s: imsgbuf_get error", __func__);
 		if (n == 0)	/* No more messages. */
 			break;
 
@@ -2693,8 +2693,8 @@ gotd_dispatch_client_session(int fd, short event, void *arg)
 		int do_disconnect = 0, do_start_repo_child = 0;
 		int do_gotsys_check = 0, refs_updated = 0;
 
-		if ((n = imsg_get(ibuf, &imsg)) == -1)
-			fatal("%s: imsg_get error", __func__);
+		if ((n = imsgbuf_get(ibuf, &imsg)) == -1)
+			fatal("%s: imsgbuf_get error", __func__);
 		if (n == 0)	/* No more messages. */
 			break;
 
@@ -2980,8 +2980,8 @@ gotd_dispatch_repo_child(int fd, short event, void *arg)
 		uint32_t client_id = 0;
 		int do_disconnect = 0;
 
-		if ((n = imsg_get(ibuf, &imsg)) == -1)
-			fatal("%s: imsg_get error", __func__);
+		if ((n = imsgbuf_get(ibuf, &imsg)) == -1)
+			fatal("%s: imsgbuf_get error", __func__);
 		if (n == 0)	/* No more messages. */
 			break;
 

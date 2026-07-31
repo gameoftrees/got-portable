@@ -82,9 +82,9 @@ gotsysd_imsg_recv(struct imsg *imsg, struct imsgbuf *ibuf, size_t min_datalen)
 {
 	ssize_t n;
 
-	n = imsg_get(ibuf, imsg);
+	n = imsgbuf_get(ibuf, imsg);
 	if (n == -1)
-		return got_error_from_errno("imsg_get");
+		return got_error_from_errno("imsgbuf_get");
 
 	if (n == 0) {
 		n = imsgbuf_read(ibuf);
@@ -92,9 +92,9 @@ gotsysd_imsg_recv(struct imsg *imsg, struct imsgbuf *ibuf, size_t min_datalen)
 			return got_error_from_errno("imsgbuf_read");
 		if (n == 0)
 			return got_error(GOT_ERR_EOF);
-		n = imsg_get(ibuf, imsg);
+		n = imsgbuf_get(ibuf, imsg);
 		if (n == -1)
-			return got_error_from_errno("imsg_get");
+			return got_error_from_errno("imsgbuf_get");
 		if (n == 0)
 			return got_error(GOT_ERR_PRIVSEP_READ);
 	}

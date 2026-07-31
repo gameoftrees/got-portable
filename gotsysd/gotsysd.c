@@ -496,8 +496,8 @@ gotsysd_dispatch_sysconf_child(int fd, short event, void *arg)
 	}
 
 	for (;;) {
-		if ((n = imsg_get(ibuf, &imsg)) == -1)
-			fatal("%s: imsg_get error", __func__);
+		if ((n = imsgbuf_get(ibuf, &imsg)) == -1)
+			fatal("%s: imsgbuf_get error", __func__);
 		if (n == 0)	/* No more messages. */
 			break;
 
@@ -755,9 +755,9 @@ gotsysd_request(int fd, short events, void *arg)
 	}
 
 	while (err == NULL) {
-		n = imsg_get(ibuf, &imsg);
+		n = imsgbuf_get(ibuf, &imsg);
 		if (n == -1) {
-			err = got_error_from_errno("imsg_get");
+			err = got_error_from_errno("imsgbuf_get");
 			break;
 		}
 		if (n == 0)
@@ -869,8 +869,8 @@ gotsysd_dispatch_auth_child(int fd, short event, void *arg)
 	if (client->auth->iev.ibuf.fd != fd)
 		fatalx("%s: unexpected fd %d", __func__, fd);
 
-	if ((n = imsg_get(ibuf, &imsg)) == -1)
-		fatal("%s: imsg_get error", __func__);
+	if ((n = imsgbuf_get(ibuf, &imsg)) == -1)
+		fatal("%s: imsgbuf_get error", __func__);
 	if (n == 0)	/* No more messages. */
 		return;
 
@@ -1115,8 +1115,8 @@ gotsysd_dispatch_listener(int fd, short event, void *arg)
 		uint32_t client_id = 0;
 		int do_disconnect = 0;
 
-		if ((n = imsg_get(ibuf, &imsg)) == -1)
-			fatal("%s: imsg_get error", __func__);
+		if ((n = imsgbuf_get(ibuf, &imsg)) == -1)
+			fatal("%s: imsgbuf_get error", __func__);
 		if (n == 0)	/* No more messages. */
 			break;
 
@@ -1290,8 +1290,8 @@ gotsysd_dispatch_priv(int fd, short event, void *arg)
 	}
 
 	for (;;) {
-		if ((n = imsg_get(ibuf, &imsg)) == -1)
-			fatal("%s: imsg_get error", __func__);
+		if ((n = imsgbuf_get(ibuf, &imsg)) == -1)
+			fatal("%s: imsgbuf_get error", __func__);
 		if (n == 0)	/* No more messages. */
 			break;
 
@@ -1379,8 +1379,8 @@ gotsysd_dispatch_libexec(int fd, short event, void *arg)
 	}
 
 	for (;;) {
-		if ((n = imsg_get(ibuf, &imsg)) == -1)
-			fatal("%s: imsg_get error", __func__);
+		if ((n = imsgbuf_get(ibuf, &imsg)) == -1)
+			fatal("%s: imsgbuf_get error", __func__);
 		if (n == 0)	/* No more messages. */
 			break;
 
