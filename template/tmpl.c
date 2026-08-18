@@ -83,7 +83,7 @@ tp_urlescape(struct template *tp, const char *str)
 		if (iscntrl((unsigned char)*str) ||
 		    isspace((unsigned char)*str) ||
 		    *str == '\'' || *str == '"' || *str == '\\') {
-			r = snprintf(tmp, sizeof(tmp), "%%%2X", *str);
+			r = snprintf(tmp, sizeof(tmp), "%%%02X", *str);
 			if (r < 0  || (size_t)r >= sizeof(tmp))
 				return (0);
 			if (tp_write(tp, tmp, r) == -1)
