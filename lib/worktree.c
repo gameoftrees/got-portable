@@ -4238,7 +4238,7 @@ worktree_status(struct got_worktree *worktree, const char *path,
 		else {
 			if (!no_ignores) {
 				err = add_ignores_from_parent_paths(&ignores,
-				    worktree->root_path, ondisk_path);
+				    worktree->root_path, path);
 				if (err)
 					goto done;
 			}
