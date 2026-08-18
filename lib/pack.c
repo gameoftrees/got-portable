@@ -60,7 +60,7 @@ verify_fanout_table(uint32_t *fanout_table)
 {
 	int i;
 
-	for (i = 0; i < 0xff - 1; i++) {
+	for (i = 0; i < 0xff; i++) {
 		if (be32toh(fanout_table[i]) > be32toh(fanout_table[i + 1]))
 			return got_error(GOT_ERR_BAD_PACKIDX);
 	}
