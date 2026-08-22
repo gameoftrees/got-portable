@@ -6703,6 +6703,7 @@ commit_worktree(struct got_object_id **new_commit_id,
 	if (err)
 		goto done;
 done:
+	free(new_tree_id);
 	got_object_id_queue_free(&parent_ids);
 	if (head_tree)
 		got_object_tree_close(head_tree);
