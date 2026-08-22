@@ -206,7 +206,7 @@ static const struct got_error*
 diffreg(BUF **d, const char *path1, const char *path2,
     enum got_diff_algorithm diff_algo)
 {
-	const struct got_error *err = NULL;
+	const struct got_error *err = NULL, *free_err;
 	FILE *f1 = NULL, *f2 = NULL, *outfile = NULL;
 	char *outpath = NULL;
 	struct got_diffreg_result *diffreg_result = NULL;
@@ -270,6 +270,9 @@ done:
 		err = got_error_from_errno("fclose");
 	if (f2 && fclose(f2) == EOF && err == NULL)
 		err = got_error_from_errno("fclose");
+	free_err = got_diffreg_result_free(diffreg_result);
+	if (free_err && err == NULL)
+		err = free_err;
 	return err;
 }
 
