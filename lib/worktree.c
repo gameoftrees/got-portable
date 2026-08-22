@@ -3604,6 +3604,8 @@ done:
 		got_object_commit_close(commit1);
 	if (commit2)
 		got_object_commit_close(commit2);
+	free(tree_id1);
+	free(tree_id2);
 	if (tree1)
 		got_object_tree_close(tree1);
 	if (tree2)
