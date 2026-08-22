@@ -430,6 +430,10 @@ out:
 			err = got_error_from_errno("buf_write_fd");
 		*overlapcnt = d3s->overlapcnt;
 	}
+	free(d3s->d13);
+	free(d3s->d23);
+	free(d3s->de);
+	free(d3s->overlap);
 	free(d3s);
 	buf_free(diffb);
 	return err;
