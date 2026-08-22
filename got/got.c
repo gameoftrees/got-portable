@@ -12704,6 +12704,8 @@ histedit_free_list(struct got_histedit_list *histedit_cmds)
 
 	while ((hle = TAILQ_FIRST(histedit_cmds))) {
 		TAILQ_REMOVE(histedit_cmds, hle, entry);
+		free(hle->commit_id);
+		free(hle->logmsg);
 		free(hle);
 	}
 }
