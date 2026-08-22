@@ -8165,6 +8165,8 @@ done:
 	free(tmp_branch_name);
 	free(branch_ref_name);
 	free(base_commit_ref_name);
+	if (base_commit_ref)
+		got_ref_close(base_commit_ref);
 	if (wt_branch)
 		got_ref_close(wt_branch);
 	if (err) {
