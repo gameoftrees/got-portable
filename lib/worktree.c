@@ -6441,7 +6441,7 @@ write_tree(struct got_object_id **new_tree_id, int *nentries,
 	/* Write new list of entries; deleted entries have been dropped. */
 	err = got_object_tree_create(new_tree_id, &paths, *nentries, repo);
 done:
-	got_pathlist_free(&paths, GOT_PATHLIST_FREE_NONE);
+	got_pathlist_free(&paths, GOT_PATHLIST_FREE_DATA);
 	return err;
 }
 
