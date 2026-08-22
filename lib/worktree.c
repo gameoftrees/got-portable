@@ -6321,6 +6321,7 @@ write_tree(struct got_object_id **new_tree_id, int *nentries,
 			err = insert_tree_entry(new_te, &paths);
 			if (err)
 				goto done;
+			new_te = NULL;
 			(*nentries)++;
 		} else {
 			*slash = '\0'; /* trim trailing path components */
@@ -6336,6 +6337,7 @@ write_tree(struct got_object_id **new_tree_id, int *nentries,
 				err = insert_tree_entry(new_te, &paths);
 				if (err)
 					goto done;
+				new_te = NULL;
 				(*nentries)++;
 			}
 		}
@@ -6363,6 +6365,7 @@ write_tree(struct got_object_id **new_tree_id, int *nentries,
 				err = insert_tree_entry(new_te, &paths);
 				if (err)
 					goto done;
+				new_te = NULL;
 				(*nentries)++;
 				continue;
 			}
@@ -6398,6 +6401,7 @@ write_tree(struct got_object_id **new_tree_id, int *nentries,
 				err = insert_tree_entry(new_te, &paths);
 				if (err)
 					goto done;
+				new_te = NULL;
 				(*nentries)++;
 				continue;
 			}
@@ -6419,6 +6423,7 @@ write_tree(struct got_object_id **new_tree_id, int *nentries,
 					err = insert_tree_entry(new_te, &paths);
 					if (err)
 						goto done;
+					new_te = NULL;
 					(*nentries)++;
 				}
 				err = report_ct_status(ct, status_cb,
@@ -6433,6 +6438,7 @@ write_tree(struct got_object_id **new_tree_id, int *nentries,
 				err = insert_tree_entry(new_te, &paths);
 				if (err)
 					goto done;
+				new_te = NULL;
 				(*nentries)++;
 			}
 		}
@@ -6441,6 +6447,7 @@ write_tree(struct got_object_id **new_tree_id, int *nentries,
 	/* Write new list of entries; deleted entries have been dropped. */
 	err = got_object_tree_create(new_tree_id, &paths, *nentries, repo);
 done:
+	free(new_te);
 	got_pathlist_free(&paths, GOT_PATHLIST_FREE_DATA);
 	return err;
 }
