@@ -7457,6 +7457,7 @@ rebase_commit(struct got_object_id **new_commit_id,
 	struct got_reference *head_ref = NULL;
 	struct got_object_id *head_commit_id = NULL;
 	char *logmsg = NULL;
+	struct got_pathlist_entry *pe;
 
 	memset(&cc_arg, 0, sizeof(cc_arg));
 	RB_INIT(&commitable_paths);
@@ -7554,6 +7555,12 @@ rebase_commit(struct got_object_id **new_commit_id,
 	if (sync_err && err == NULL)
 		err = sync_err;
 done:
+	RB_FOREACH(pe, got_pathlist_head, &commitable_paths) {
+		struct got_commitable *ct = pe->data;
+
+		free_commitable(ct);
+	}
+	got_pathlist_free(&commitable_paths, GOT_PATHLIST_FREE_NONE);
 	free(fileindex_path);
 	free(head_commit_id);
 	if (head_ref)
