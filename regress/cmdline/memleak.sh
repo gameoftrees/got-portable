@@ -81,6 +81,42 @@ EOF
 	test_memleak_done "$testroot" "$ret"
 }
 
+test_memleak_histedit_basic() {
+	local testroot=`test_init memleak_histedit_basic`
+
+	got checkout $testroot/repo $testroot/wt > /dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	echo "foo" > $testroot/wt/foo
+	(cd $testroot/wt && got add foo > /dev/null)
+	(cd $testroot/wt && got commit -m 'add foo' foo > /dev/null)
+	local commit_id=`git_show_head $testroot/repo`
+
+	echo -n > $testroot/histedit-script
+	for i in `seq 10`; do
+		echo "change $i" >> $testroot/wt/foo
+		(cd $testroot/wt && got commit -m 'change foo' foo > /dev/null)
+		echo "pick `git_show_head $testroot/repo`" \
+			>> $testroot/histedit-script
+	done
+
+	echo "last change" >> $testroot/wt/foo
+	(cd $testroot/wt && got commit -m 'last change to foo' foo > /dev/null)
+	echo "drop `git_show_head $testroot/repo`" >> $testroot/histedit-script
+
+	(cd $testroot/wt && got up -c $commit_id > /dev/null)
+	(cd $testroot/wt && $(check_memleak $testroot) \
+		got histedit -F $testroot/histedit-script > /dev/null)
+
+	test_memleak_done "$testroot" "$ret"
+}
+
+
 test_parseargs "$@"
 run_test test_memleak_add_basic
 run_test test_memleak_send_basic
+run_test test_memleak_histedit_basic
