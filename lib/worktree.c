@@ -8570,6 +8570,8 @@ got_worktree_histedit_complete(struct got_worktree *worktree,
 	if (sync_err && err == NULL)
 		err = sync_err;
 done:
+	if (resolved)
+		got_ref_close(resolved);
 	got_fileindex_free(fileindex);
 	free(fileindex_path);
 	free(new_head_commit_id);
