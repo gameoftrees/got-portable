@@ -9256,7 +9256,8 @@ got_worktree_merge_abort(struct got_worktree *worktree,
 	if (err)
 		goto done;
 
-	err = got_ref_resolve(&merged_commit_id, repo, commit_ref);
+	err = got_ref_resolve_commit_or_tag(&merged_commit_id, repo,
+	    commit_ref);
 	if (err)
 		goto done;
 
