@@ -2118,6 +2118,219 @@ test_merge_tag() {
 	test_done "$testroot" "$ret"
 }
 
+test_merge_tag_abort() {
+	local testroot=`test_init merge_abort`
+	local commit0=`git_show_head $testroot/repo`
+	local commit0_author_time=`git_show_author_time $testroot/repo`
+
+	git -C $testroot/repo checkout -q -b newbranch
+	echo "modified delta on branch" > $testroot/repo/gamma/delta
+	git_commit $testroot/repo -m "committing to delta on newbranch"
+	local branch_commit0=`git_show_branch_head $testroot/repo newbranch`
+
+	echo "modified alpha on branch" > $testroot/repo/alpha
+	git_commit $testroot/repo -m "committing to alpha on newbranch"
+	local branch_commit1=`git_show_branch_head $testroot/repo newbranch`
+	git -C $testroot/repo rm -q beta
+	git_commit $testroot/repo -m "removing beta on newbranch"
+	local branch_commit2=`git_show_branch_head $testroot/repo newbranch`
+	echo "new file on branch" > $testroot/repo/epsilon/new
+	git -C $testroot/repo add epsilon/new
+	git_commit $testroot/repo -m "adding new file on newbranch"
+	local branch_commit3=`git_show_branch_head $testroot/repo newbranch`
+	(cd $testroot/repo && ln -s alpha symlink)
+	git -C $testroot/repo add symlink
+	git_commit $testroot/repo -m "adding symlink on newbranch"
+	local branch_commit4=`git_show_branch_head $testroot/repo newbranch`
+
+	got tag -c $branch_commit4 -r $testroot/repo -m "version 1.0" 1.0 \
+		> /dev/null
+
+	got checkout -b master $testroot/repo $testroot/wt > /dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got checkout failed unexpectedly" >&2
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	# unrelated unversioned file in work tree
+	touch $testroot/wt/unversioned-file
+
+	# create a conflicting commit
+	git -C $testroot/repo checkout -q master
+	echo "modified alpha on master" > $testroot/repo/alpha
+	git_commit $testroot/repo -m "committing to alpha on master"
+	local master_commit=`git_show_head $testroot/repo`
+
+	# need an up-to-date work tree for 'got merge'
+	(cd $testroot/wt && got update > /dev/null)
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got update failed unexpectedly" >&2
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	(cd $testroot/wt && got merge refs/tags/1.0 \
+		> $testroot/stdout 2> $testroot/stderr)
+	ret=$?
+	if [ $ret -eq 0 ]; then
+		echo "got merge succeeded unexpectedly" >&2
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	echo "C  alpha" >> $testroot/stdout.expected
+	echo "D  beta" >> $testroot/stdout.expected
+	echo "A  epsilon/new" >> $testroot/stdout.expected
+	echo "G  gamma/delta" >> $testroot/stdout.expected
+	echo "A  symlink" >> $testroot/stdout.expected
+	echo "Files with new merge conflicts: 1" >> $testroot/stdout.expected
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	echo "got: conflicts must be resolved before merging can continue" \
+		> $testroot/stderr.expected
+	cmp -s $testroot/stderr.expected $testroot/stderr
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stderr.expected $testroot/stderr
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	# unrelated added file added during conflict resolution
+	touch $testroot/wt/added-file
+	(cd $testroot/wt && got add added-file > /dev/null)
+
+	(cd $testroot/wt && got status > $testroot/stdout)
+
+	cat > $testroot/stdout.expected <<EOF
+A  added-file
+C  alpha
+D  beta
+A  epsilon/new
+M  gamma/delta
+A  symlink
+?  unversioned-file
+Work tree is merging refs/tags/1.0 into refs/heads/master
+EOF
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	(cd $testroot/wt && got merge -a > $testroot/stdout)
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got merge failed unexpectedly" >&2
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	echo "R  added-file" > $testroot/stdout.expected
+	echo "R  alpha" >> $testroot/stdout.expected
+	echo "R  beta" >> $testroot/stdout.expected
+	echo "R  epsilon/new" >> $testroot/stdout.expected
+	echo "R  gamma/delta" >> $testroot/stdout.expected
+	echo "R  symlink" >> $testroot/stdout.expected
+	echo "G  added-file" >> $testroot/stdout.expected
+	echo "Merge of refs/tags/1.0 aborted" \
+		>> $testroot/stdout.expected
+
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	echo "delta" > $testroot/content.expected
+	cat $testroot/wt/gamma/delta > $testroot/content
+	cmp -s $testroot/content.expected $testroot/content
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/content.expected $testroot/content
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	echo "modified alpha on master" > $testroot/content.expected
+	cat $testroot/wt/alpha > $testroot/content
+	cmp -s $testroot/content.expected $testroot/content
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/content.expected $testroot/content
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	echo "beta" > $testroot/content.expected
+	cat $testroot/wt/beta > $testroot/content
+	cmp -s $testroot/content.expected $testroot/content
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/content.expected $testroot/content
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	if [ -e $testroot/wt/epsilon/new ]; then
+		echo "reverted file epsilon/new still exists on disk" >&2
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	if [ -e $testroot/wt/symlink ]; then
+		echo "reverted symlink still exists on disk" >&2
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	(cd $testroot/wt && got status > $testroot/stdout)
+
+	echo "?  added-file" > $testroot/stdout.expected
+	echo "?  unversioned-file" >> $testroot/stdout.expected
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	(cd $testroot/wt && got log -l3 | grep ^commit > $testroot/stdout)
+	echo "commit $master_commit (master)" > $testroot/stdout.expected
+	echo "commit $commit0" >> $testroot/stdout.expected
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	(cd $testroot/wt && got update > $testroot/stdout)
+
+	echo 'Already up-to-date' > $testroot/stdout.expected
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+	fi
+	test_done "$testroot" "$ret"
+}
+
 test_parseargs "$@"
 run_test test_merge_basic
 run_test test_merge_forward
@@ -2138,3 +2351,4 @@ run_test test_merge_gitconfig_author
 run_test test_merge_fetched_branch
 run_test test_merge_fetched_branch_remote
 run_test test_merge_tag
+run_test test_merge_tag_abort
