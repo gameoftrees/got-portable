@@ -451,16 +451,17 @@ done:
 		err = got_error_from_errno("close");
 	if (secrets_fd != -1 && close(secrets_fd) == -1 && err == NULL)
 		err = got_error_from_errno("close"); 
-	if (gotsysd_iev.ibuf.fd != -1)
-		imsgbuf_clear(&gotsysd_iev.ibuf);
 	if (gotd_iev.ibuf.fd != -1)
 		imsgbuf_clear(&gotd_iev.ibuf);
 	if (gotd_sock != -1 && close(gotd_sock) == -1 && err == NULL)
 		err = got_error_from_errno("close");
 	if (err) {
 		fprintf(stderr, "%s: %s\n", getprogname(), err->msg);
-		gotsysd_imsg_send_error(&gotsysd_iev.ibuf, 0, 0, err);
+		if (gotsysd_iev.ibuf.fd != -1)
+			gotsysd_imsg_send_error(&gotsysd_iev.ibuf, 0, 0, err);
 	}
+	if (gotsysd_iev.ibuf.fd != -1)
+		imsgbuf_clear(&gotsysd_iev.ibuf);
 	if (close(GOTSYSD_FILENO_MSG_PIPE) == -1 && err == NULL) {
 		err = got_error_from_errno("close");
 		fprintf(stderr, "%s: %s\n", getprogname(), err->msg);
