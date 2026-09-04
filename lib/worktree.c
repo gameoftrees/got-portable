@@ -3194,7 +3194,7 @@ merge_file_cb(void *arg, struct got_blob_object *blob1,
 			 * exists in the repository.
 			 */
 			err = got_object_blob_file_create(&id, &blob1_f,
-			    &blob1_size, path1, repo);
+			    &blob1_size, ondisk_path, repo);
 			if (err)
 				goto done;
 			if (fclose(blob1_f) == EOF) {
@@ -3236,7 +3236,7 @@ merge_file_cb(void *arg, struct got_blob_object *blob1,
 			 * on disk. No content will be lost in either case.
 			 */
 			err = got_object_blob_file_create(&id, &blob1_f,
-			    &blob1_size, path1, repo);
+			    &blob1_size, ondisk_path, repo);
 			if (err) {
 				if (err->code == GOT_ERR_ERRNO &&
 				    (errno == ENOENT || errno == ENOTDIR)) {
