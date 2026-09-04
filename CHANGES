@@ -1,3 +1,13 @@
+* got 0.128; 2026-09-04
+- switch from imsg_get(), removed in OpenBSD-current, to imsgbuf_get() 
+- fix tp_urlescape() escaping in template tool for gotwebd
+- fix off-by-one in pack index verification: check up to fanout_table[0xff]
+- fix ignore pattern matching when a file path is given to 'got status'
+- plug several memory leaks reachable via 'got histedit' and other commands
+- fix bogus "bad object" errors from 'got merge -a' when merging a tag
+- fix segfault in error handling path of gotsys-apply-conf
+- fix bogus "no such file or directory" errors seen during histedit
+
 * got 0.127; 2026-07-20
 - re-add cmdline tests to 'make regress' target (regression from 0.126)
 - add version flag (-V, --version) to gotd, gotwebd, and gotsysd 
