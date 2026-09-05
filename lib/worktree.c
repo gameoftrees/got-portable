@@ -6936,6 +6936,9 @@ got_commitable_get_path(struct got_commitable *ct)
 unsigned int
 got_commitable_get_status(struct got_commitable *ct)
 {
+	if (ct->staged_status != GOT_STATUS_NO_CHANGE)
+		return ct->staged_status;
+
 	return ct->status;
 }
 
