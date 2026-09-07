@@ -210,6 +210,10 @@ explain in very clear terms how the problem can be reproduced.
 
 Mail problem reports to: gameoftrees@openbsd.org
 
+If you prefer to send a private report (e.g. for high-impact security issues),
+send email to: Stefan Sperling, Omar Polo, and Thomas Adam.
+You will find our email addresses in the commit logs of this repository.
+
 
 Guidelines for submitting patches:
 
