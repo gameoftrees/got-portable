@@ -230,9 +230,9 @@ Should you feel a need to ask an LLM questions in order to help you understand
 something, try asking us first. If you are truly trying to wrap your head
 around something then you will learn from us, and we will learn from you.
 We may have some expertise you are lacking, but because we cannot ignore what
-We already know we can be blind to problems you are seeing. Our code and
-our documentation can likely be improved as a result of communication even
-before you send a first patch.
+we already know, we can be blind to problems you are seeing. Our code and
+documentation can likely be improved as a result of communication, even before
+you send a first patch.
 
 
 Subscribing to the gameoftrees@openbsd.org mailing list:
