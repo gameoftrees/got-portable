@@ -36,6 +36,7 @@ got:
   to make this possible. The C code we publish should use the MIT license.
 - 'got send' should support the equivalent to 'got fetch -R', allowing
   arbitrary references to be sent
+- add a dry-run mode to 'got update', e.g. as 'got update -n'
 
 tog:
 - make 'tog log' respond to key presses while 'loading...' history; loading
