@@ -672,6 +672,45 @@ test_branch_list_worktree_state() {
 	test_done "$testroot" "$ret"
 }
 
+test_branch_del_child_create_parent() {
+	local testroot=$(test_init branch_del_child_create_parent)
+	local wt="$testroot/wt"
+
+	set -- "$(git_show_head "$testroot/repo")"
+
+	got checkout "$testroot/repo" "$wt" > /dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "checkout failed unexpectedly" >&2
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	(cd "$wt" && got br -n a/b > /dev/null)
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "branch a/b failed unexpectedly" >&2
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+	(cd "$wt" && got br -d a/b > /dev/null)
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "branch deletion a/b failed unexpectedly" >&2
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+	(cd "$wt" && got br -n a > /dev/null)
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "branch a failed unexpectedly" >&2
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	test_done "$testroot" "$ret"
+}
+
 test_parseargs "$@"
 run_test test_branch_create
 run_test test_branch_list
@@ -682,3 +721,4 @@ run_test test_branch_show
 run_test test_branch_packed_ref_collision
 run_test test_branch_commit_keywords
 run_test test_branch_list_worktree_state
+run_test test_branch_del_child_create_parent
