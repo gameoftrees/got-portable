@@ -1533,7 +1533,7 @@ delete_loose_ref(struct got_reference *ref, struct got_repository *repo)
 {
 	const struct got_error *err = NULL, *unlock_err = NULL;
 	const char *name = got_ref_get_name(ref);
-	char *path_refs = NULL, *path = NULL;
+	char *path_refs = NULL, *path = NULL, *parent = NULL;
 	struct got_lockfile *lf = NULL;
 
 	path_refs = get_refs_dir_path(repo, name);
@@ -1546,6 +1546,10 @@ delete_loose_ref(struct got_reference *ref, struct got_repository *repo)
 		err = got_error_from_errno("asprintf");
 		goto done;
 	}
+
+	err = got_path_dirname(&parent, path);
+	if (err)
+		goto done;
 
 	if (ref->lf == NULL) {
 		err = got_lockfile_lock(&lf, path, -1);
@@ -1561,8 +1565,14 @@ done:
 	if (ref->lf == NULL && lf)
 		unlock_err = got_lockfile_unlock(lf, -1);
 
+	/* Remove empty directories to make parent reference name available. */
+	if (err == NULL && unlock_err == NULL &&
+	    rmdir(parent) == -1 && errno != ENOTEMPTY && errno != ENOENT)
+		err = got_error_from_errno2("rmdir", path);
+
 	free(path_refs);
 	free(path);
+	free(parent);
 	return err ? err : unlock_err;
 }
 
