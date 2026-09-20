@@ -2331,6 +2331,367 @@ EOF
 	test_done "$testroot" "$ret"
 }
 
+test_merge_adds_ignored_file() {
+	local testroot=`test_init merge_adds_ignored_file`
+	local commit0=`git_show_head $testroot/repo`
+	local commit0_author_time=`git_show_author_time $testroot/repo`
+
+	git -C $testroot/repo checkout -q -b newbranch
+	echo "new file on branch" > $testroot/repo/gamma/new
+	git -C $testroot/repo add gamma/new > /dev/null
+	git_commit $testroot/repo -m "committing to new file on newbranch"
+	local branch_commit=`git_show_branch_head $testroot/repo newbranch`
+
+	git -C $testroot/repo checkout -q master
+	echo gamma/new > $testroot/repo/.gitignore
+	git -C $testroot/repo add .gitignore > /dev/null
+	echo "ignoring new file on master branch" > $testroot/repo/epsilon/zeta
+	git_commit $testroot/repo -m "committing to zeta on master"
+	local master_commit=`git_show_head $testroot/repo`
+
+	got checkout -b master $testroot/repo $testroot/wt > /dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got checkout failed unexpectedly" >&2
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	echo 'this file is being ignored' > $testroot/wt/gamma/new
+
+	(cd $testroot/wt && got status > $testroot/stdout)
+
+	echo -n > $testroot/stdout.expected
+
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	(cd $testroot/wt && got status -I > $testroot/stdout)
+
+	cat > $testroot/stdout.expected <<EOF
+?  gamma/new
+EOF
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	cat > $testroot/stderr.expected <<EOF
+got: changes destined for some files were not yet merged and should be merged manually if required before the merge operation is continued
+EOF
+	(cd $testroot/wt && got merge newbranch \
+		> $testroot/stdout 2> $testroot/stderr)
+	ret=$?
+	if [ $ret -eq 0 ]; then
+		echo "got merge succeeded unexpectedly" >&2
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	local merge_commit=`git_show_head $testroot/repo`
+
+	cat > $testroot/stdout.expected <<EOF
+?  gamma/new
+Files not merged because an unversioned file was found in the work tree: 1
+EOF
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	cmp -s $testroot/stderr.expected $testroot/stderr
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stderr.expected $testroot/stderr
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	test_done "$testroot" "$ret"
+}
+
+test_merge_adds_ignored_symlink() {
+	local testroot=`test_init merge_adds_ignored_symlink`
+	local commit0=`git_show_head $testroot/repo`
+	local commit0_author_time=`git_show_author_time $testroot/repo`
+
+	git -C $testroot/repo checkout -q -b newbranch
+	echo "new file on branch" > $testroot/repo/gamma/new
+	git -C $testroot/repo add gamma/new > /dev/null
+	git_commit $testroot/repo -m "committing to new file on newbranch"
+	local branch_commit=`git_show_branch_head $testroot/repo newbranch`
+
+	git -C $testroot/repo checkout -q master
+	echo gamma/new > $testroot/repo/.gitignore
+	git -C $testroot/repo add .gitignore > /dev/null
+	echo "ignoring new file on master branch" > $testroot/repo/epsilon/zeta
+	git_commit $testroot/repo -m "committing to zeta on master"
+	local master_commit=`git_show_head $testroot/repo`
+
+	got checkout -b master $testroot/repo $testroot/wt > /dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got checkout failed unexpectedly" >&2
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	ln -s ../alpha $testroot/wt/gamma/new
+
+	(cd $testroot/wt && got status > $testroot/stdout)
+
+	echo -n > $testroot/stdout.expected
+
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	(cd $testroot/wt && got status -I > $testroot/stdout)
+
+	cat > $testroot/stdout.expected <<EOF
+?  gamma/new
+EOF
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	cat > $testroot/stderr.expected <<EOF
+got: changes destined for some files were not yet merged and should be merged manually if required before the merge operation is continued
+EOF
+	(cd $testroot/wt && got merge newbranch \
+		> $testroot/stdout 2> $testroot/stderr)
+	ret=$?
+	if [ $ret -eq 0 ]; then
+		echo "got merge succeeded unexpectedly" >&2
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	local merge_commit=`git_show_head $testroot/repo`
+
+	cat > $testroot/stdout.expected <<EOF
+?  gamma/new
+Files not merged because an unversioned file was found in the work tree: 1
+EOF
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	cmp -s $testroot/stderr.expected $testroot/stderr
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stderr.expected $testroot/stderr
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	test_done "$testroot" "$ret"
+}
+
+test_merge_adds_ignored_dangling_symlink() {
+	local testroot=`test_init merge_adds_ignored_dangling_symlink`
+	local commit0=`git_show_head $testroot/repo`
+	local commit0_author_time=`git_show_author_time $testroot/repo`
+
+	git -C $testroot/repo checkout -q -b newbranch
+	echo "new file on branch" > $testroot/repo/gamma/new
+	git -C $testroot/repo add gamma/new > /dev/null
+	git_commit $testroot/repo -m "committing to new file on newbranch"
+	local branch_commit=`git_show_branch_head $testroot/repo newbranch`
+
+	git -C $testroot/repo checkout -q master
+	echo gamma/new > $testroot/repo/.gitignore
+	git -C $testroot/repo add .gitignore > /dev/null
+	echo "ignoring new file on master branch" > $testroot/repo/epsilon/zeta
+	git_commit $testroot/repo -m "committing to zeta on master"
+	local master_commit=`git_show_head $testroot/repo`
+
+	got checkout -b master $testroot/repo $testroot/wt > /dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got checkout failed unexpectedly" >&2
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	ln -f -s ../nonexistent $testroot/wt/gamma/new
+
+	(cd $testroot/wt && got status > $testroot/stdout)
+
+	echo -n > $testroot/stdout.expected
+
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	(cd $testroot/wt && got status -I > $testroot/stdout)
+
+	cat > $testroot/stdout.expected <<EOF
+?  gamma/new
+EOF
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	cat > $testroot/stderr.expected <<EOF
+got: changes destined for some files were not yet merged and should be merged manually if required before the merge operation is continued
+EOF
+	(cd $testroot/wt && got merge newbranch \
+		> $testroot/stdout 2> $testroot/stderr)
+	ret=$?
+	if [ $ret -eq 0 ]; then
+		echo "got merge succeeded unexpectedly" >&2
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	local merge_commit=`git_show_head $testroot/repo`
+
+	cat > $testroot/stdout.expected <<EOF
+?  gamma/new
+Files not merged because an unversioned file was found in the work tree: 1
+EOF
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	cmp -s $testroot/stderr.expected $testroot/stderr
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stderr.expected $testroot/stderr
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	test_done "$testroot" "$ret"
+}
+
+test_merge_adds_ignored_directory() {
+	local testroot=`test_init merge_adds_ignored_directory`
+	local commit0=`git_show_head $testroot/repo`
+	local commit0_author_time=`git_show_author_time $testroot/repo`
+
+	git -C $testroot/repo checkout -q -b newbranch
+	echo "new file on branch" > $testroot/repo/gamma/new
+	git -C $testroot/repo add gamma/new > /dev/null
+	git_commit $testroot/repo -m "committing to new file on newbranch"
+	local branch_commit=`git_show_branch_head $testroot/repo newbranch`
+
+	git -C $testroot/repo checkout -q master
+	echo gamma/new > $testroot/repo/.gitignore
+	git -C $testroot/repo add .gitignore > /dev/null
+	echo "ignoring new file on master branch" > $testroot/repo/epsilon/zeta
+	git_commit $testroot/repo -m "committing to zeta on master"
+	local master_commit=`git_show_head $testroot/repo`
+
+	got checkout -b master $testroot/repo $testroot/wt > /dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got checkout failed unexpectedly" >&2
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	mkdir -p $testroot/wt/gamma/new/
+	echo 'this file is being ignored' > $testroot/wt/gamma/new/ignored
+
+	(cd $testroot/wt && got status > $testroot/stdout)
+
+	echo -n > $testroot/stdout.expected
+
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	(cd $testroot/wt && got status -I > $testroot/stdout)
+
+	cat > $testroot/stdout.expected <<EOF
+?  gamma/new/ignored
+EOF
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	cat > $testroot/stderr.expected <<EOF
+got: changes destined for some files were not yet merged and should be merged manually if required before the merge operation is continued
+EOF
+	(cd $testroot/wt && got merge newbranch \
+		> $testroot/stdout 2> $testroot/stderr)
+	ret=$?
+	if [ $ret -eq 0 ]; then
+		echo "got merge succeeded unexpectedly" >&2
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	local merge_commit=`git_show_head $testroot/repo`
+
+	cat > $testroot/stdout.expected <<EOF
+~  gamma/new
+File paths obstructed by a non-regular file: 1
+EOF
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	cmp -s $testroot/stderr.expected $testroot/stderr
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stderr.expected $testroot/stderr
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	test_done "$testroot" "$ret"
+}
+
 test_parseargs "$@"
 run_test test_merge_basic
 run_test test_merge_forward
@@ -2352,3 +2713,7 @@ run_test test_merge_fetched_branch
 run_test test_merge_fetched_branch_remote
 run_test test_merge_tag
 run_test test_merge_tag_abort
+run_test test_merge_adds_ignored_file
+run_test test_merge_adds_ignored_symlink
+run_test test_merge_adds_ignored_dangling_symlink
+run_test test_merge_adds_ignored_directory
