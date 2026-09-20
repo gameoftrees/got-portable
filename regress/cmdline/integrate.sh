@@ -544,6 +544,87 @@ test_integrate_into_nonbranch() {
 	test_done "$testroot" "$ret"
 }
 
+test_integrate_with_obstructed_file() {
+	local testroot=`test_init integrate_with_obstructed_file`
+	local commit0=`git_show_head $testroot/repo`
+
+	git -C $testroot/repo checkout -q -b newbranch
+	echo "modified delta on branch" > $testroot/repo/gamma/delta
+	echo "new file on branch" > $testroot/repo/gamma/new
+	git -C $testroot/repo add gamma/new > /dev/null
+	git_commit $testroot/repo -m "committing changes on newbranch"
+	local commit1=`git_show_head $testroot/repo`
+
+	git -C $testroot/repo checkout -q master
+
+	got checkout $testroot/repo $testroot/wt > /dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	mkdir $testroot/wt/gamma/new
+	echo newfile > $testroot/wt/gamma/new/newfile
+	
+	(cd $testroot/wt && got integrate newbranch > $testroot/stdout)
+
+	echo "U  gamma/delta" >> $testroot/stdout.expected
+	echo "~  gamma/new" >> $testroot/stdout.expected
+	echo "Integrated refs/heads/newbranch into refs/heads/master" \
+		>> $testroot/stdout.expected
+	echo "File paths obstructed by a non-regular file: 1" \
+		>> $testroot/stdout.expected
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	(cd $testroot/wt && got log -l3 | grep ^commit > $testroot/stdout)
+	echo "commit $commit1 (master, newbranch)" \
+		> $testroot/stdout.expected
+	echo "commit $commit0" >> $testroot/stdout.expected
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	(cd $testroot/wt && got status > $testroot/stdout)
+
+	echo "?  gamma/new/newfile" > $testroot/stdout.expected
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	rm -r $testroot/wt/gamma/new
+
+	(cd $testroot/wt && got update > $testroot/stdout)
+
+	echo "A  gamma/new" > $testroot/stdout.expected
+	echo -n "Updated to refs/heads/master: " >> $testroot/stdout.expected
+	git_show_head $testroot/repo >> $testroot/stdout.expected
+	echo >> $testroot/stdout.expected
+
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+	test_done "$testroot" "$ret"
+}
+
 test_parseargs "$@"
 run_test test_integrate_basic
 run_test test_integrate_requires_rebase_first
@@ -552,3 +633,4 @@ run_test test_integrate_backwards_in_time
 run_test test_integrate_replace_symlink_with_file
 run_test test_integrate_replace_file_with_symlink
 run_test test_integrate_into_nonbranch
+run_test test_integrate_with_obstructed_file
