@@ -12049,7 +12049,8 @@ cmd_rebase(int argc, char *argv[])
 
 		print_merge_progress_stats(&upa);
 		if (upa.conflicts > 0 || upa.missing > 0 ||
-		    upa.not_deleted > 0 || upa.unversioned > 0) {
+		    upa.not_deleted > 0 || upa.unversioned > 0 ||
+		    upa.obstructed > 0) {
 			if (upa.conflicts > 0) {
 				error = show_rebase_merge_conflict(&qid->id,
 				    repo);
@@ -12068,7 +12069,7 @@ cmd_rebase(int argc, char *argv[])
 	}
 
 	if (upa.conflicts > 0 || upa.missing > 0 ||
-	    upa.not_deleted > 0 || upa.unversioned > 0) {
+	    upa.not_deleted > 0 || upa.unversioned > 0 || upa.obstructed > 0) {
 		error = got_worktree_rebase_postpone(worktree, fileindex);
 		if (error)
 			goto done;
@@ -13474,7 +13475,8 @@ cmd_histedit(int argc, char *argv[])
 
 		print_merge_progress_stats(&upa);
 		if (upa.conflicts > 0 || upa.missing > 0 ||
-		    upa.not_deleted > 0 || upa.unversioned > 0) {
+		    upa.not_deleted > 0 || upa.unversioned > 0 ||
+		    upa.obstructed > 0) {
 			if (upa.conflicts > 0) {
 				error = show_rebase_merge_conflict(
 				    hle->commit_id, repo);
@@ -13516,7 +13518,7 @@ cmd_histedit(int argc, char *argv[])
 	}
 
 	if (upa.conflicts > 0 || upa.missing > 0 ||
-	    upa.not_deleted > 0 || upa.unversioned > 0) {
+	    upa.not_deleted > 0 || upa.unversioned > 0 || upa.obstructed > 0) {
 		error = got_worktree_histedit_postpone(worktree, fileindex);
 		if (error)
 			goto done;
@@ -14029,7 +14031,7 @@ cmd_merge(int argc, char *argv[])
 			goto done;
 		printf("Merge of %s interrupted on request\n", branch_name);
 	} else if (upa.conflicts > 0 || upa.missing > 0 ||
-	    upa.not_deleted > 0 || upa.unversioned > 0) {
+	    upa.not_deleted > 0 || upa.unversioned > 0 || upa.obstructed > 0) {
 		error = got_worktree_merge_postpone(worktree, fileindex);
 		if (error)
 			goto done;

@@ -3030,22 +3030,33 @@ test_histedit_added_file() {
 	# +2f81c7988242 -> no-op change: add new file
 	echo new > $testroot/wt/new
 
-	(cd $testroot/wt && got histedit -f > $testroot/stdout)
+	(cd $testroot/wt && got histedit -f > $testroot/stdout \
+		2> $testroot/stderr)
 	local new_commit=`git_show_head $testroot/repo`
 
 	local short_commit2=`trim_obj_id 12 $commit2`
 	local short_new_commit=`trim_obj_id 12 $new_commit`
 
-	echo "A  new" > $testroot/stdout.expected
-	echo "$short_commit2 -> $short_new_commit: add new file" \
-		>> $testroot/stdout.expected
-	echo "Switching work tree to refs/heads/master" \
-		>> $testroot/stdout.expected
+	cat > $testroot/stdout.expected <<EOF
+?  new
+Files not merged because an unversioned file was found in the work tree: 1
+EOF
 
 	cmp -s $testroot/stdout.expected $testroot/stdout
 	ret=$?
 	if [ $ret -ne 0 ]; then
 		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	cat > $testroot/stderr.expected <<EOF
+got: changes destined for some files were not yet merged and should be merged manually if required before the histedit operation is continued
+EOF
+	cmp -s $testroot/stderr.expected $testroot/stderr
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stderr.expected $testroot/stderr
 		test_done "$testroot" "$ret"
 		return 1
 	fi

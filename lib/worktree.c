@@ -3342,6 +3342,21 @@ merge_file_cb(void *arg, struct got_blob_object *blob1,
 					goto done;
 			}
 		} else {
+			if (lstat(ondisk_path, &sb) == -1) {
+				if (errno != ENOENT && errno != ENOTDIR) {
+					err = got_error_from_errno2("stat",
+					    ondisk_path);
+					goto done;
+				}
+			} else {
+				if (S_ISREG(sb.st_mode) || S_ISLNK(sb.st_mode))
+					status = GOT_STATUS_UNVERSIONED;
+				else
+					status = GOT_STATUS_OBSTRUCTED;
+				err = (*a->progress_cb)(a->progress_arg,
+				    status, path2);
+				goto done;
+			}
 			err = add_file(a->worktree, a->fileindex, NULL,
 			     ondisk_path, path2, blob2, mode2,
 			     0, 0, 1, a->allow_bad_symlinks,

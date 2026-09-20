@@ -2621,7 +2621,7 @@ Show the status of each affected file, using the following status codes:
 .It D Ta file was deleted
 .It d Ta file's deletion was prevented by local modifications
 .It A Ta new file was added
-.It \(a~ Ta changes destined for a non-regular file were not merged
+.It \(a~ Ta changes obstructed by a non-regular file were not merged
 .It ? Ta changes destined for an unversioned file were not merged
 .El
 .Pp
@@ -2764,7 +2764,7 @@ Show the status of each affected file, using the following status codes:
 .It D Ta file was deleted
 .It d Ta file's deletion was prevented by local modifications
 .It A Ta new file was added
-.It \(a~ Ta changes destined for a non-regular file were not merged
+.It \(a~ Ta changes obstructed by a non-regular file were not merged
 .It ? Ta changes destined for an unversioned file were not merged
 .El
 .Pp
@@ -2927,13 +2927,14 @@ using the following status codes:
 .It D Ta file was deleted
 .It d Ta file's deletion was prevented by local modifications
 .It A Ta new file was added
-.It \(a~ Ta changes destined for a non-regular file were not merged
+.It \(a~ Ta changes obstructed by a non-regular file were not merged
 .It ? Ta changes destined for an unversioned file were not merged
 .El
 .Pp
 If merge conflicts occur, the rebase operation is interrupted and may
 be continued once conflicts have been resolved.
-If any files with destined changes are found to be missing or unversioned,
+If any files with destined changes are found to be missing, unversioned,
+or obstructed,
 or if files could not be deleted due to differences in deleted content,
 the rebase operation will be interrupted to prevent potentially incomplete
 changes from being committed to the repository without user intervention.
@@ -3196,13 +3197,14 @@ using the following status codes:
 .It D Ta file was deleted
 .It d Ta file's deletion was prevented by local modifications
 .It A Ta new file was added
-.It \(a~ Ta changes destined for a non-regular file were not merged
+.It \(a~ Ta changes obstructed by a non-regular file were not merged
 .It ? Ta changes destined for an unversioned file were not merged
 .El
 .Pp
 If merge conflicts occur, the histedit operation is interrupted and may
 be continued once conflicts have been resolved.
-If any files with destined changes are found to be missing or unversioned,
+If any files with destined changes are found to be missing, unversioned,
+or obstructed,
 or if files could not be deleted due to differences in deleted content,
 the histedit operation will be interrupted to prevent potentially incomplete
 changes from being committed to the repository without user intervention.
@@ -3497,13 +3499,14 @@ using the following status codes:
 .It D Ta file was deleted
 .It d Ta file's deletion was prevented by local modifications
 .It A Ta new file was added
-.It \(a~ Ta changes destined for a non-regular file were not merged
+.It \(a~ Ta changes obstructed by a non-regular file were not merged
 .It ? Ta changes destined for an unversioned file were not merged
 .El
 .Pp
 If merge conflicts occur, the merge operation is interrupted and conflicts
 must be resolved before the merge operation can continue.
-If any files with destined changes are found to be missing or unversioned,
+If any files with destined changes are found to be missing, unversioned,
+or obstructed,
 or if files could not be deleted due to differences in deleted content,
 the merge operation will be interrupted to prevent potentially incomplete
 changes from being committed to the repository without user intervention.
@@ -3726,7 +3729,7 @@ Show the status of each affected file, using the following status codes:
 .It ! Ta changes destined for a missing file were not merged
 .It D Ta file was staged as deleted and still is deleted
 .It d Ta file's deletion was prevented by local modifications
-.It \(a~ Ta changes destined for a non-regular file were not merged
+.It \(a~ Ta changes obstructed by a non-regular file were not merged
 .El
 .Pp
 The options for
