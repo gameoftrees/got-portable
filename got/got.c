@@ -9039,12 +9039,16 @@ commit_path_changed_in_worktree(struct wt_commitable_path_arg *wcpa,
     struct got_repository *repo)
 {
 	const struct got_error		*err;
-	struct got_pathlist_head	 paths;
+	struct got_pathlist_head	 paths, wt_paths;
+	struct got_pathlist_head	*status_paths;
+	struct got_pathlist_entry	*pe;
 	struct got_commit_object	*commit = NULL, *pcommit = NULL;
 	struct got_tree_object		*tree = NULL, *ptree = NULL;
 	struct got_object_qid		*pid;
+	const char			*prefix;
 
 	RB_INIT(&paths);
+	RB_INIT(&wt_paths);
 
 	err = got_object_open_as_commit(&commit, repo, id);
 	if (err)
@@ -9072,7 +9076,31 @@ commit_path_changed_in_worktree(struct wt_commitable_path_arg *wcpa,
 	if (err)
 		goto done;
 
-	err = got_worktree_status(worktree, &paths, repo, 0,
+	prefix = got_worktree_get_path_prefix(worktree);
+	if (!got_path_is_root_dir(prefix)) {
+		RB_FOREACH(pe, got_pathlist_head, &paths) {
+			char *abspath, *wt_path;
+
+			if (asprintf(&abspath, "/%s", pe->path) == -1) {
+				err = got_error_from_errno("asprintf");
+				goto done;
+			}
+			err = got_path_skip_common_ancestor(&wt_path,
+			    prefix, abspath);
+			free(abspath);
+			if (err)
+				goto done;
+
+			err = got_pathlist_insert(NULL, &wt_paths, wt_path,
+			    NULL);
+			if (err)
+				goto done;
+		}
+		status_paths = &wt_paths;
+	} else
+		status_paths = &paths;
+
+	err = got_worktree_status(worktree, status_paths, repo, 0,
 	    worktree_has_commitable_path, wcpa, check_cancelled, NULL);
 	if (err && err->code == GOT_ERR_FILE_MODIFIED) {
 		/*
@@ -9084,6 +9112,7 @@ commit_path_changed_in_worktree(struct wt_commitable_path_arg *wcpa,
 
 done:
 	got_pathlist_free(&paths, GOT_PATHLIST_FREE_ALL);
+	got_pathlist_free(&wt_paths, GOT_PATHLIST_FREE_PATH);
 	if (commit)
 		got_object_commit_close(commit);
 	if (pcommit)
