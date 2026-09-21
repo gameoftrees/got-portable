@@ -2078,6 +2078,59 @@ test_revert_partially_staged_file() {
 	test_done "$testroot" "$ret"
 }
 
+test_revert_backout_with_path_prefix() {
+	local testroot=`test_init revert_backout_with_path_prefix`
+
+	got checkout $testroot/repo $testroot/wt2 > /dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got checkout failed unexpectedly" >&2
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	echo "modified zeta" > $testroot/wt2/epsilon/zeta
+	(cd $testroot/wt2 && got commit -m 'modify zeta' > /dev/null)
+	local commit_id=`git_show_head $testroot/repo`
+
+	got checkout -p epsilon $testroot/repo $testroot/wt > /dev/null
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got checkout failed unexpectedly" >&2
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	(cd $testroot/wt && got backout "$commit_id" >/dev/null)
+
+	echo "unversioned file" > $testroot/wt/epsilon
+
+	echo 'R  zeta' > $testroot/stdout.expected
+
+	# This used to fail with:
+	# "got: fopen: $testroot/wt/epsilon/.cvsignore: Not a directory"
+	(cd $testroot/wt && got revert -R . > $testroot/stdout)
+
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	echo "modified zeta" > $testroot/content.expected
+	cat $testroot/wt/zeta > $testroot/content
+
+	cmp -s $testroot/content.expected $testroot/content
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/content.expected $testroot/content
+	fi
+	test_done "$testroot" "$ret"
+
+}
+
 test_parseargs "$@"
 run_test test_revert_basic
 run_test test_revert_rm
@@ -2100,3 +2153,4 @@ run_test test_revert_umask
 run_test test_revert_patch_binary
 run_test test_revert_staged_file
 run_test test_revert_partially_staged_file
+run_test test_revert_backout_with_path_prefix
