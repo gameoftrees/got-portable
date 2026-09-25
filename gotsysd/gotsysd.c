@@ -1778,7 +1778,7 @@ main(int argc, char **argv)
 
 	pw = getpwnam(gotsysd.gotd_username);
 	if (pw == NULL) {
-		uid = strtonum(gotsysd.gotd_username, 0, UID_MAX - 1, &errstr);
+		uid = strtonum(gotsysd.gotd_username, 0, UINT_MAX - 1, &errstr);
 		if (errstr == NULL) {
 			pw = getpwuid(uid);
 			if (pw && strlcpy(gotsysd.gotd_username, pw->pw_name,
@@ -1797,7 +1797,7 @@ main(int argc, char **argv)
 
 	pw = getpwnam(gotsysd.user_name);
 	if (pw == NULL) {
-		uid = strtonum(gotsysd.user_name, 0, UID_MAX - 1, &errstr);
+		uid = strtonum(gotsysd.user_name, 0, UINT_MAX - 1, &errstr);
 		if (errstr == NULL) {
 			pw = getpwuid(uid);
 			if (pw && strlcpy(gotsysd.user_name, pw->pw_name,

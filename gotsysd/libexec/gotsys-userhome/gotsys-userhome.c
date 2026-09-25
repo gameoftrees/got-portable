@@ -141,8 +141,8 @@ create_homedirs(void)
 #if GOTSYSD_UID_MIN == 0
 #error "UID 0 must not be used as GOTSYSD_UID_MIN"
 #endif
-#if GOTSYSD_UID_MIN == UID_MAX
-#error "UID UID_MAX must not be used as GOTSYSD_UID_MIN"
+#if GOTSYSD_UID_MIN == UINT_MAX
+#error "UID UINT_MAX must not be used as GOTSYSD_UID_MIN"
 #endif
 	if (userhome_uid_start == 0 || userhome_uid_start >= userhome_uid_end)
 		abort();

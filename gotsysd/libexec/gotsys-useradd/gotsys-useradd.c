@@ -149,7 +149,7 @@ assign_uid(uid_t *uid, struct gotsys_uidset *uids)
 
 	/* sanity checks -- should not happen */
 	if (useradd_uid_start == 0 || useradd_uid_start >= useradd_uid_end ||
-	    u < GOTSYSD_UID_MIN || u < useradd_uid_start || u == UID_MAX) {
+	    u < GOTSYSD_UID_MIN || u < useradd_uid_start || u == -1) {
 		pw_abort();
 		abort();
 	}
@@ -181,7 +181,7 @@ write_user_entry(struct gotsys_user *user, uid_t uid)
 	ssize_t w;
 
 	/* sanity */
-	if (uid == 0 || uid == UID_MAX) {
+	if (uid == 0 || uid == -1) {
 		pw_abort();
 		abort();
 	}
