@@ -255,8 +255,8 @@ main		: LISTEN ON STRING {
 #if GOTSYSD_UID_MIN == 0
 #error "UID 0 must not be used as GOTSYSD_UID_MIN"
 #endif
-#if GOTSYSD_UID_MIN == UID_MAX
-#error "UID UID_MAX must not be used as GOTSYSD_UID_MIN"
+#if GOTSYSD_UID_MIN == UINT_MAX
+#error "UID UINT_MAX must not be used as GOTSYSD_UID_MIN"
 #endif
 			if (gotsysd->uid_start < GOTSYSD_UID_MIN ||
 			    gotsysd->uid_end < GOTSYSD_UID_MIN) {
@@ -266,10 +266,10 @@ main		: LISTEN ON STRING {
 				YYERROR;
 			}
 
-			if (gotsysd->uid_start == UID_MAX ||
-			    gotsysd->uid_end == UID_MAX) {
+			if (gotsysd->uid_start == UINT_MAX ||
+			    gotsysd->uid_end == UINT_MAX) {
 				yyerror("%s: UID %u is not allowed in "
-				    "uid range", __func__, UID_MAX);
+				    "uid range", __func__, UINT_MAX);
 				YYERROR;
 			}
 
@@ -1269,11 +1269,11 @@ gotsysd_parseuid(const char *s, uid_t *uid)
 
 	if ((pw = getpwnam(s)) != NULL) {
 		*uid = pw->pw_uid;
-		if (*uid == UID_MAX)
+		if (*uid == -1)
 			return -1;
 		return 0;
 	}
-	*uid = strtonum(s, 0, UID_MAX - 1, &errstr);
+	*uid = strtonum(s, 0, UINT_MAX - 1, &errstr);
 	if (errstr)
 		return -1;
 	return 0;

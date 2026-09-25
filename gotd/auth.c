@@ -95,11 +95,11 @@ parsegid(const char *s, gid_t *gid)
 
 	if ((gr = getgrnam(s)) != NULL) {
 		*gid = gr->gr_gid;
-		if (*gid == GID_MAX)
+		if (*gid == -1)
 			return -1;
 		return 0;
 	}
-	*gid = strtonum(s, 0, GID_MAX - 1, &errstr);
+	*gid = strtonum(s, 0, UINT_MAX - 1, &errstr);
 	if (errstr)
 		return -1;
 	return 0;

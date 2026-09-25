@@ -3539,7 +3539,7 @@ main(int argc, char **argv)
 
 		pw = getpwnam(gotd.user_name);
 		if (pw == NULL) {
-			uid = strtonum(gotd.user_name, 0, UID_MAX - 1, &errstr);
+			uid = strtonum(gotd.user_name, 0, UINT_MAX - 1, &errstr);
 			if (errstr == NULL)
 				pw = getpwuid(uid);
 		}
@@ -3690,7 +3690,7 @@ main(int argc, char **argv)
 
 		pw = getpwnam(gotd.user_name);
 		if (pw == NULL) {
-			uid = strtonum(gotd.user_name, 0, UID_MAX - 1, &errstr);
+			uid = strtonum(gotd.user_name, 0, UINT_MAX - 1, &errstr);
 			if (errstr == NULL)
 				pw = getpwuid(uid);
 		}

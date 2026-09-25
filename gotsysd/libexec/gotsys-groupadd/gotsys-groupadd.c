@@ -126,7 +126,7 @@ assign_gid(gid_t *gid, struct gotsys_uidset *gids)
 
 	/* sanity checks -- should not happen */
 	if (groupadd_gid_start == 0 || groupadd_gid_start >= groupadd_gid_end ||
-	    g < GOTSYSD_UID_MIN || g < groupadd_gid_start || g == GID_MAX)
+	    g < GOTSYSD_UID_MIN || g < groupadd_gid_start || g == -1)
 		abort();
 
 	if (g > groupadd_gid_end) {
