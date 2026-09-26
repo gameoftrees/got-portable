@@ -3808,7 +3808,7 @@ static const struct got_error *
 read_ignores(struct got_pathlist_head *ignores, const char *path, FILE *f)
 {
 	const struct got_error *err = NULL;
-	struct got_pathlist_entry *pe = NULL;
+	struct got_pathlist_entry *pe = NULL, *ipe = NULL;
 	struct got_pathlist_head *ignorelist;
 	char *line = NULL, *pattern, *dirpath = NULL;
 	size_t linesize = 0;
@@ -3840,7 +3840,13 @@ read_ignores(struct got_pathlist_head *ignores, const char *path, FILE *f)
 			err = got_error_from_errno("asprintf");
 			goto done;
 		}
-		err = got_pathlist_insert(NULL, ignorelist, pattern, NULL);
+		err = got_pathlist_insert(&ipe, ignorelist, pattern, NULL);
+		/*
+		 * got_pathlist_insert() silently rejects duplicated pattern;
+		 * free it.
+		 */
+		if (err || ipe == NULL)
+			free(pattern);
 		if (err)
 			goto done;
 	}
