@@ -1,3 +1,11 @@
+* got 0.129; 2026-09-26
+- fix missing status code of staged files in log message template during commit
+- remove empty dangling directories within refs/ when removing references
+- do not add unversioned files to version control if a file addition is merged
+- handle removal of UID_MAX and GID_MAX
+- fix a problem where 'got revert' errors out in work trees with a path-prefix
+- plug a memory leak caused by duplicate ignore patterns
+
 * got 0.128; 2026-09-04
 - switch from imsg_get(), removed in OpenBSD-current, to imsgbuf_get() 
 - fix tp_urlescape() escaping in template tool for gotwebd
