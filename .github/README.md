@@ -1,9 +1,6 @@
 README.portable
 ===============
 
-**NOTE: This repository is read-only and is used only to mirror the
-got-portable repository for CI purposes.**
-
 This is the portable version of got[1] (Game of Trees), using autotools to
 provide the library checks required for GoT's dependencies.
 
@@ -267,48 +264,28 @@ possible, even on the same day where that can happen.  That being said,
 sometimes a release of `-portable` might happen outside of that cadence, where
 a `-portable`-specific issue needs addressing, for example.
 
-Before creating a new release, check the version of GoT as found in
-`util/got-portable-ver.sh` -- as `GOT_PORTABLE_VER`:
+From a clean `portable` checkout, run:
 
 ```
-GOT_PORTABLE_VER=0.75
-
+./maintscripts/mk-portable-release.sh --version 0.130 --next-version 0.131
 ```
 
-Here, the *to be released* version of `got-portable` will be `0.75`.
+Review the CHANGELOG draft. It uses commits mentioning "portable" since the
+previous release; add missing changes and remove irrelevant entries before
+saving. See `--help` for other options.
 
-The variable `GOT_RELEASE` needs be changed to `yes` so that the
-GOT_PORTABLE_VER is asserted correctly.
+The script updates the version, runs `make distcheck` in a temporary source
+snapshot, then creates a release commit, annotated tag, tarball and SHA256
+file. Untracked files are excluded. The separate `make tests` suite is not run.
+Omit `--next-version` to skip the subsequent development-version commit.
 
-The variable `GOT_RELEASE` needs be changed to `yes` so that the
-GOT_PORTABLE_VER is asserted correctly.
+A failed build leaves the release edits and prints the build log location.
+Fix the problem, commit any source fixes, and rerun with the same version.
+For failures after verification, inspect the Git state before retrying.
 
-Once the version is verified, the following should be run from the `portable`
-branch -- and the repository should not have any outstanding modifications to
-the source:
-
-```
-make clean ; ./autogen && ./configure && make distcheck
-```
-
-If this succeeds, the tarball is in the CWD, as: `got-portable-VERSION.tar.gz`
-
-This can then be copied to the `got-www` repository and uploaded, along with
-changing a couple of HTML pages therein to represent the new released version.
-Additionally, the CHANGELOG file can be copied to the `got-www` and committed.
-
-Once all of that has been done, the repository should be tagged to indicate
-the release, hence:
-
-```
-git tag -a 0.75
-```
-
-This can then be pushed out to `gh` and `origin`.
-
-After that point, the version of `GOT_PORTABLE_VER` in
-`util/got-portable-ver.sh` should be changed to the next version, and
-`GOT_RELEASE` should be setg back to `no`.
+Nothing is pushed or uploaded. Copy the tarball and CHANGELOG to `got-www`,
+update its release pages, and publish. Push `portable` and the release tag
+to `gh` and `origin`.
 
 MAINTENANCE RELEASES
 ====================
@@ -342,5 +319,5 @@ Thomas Adam <thomas@xteddy.org><br />
 thomas_adam (#gameoftrees on irc.libera.chat)
 
 [1]  https://gameoftrees.org<br />
-[2]  https://lists.openbsd.org/cgi-bin/mj_wwwusr?user=&passw=&func=lists-long-full&extra=gameoftrees<br />
+[2]  https://lists.openbsd.org/cgi-bin/mj_wwwusr?user=&passw=&func=lists-long-full&extra=gameoftrees
 [3]  https://github.com/ThomasAdam/got-portable

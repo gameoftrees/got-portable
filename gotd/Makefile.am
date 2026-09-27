@@ -79,7 +79,7 @@ gotd_SOURCES += chroot-openbsd.c
 endif
        
 gotd_DEPENDENCIES = $(top_builddir)/compat/libopenbsd-compat.a
-EXTRA_DIST = gotd.8 gotd.conf.5 gotd-secrets.conf.5 *.h
+EXTRA_DIST = gotd.8 gotd.conf.5 gotd-secrets.conf.5 $(top_srcdir)/gotd/*.h
 
 man5_MANS = gotd.conf.5 gotd-secrets.conf.5
 man8_MANS = gotd.8
