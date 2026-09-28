@@ -464,6 +464,19 @@ work tree, use the repository path associated with this work tree.
 .El
 .Sh EXIT STATUS
 .Ex -std gotadmin
+.Sh EXAMPLES
+This
+.Xr crontab 5
+entry runs
+.Cm gotadmin cleanup
+on a Git repository found in the
+.Pa /git
+directory if the repository contains more than 32 pack files:
+.Pp
+.Bd -literal -offset indent
+~ ~ * * * -ns for r in /git/*.git; do n=`gotadmin info -r "$r" | grep ^pack\\ files: | sed -e s/^pack\\ files:\\ //` && [ "$n" -gt 32 ] && gotadmin cleanup -q -r "$r"; done
+.Ed
+.Pp
 .Sh SEE ALSO
 .Xr got 1 ,
 .Xr tog 1 ,
