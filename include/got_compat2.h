@@ -69,13 +69,6 @@
 #define	_PW_NAME_LEN		31	/* max length, not counting NUL */
 #endif
 
-#ifndef UID_MAX
-# define UID_MAX	UINT_MAX	/* max value for a uid_t */
-#endif
-#ifndef GID_MAX
-# define GID_MAX	UINT_MAX	/* max value for a gid_t */
-#endif
-
 /* For flock. */
 #ifndef O_EXLOCK
 #define O_EXLOCK 0
