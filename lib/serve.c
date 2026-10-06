@@ -521,7 +521,7 @@ recv_want(int *use_sidebands, int outfd, struct imsgbuf *ibuf,
 {
 	const struct got_error *err;
 	struct gotd_imsg_want iwant;
-	char *capabilities_str;
+	char *capabilities_str = NULL;
 	int done = 0;
 	struct imsg imsg;
 
