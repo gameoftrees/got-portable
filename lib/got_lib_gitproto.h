@@ -51,7 +51,7 @@ const struct got_error *got_gitproto_parse_ref_update_line(char **old_id_str,
     char *line, size_t len);
 const struct got_error *got_gitproto_match_capabilities(
     char **common_capabilities,
-    struct got_pathlist_head *symrefs, char *capabilities,
+    struct got_pathlist_head *symrefs, const char *capabilities,
     const struct got_capability my_capabilities[], size_t ncapa,
     enum got_hash_algorithm *);
 const struct got_error *got_gitproto_append_capabilities(size_t *capalen,

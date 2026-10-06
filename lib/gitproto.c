@@ -308,20 +308,25 @@ done:
 
 const struct got_error *
 got_gitproto_match_capabilities(char **common_capabilities,
-    struct got_pathlist_head *symrefs, char *capabilities,
+    struct got_pathlist_head *symrefs, const char *capabilities,
     const struct got_capability my_capabilities[], size_t ncapa,
     enum got_hash_algorithm *algo)
 {
 	const struct got_error *err = NULL;
-	char *capa, *equalsign;
+	char *s, *capa, *equalsign;
 	size_t i;
 
 	*common_capabilities = NULL;
 	*algo = GOT_HASH_SHA1;
+
+	s = strdup(capabilities);
+	if (s == NULL)
+		return got_error_from_errno("strdup");
+
 	do {
-		capa = strsep(&capabilities, " ");
+		capa = strsep(&s, " ");
 		if (capa == NULL)
-			return NULL;
+			break;
 
 		equalsign = strchr(capa, '=');
 		if (equalsign != NULL && symrefs != NULL &&
@@ -329,6 +334,7 @@ got_gitproto_match_capabilities(char **common_capabilities,
 			err = add_symref(symrefs, equalsign + 1);
 			if (err && err->code != GOT_ERR_REF_DUP_ENTRY)
 				break;
+			err = NULL;
 			continue;
 		}
 
@@ -336,7 +342,7 @@ got_gitproto_match_capabilities(char **common_capabilities,
 			err = match_capability(common_capabilities,
 			    capa, &my_capabilities[i], algo);
 			if (err)
-				break;
+				goto done;
 		}
 	} while (capa);
 
@@ -345,6 +351,8 @@ got_gitproto_match_capabilities(char **common_capabilities,
 		if (*common_capabilities == NULL)
 			err = got_error_from_errno("strdup");
 	}
+done:
+	free(s);
 	return err;
 }
 
