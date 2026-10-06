@@ -363,11 +363,9 @@ parse_want_line(char **common_capabilities, uint8_t *id, char *buf, size_t len)
 	}
 
 	if (client_capabilities) {
-		enum got_hash_algorithm algo;
-
 		err = got_gitproto_match_capabilities(common_capabilities,
 		    NULL, client_capabilities, read_capabilities,
-		    nitems(read_capabilities), &algo);
+		    nitems(read_capabilities));
 		if (err)
 			goto done;
 	}
@@ -989,11 +987,9 @@ parse_ref_update_line(char **common_capabilities, char **refname,
 	}
 
 	if (client_capabilities) {
-		enum got_hash_algorithm algo;
-
 		err = got_gitproto_match_capabilities(common_capabilities,
 		    NULL, client_capabilities, write_capabilities,
-		    nitems(write_capabilities), &algo);
+		    nitems(write_capabilities));
 		if (err)
 			goto done;
 	}

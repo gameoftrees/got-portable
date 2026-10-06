@@ -232,7 +232,7 @@ got_gitproto_parse_ref_update_line(char **old_id_str, char **new_id_str,
 
 static const struct got_error *
 match_capability(char **my_capabilities, const char *capa,
-    const struct got_capability *mycapa, enum got_hash_algorithm *algo)
+    const struct got_capability *mycapa)
 {
 	char *equalsign;
 	char *s;
@@ -241,17 +241,6 @@ match_capability(char **my_capabilities, const char *capa,
 	if (equalsign) {
 		if (strncmp(capa, mycapa->key, equalsign - capa) != 0)
 			return NULL;
-
-		if (strcmp(mycapa->key, GOT_CAPA_OBJECT_FORMAT) == 0) {
-			/* require an exact match on object-format value */
-			if (strcmp(equalsign + 1, mycapa->value) != 0)
-				return NULL;
-
-			if (strcmp(mycapa->value, GOT_CAPA_OBJECT_FORMAT_SHA256)
-			    == 0)
-				*algo = GOT_HASH_SHA256;
-		}
-
 	} else {
 		if (strcmp(capa, mycapa->key) != 0)
 			return NULL;
@@ -310,15 +299,13 @@ done:
 const struct got_error *
 got_gitproto_match_capabilities(char **common_capabilities,
     struct got_pathlist_head *symrefs, const char *capabilities,
-    const struct got_capability my_capabilities[], size_t ncapa,
-    enum got_hash_algorithm *algo)
+    const struct got_capability my_capabilities[], size_t ncapa)
 {
 	const struct got_error *err = NULL;
 	char *s, *capa, *equalsign;
 	size_t i;
 
 	*common_capabilities = NULL;
-	*algo = GOT_HASH_SHA1;
 
 	s = strdup(capabilities);
 	if (s == NULL)
@@ -341,7 +328,7 @@ got_gitproto_match_capabilities(char **common_capabilities,
 
 		for (i = 0; i < ncapa; i++) {
 			err = match_capability(common_capabilities,
-			    capa, &my_capabilities[i], algo);
+			    capa, &my_capabilities[i]);
 			if (err)
 				goto done;
 		}
@@ -464,4 +451,24 @@ got_gitproto_split_capabilities_str(struct got_capability **capabilities,
 	}
 
 	return NULL;
+}
+
+int
+got_gitproto_find_capability(const char **value,
+    struct got_capability *capabilities, size_t ncapabilities,
+    const char *capa)
+{
+	size_t i;
+
+	for (i = 0; i < ncapabilities; i++) {
+		if (strcmp(capabilities[i].key, capa) != 0)
+			continue;
+
+		if (value)
+			*value = capabilities[i].value;
+
+		return 1;
+	}
+
+	return 0;
 }

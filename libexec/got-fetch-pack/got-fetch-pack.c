@@ -69,7 +69,6 @@ static int chattygot;
 
 static const struct got_capability got_capabilities[] = {
 	{ GOT_CAPA_AGENT, "got/" GOT_VERSION_STR },
-	{ GOT_CAPA_OBJECT_FORMAT, "sha256" },
 	{ GOT_CAPA_OFS_DELTA, NULL },
 	{ GOT_CAPA_SIDE_BAND_64K, NULL },
 };
@@ -375,6 +374,8 @@ fetch_pack(int fd, int packfd, int expected_algo,
 	struct got_ratelimit rl;
 	size_t idlen;
 	enum got_hash_algorithm algo = GOT_HASH_SHA1;
+	struct got_capability *capa = NULL;
+	size_t ncapa = 0;
 
 	RB_INIT(&symrefs);
 	got_ratelimit_init(&rl, 0, 500);
@@ -424,18 +425,55 @@ fetch_pack(int fd, int packfd, int expected_algo,
 		}
 
 		if (is_firstpkt) {
+			const char *object_format;
+
 			if (chattygot && server_capabilities[0] != '\0')
 				fprintf(stderr, "%s: server capabilities: %s\n",
 				    getprogname(), server_capabilities);
 			err = got_gitproto_match_capabilities(&my_capabilities,
 			    &symrefs, server_capabilities,
-			    got_capabilities, nitems(got_capabilities),
-			    &algo);
+			    got_capabilities, nitems(got_capabilities));
 			if (err)
 				goto done;
+
+			/* Check repository hash algorithm. */
+			err = got_gitproto_split_capabilities_str(&capa,
+			    &ncapa, server_capabilities); 
+			if (err)
+				goto done;
+			if (got_gitproto_find_capability(&object_format,
+			    capa, ncapa, GOT_CAPA_OBJECT_FORMAT)) {
+				if (strcmp(object_format,
+				    GOT_CAPA_OBJECT_FORMAT_SHA256) == 0) {
+					algo = GOT_HASH_SHA256;
+				} else if (strcmp(object_format,
+				    GOT_CAPA_OBJECT_FORMAT_SHA1) == 0) {
+					algo = GOT_HASH_SHA1;
+				} else {
+					err = got_error_fmt(
+					    GOT_ERR_OBJECT_FORMAT,
+					    "unknown object format %s",
+					    object_format);
+					goto done;
+				}
+			}
 			if (expected_algo != -1 && algo != expected_algo) {
 				err = got_error(GOT_ERR_OBJECT_FORMAT);
 				goto done;
+			}
+
+			if (algo == GOT_HASH_SHA256) {
+				char *s;
+
+				if (asprintf(&s, "%s%s%s=%s", my_capabilities,
+				    my_capabilities[0] != '\0' ? " " : "",
+				    GOT_CAPA_OBJECT_FORMAT,
+				    GOT_CAPA_OBJECT_FORMAT_SHA256) == -1) {
+					err = got_error_from_errno("asprintf");
+					goto done;
+				}
+				free(my_capabilities);
+				my_capabilities = s;
 			}
 
 			if (chattygot)
@@ -901,6 +939,7 @@ done:
 	free(refname);
 	free(server_capabilities);
 	free(my_capabilities);
+	free(capa);
 	return err;
 }
 
