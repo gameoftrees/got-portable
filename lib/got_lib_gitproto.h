@@ -52,11 +52,12 @@ const struct got_error *got_gitproto_parse_ref_update_line(char **old_id_str,
 const struct got_error *got_gitproto_match_capabilities(
     char **common_capabilities,
     struct got_pathlist_head *symrefs, const char *capabilities,
-    const struct got_capability my_capabilities[], size_t ncapa,
-    enum got_hash_algorithm *);
+    const struct got_capability my_capabilities[], size_t ncapa);
 const struct got_error *got_gitproto_append_capabilities(size_t *capalen,
     char *buf, size_t offset, size_t bufsize,
     const struct got_capability my_capabilities[], size_t ncapa);
 const struct got_error *got_gitproto_split_capabilities_str(
     struct got_capability **capabilities, size_t *ncapabilities,
     char *capabilities_str);
+int got_gitproto_find_capability(const char **, struct got_capability *,
+    size_t, const char *);

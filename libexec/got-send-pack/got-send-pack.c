@@ -70,7 +70,6 @@ static const struct got_capability got_capabilities[] = {
 #endif
 	{ GOT_CAPA_REPORT_STATUS, NULL },
 	{ GOT_CAPA_DELETE_REFS, NULL },
-	{ GOT_CAPA_OBJECT_FORMAT, "sha256" },
 };
 
 static const struct got_error *
@@ -356,6 +355,8 @@ send_pack(int fd, enum got_hash_algorithm algo, struct got_pathlist_head *refs,
 	char *server_capabilities = NULL, *my_capabilities = NULL;
 	struct got_pathlist_entry *pe;
 	int sent_my_capabilites = 0;
+	struct got_capability *capa = NULL;
+	size_t ncapa = 0;
 
 	RB_INIT(&their_refs);
 
@@ -381,6 +382,7 @@ send_pack(int fd, enum got_hash_algorithm algo, struct got_pathlist_head *refs,
 			goto done;
 		if (is_firstpkt) {
 			enum got_hash_algorithm expected_algo = algo;
+			const char *object_format;
 
 			if (server_capabilities == NULL) {
 				server_capabilities = strdup("");
@@ -394,13 +396,50 @@ send_pack(int fd, enum got_hash_algorithm algo, struct got_pathlist_head *refs,
 				    getprogname(), server_capabilities);
 			err = got_gitproto_match_capabilities(&my_capabilities,
 			    NULL, server_capabilities, got_capabilities,
-			    nitems(got_capabilities), &expected_algo);
+			    nitems(got_capabilities));
 			if (err)
 				goto done;
+
+			/* Check repository hash algorithm. */
+			err = got_gitproto_split_capabilities_str(&capa,
+			    &ncapa, server_capabilities); 
+			if (err)
+				goto done;
+			if (got_gitproto_find_capability(&object_format,
+			    capa, ncapa, GOT_CAPA_OBJECT_FORMAT)) {
+				if (strcmp(object_format,
+				    GOT_CAPA_OBJECT_FORMAT_SHA256) == 0) {
+					algo = GOT_HASH_SHA256;
+				} else if (strcmp(object_format,
+				    GOT_CAPA_OBJECT_FORMAT_SHA1) == 0) {
+					algo = GOT_HASH_SHA1;
+				} else {
+					err = got_error_fmt(
+					    GOT_ERR_OBJECT_FORMAT,
+					    "unknown object format %s",
+					    object_format);
+					goto done;
+				}
+			}
 			if (algo != expected_algo) {
 				err = got_error(GOT_ERR_OBJECT_FORMAT);
 				goto done;
 			}
+
+			if (algo == GOT_HASH_SHA256) {
+				char *s;
+
+				if (asprintf(&s, "%s%s%s=%s", my_capabilities,
+				    my_capabilities[0] != '\0' ? " " : "",
+				    GOT_CAPA_OBJECT_FORMAT,
+				    GOT_CAPA_OBJECT_FORMAT_SHA256) == -1) {
+					err = got_error_from_errno("asprintf");
+					goto done;
+				}
+				free(my_capabilities);
+				my_capabilities = s;
+			}
+
 			if (chattygot)
 				fprintf(stderr, "%s: my capabilities:%s\n",
 				    getprogname(),
@@ -611,6 +650,7 @@ done:
 	free(refname);
 	free(server_capabilities);
 	free(my_capabilities);
+	free(capa);
 	return err;
 }
 
