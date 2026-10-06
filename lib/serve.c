@@ -818,7 +818,7 @@ serve_read(int infd, int outfd, int gotd_sock, const char *repo_path,
 
 	while (curstate != STATE_DONE) {
 		int n;
-		buf[0] = '\0';
+
 		err = got_pkt_readpkt(&n, infd, buf, sizeof(buf), chattygot,
 		    timeout);
 		if (err)
@@ -1303,7 +1303,7 @@ serve_write(int infd, int outfd, int gotd_sock, const char *repo_path,
 
 	while (curstate != STATE_EXPECT_PACKFILE) {
 		int n;
-		buf[0] = '\0';
+
 		err = got_pkt_readpkt(&n, infd, buf, sizeof(buf), chattygot,
 		    timeout);
 		if (err)
