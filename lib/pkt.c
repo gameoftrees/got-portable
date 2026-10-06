@@ -19,6 +19,7 @@
 #include <errno.h>
 #include <limits.h>
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
 
@@ -130,6 +131,9 @@ got_pkt_readpkt(int *outlen, int fd, char *buf, int buflen, int chattygot,
 	const struct got_error *err = NULL;
 	int datalen, i;
 	ssize_t n;
+
+	memset(buf, '\0', buflen);
+	*outlen = 0;
 
 	err = got_pkt_readhdr(&datalen, fd, chattygot, timeout);
 	if (err)
