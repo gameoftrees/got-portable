@@ -107,7 +107,7 @@ got_gitproto_parse_refline(char **id_str, char **refname,
 	if (tokens[1])
 		*refname = tokens[1];
 	if (tokens[2]) {
-		if (*server_capabilities == NULL) {
+		if (tokens[2][0] != '\0' && *server_capabilities == NULL) {
 			char *p;
 			*server_capabilities = tokens[2];
 			p = strrchr(*server_capabilities, '\n');
@@ -148,7 +148,7 @@ got_gitproto_parse_want_line(char **id_str,
 	if (tokens[1])
 		*id_str = tokens[1];
 	if (tokens[2]) {
-		if (*capabilities == NULL) {
+		if (tokens[2][0] != '\0' && *capabilities == NULL) {
 			char *p;
 			*capabilities = tokens[2];
 			p = strrchr(*capabilities, '\n');
@@ -216,7 +216,7 @@ got_gitproto_parse_ref_update_line(char **old_id_str, char **new_id_str,
 	*new_id_str = tokens[1];
 	*refname = tokens[2];
 	if (tokens[3]) {
-		if (*capabilities == NULL) {
+		if (tokens[3][0] != '\0' && *capabilities == NULL) {
 			char *p;
 			*capabilities = tokens[3];
 			p = strrchr(*capabilities, '\n');
