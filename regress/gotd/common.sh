@@ -25,7 +25,7 @@ test_init()
 	local testroot=`mktemp -d \
 	    "$GOTD_TEST_ROOT/gotd-test-$testname-XXXXXXXXXX"`
 	mkdir $testroot/repo
-	git_init $testroot/repo
+	git init -q --object-format=${GOT_TEST_ALGO} $testroot/repo
 	if [ -z "$no_tree" ]; then
 		make_test_tree $testroot/repo
 		(cd $repo && git add .)

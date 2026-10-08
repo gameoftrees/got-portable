@@ -352,7 +352,8 @@ forward_want(struct gotd_session_client *client, struct imsg *imsg)
 	memcpy(&ireq, imsg->data, datalen);
 
 	memset(&iwant, 0, sizeof(iwant));
-	memcpy(iwant.object_id, ireq.object_id, SHA1_DIGEST_LENGTH);
+	memcpy(iwant.object_id, ireq.object_id, GOT_OBJECT_ID_MAXLEN);
+	iwant.algo = got_repo_get_object_format(gotd_session.repo);
 
 	if (gotd_imsg_compose_event(&gotd_session.repo_child_iev,
 	    GOTD_IMSG_WANT, GOTD_PROC_SESSION_READ, -1,
@@ -376,7 +377,8 @@ forward_have(struct gotd_session_client *client, struct imsg *imsg)
 	memcpy(&ireq, imsg->data, datalen);
 
 	memset(&ihave, 0, sizeof(ihave));
-	memcpy(ihave.object_id, ireq.object_id, SHA1_DIGEST_LENGTH);
+	memcpy(ihave.object_id, ireq.object_id, GOT_OBJECT_ID_MAXLEN);
+	ihave.algo = got_repo_get_object_format(gotd_session.repo);
 
 	if (gotd_imsg_compose_event(&gotd_session.repo_child_iev,
 	    GOTD_IMSG_HAVE, GOTD_PROC_SESSION_READ, -1,
@@ -514,6 +516,11 @@ session_dispatch_client(int fd, short events, void *arg)
 			log_debug("receiving capabilities from uid %d",
 			    client->euid);
 			err = recv_capabilities(client, &imsg);
+			if (client->ncapa_alloc != 0)
+				break;
+			gotd_session.state = GOTD_STATE_EXPECT_WANT;
+			client->accept_flush_pkt = 1;
+			log_debug("uid %d: expecting want-lines", client->euid);
 			break;
 		case GOTD_IMSG_CAPABILITY:
 			if (gotd_session.state != GOTD_STATE_EXPECT_CAPABILITIES) {
@@ -875,11 +882,6 @@ session_read_main(const char *title, const char *repo_path,
 	if (!got_repo_is_bare(gotd_session.repo)) {
 		err = got_error_msg(GOT_ERR_NOT_GIT_REPO,
 		    "bare git repository required");
-		goto done;
-	}
-	if (got_repo_get_object_format(gotd_session.repo) != GOT_HASH_SHA1) {
-		err = got_error_msg(GOT_ERR_NOT_IMPL,
-		    "sha256 object IDs unsupported in network protocol");
 		goto done;
 	}
 

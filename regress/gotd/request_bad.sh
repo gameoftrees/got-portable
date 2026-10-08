@@ -18,12 +18,20 @@
 . ./common.sh
 
 dummy_commit="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+capabilities="multi_ack side-band-64k ofs-delta"
+server_capabilities="ofs-delta side-band-64k"
+
+if [ "$GOT_TEST_ALGO" = "sha256" ]; then
+	dummy_commit="${dummy_commit}aaaaaaaaaaaaaaaaaaaaaaaa"
+	capabilities="${capabilities} object-format=sha256"
+	server_capabilities="${server_capabilities} object-format=sha256"
+fi
 
 # Non-existent commit
 test_request_bad_commit() {
 	local testroot=`test_init request_bad_commit`
 
-	echo "0054want $dummy_commit multi_ack side-band-64k ofs-delta" \
+	echo "0054want $dummy_commit $capabilities" \
 		| ssh ${GOTD_DEVUSER}@127.0.0.1 git-upload-pack '/test-repo' \
 		> $testroot/stdout 2>$testroot/stderr
 
@@ -31,9 +39,14 @@ test_request_bad_commit() {
 	# off the initial capabilities advertisement header.
 	tr '\0' '\n' < $testroot/stdout | tail -n 1 > $testroot/stdout.filtered
 
-	echo -n " agent=got/${GOT_VERSION_STR} ofs-delta side-band-64k0000" \
+	echo -n " agent=got/${GOT_VERSION_STR} ${server_capabilities}0000" \
 		> $testroot/stdout.expected
-	echo -n "0041ERR object $dummy_commit not found" \
+	if [ "$GOT_TEST_ALGO" = "sha256" ]; then
+		echo -n "0059" >> $testroot/stdout.expected
+	else
+		echo -n "0041" >> $testroot/stdout.expected
+	fi
+	echo -n "ERR object $dummy_commit not found" \
 		>> $testroot/stdout.expected
 
 	echo "gotsh: object $dummy_commit not found" \
@@ -62,13 +75,13 @@ test_request_bad_commit() {
 test_request_bad_length_zero() {
 	local testroot=`test_init request_bad_length_zero`
 
-	echo "0000want $dummy_commit multi_ack side-band-64k ofs-delta" \
+	echo "0000want $dummy_commit $capabilities" \
 		| ssh ${GOTD_DEVUSER}@127.0.0.1 git-upload-pack '/test-repo' \
 		> $testroot/stdout 2>$testroot/stderr
 
 	tr '\0' '\n' < $testroot/stdout | tail -n 1 > $testroot/stdout.filtered
 
-	echo -n " agent=got/${GOT_VERSION_STR} ofs-delta side-band-64k0000" \
+	echo -n " agent=got/${GOT_VERSION_STR} ${server_capabilities}0000" \
 		> $testroot/stdout.expected
 	echo -n "0028ERR unexpected flush packet received" \
 		>> $testroot/stdout.expected
@@ -99,13 +112,13 @@ test_request_bad_length_zero() {
 test_request_bad_length_empty() {
 	local testroot=`test_init request_bad_length_empty`
 
-	echo "0004want $dummy_commit multi_ack side-band-64k ofs-delta" \
+	echo "0004want $dummy_commit $capabilities" \
 		| ssh ${GOTD_DEVUSER}@127.0.0.1 git-upload-pack '/test-repo' \
 		> $testroot/stdout 2>$testroot/stderr
 
 	tr '\0' '\n' < $testroot/stdout | tail -n 1 > $testroot/stdout.filtered
 
-	echo -n " agent=got/${GOT_VERSION_STR} ofs-delta side-band-64k0000" \
+	echo -n " agent=got/${GOT_VERSION_STR} ${server_capabilities}0000" \
 		> $testroot/stdout.expected
 	echo -n '0018ERR packet too short' >> $testroot/stdout.expected
 
@@ -134,13 +147,13 @@ test_request_bad_length_empty() {
 test_request_bad_length_small() {
 	local testroot=`test_init request_bad_length_small`
 
-	echo "0002want $dummy_commit multi_ack side-band-64k ofs-delta" \
+	echo "0002want $dummy_commit $capabilities" \
 		| ssh ${GOTD_DEVUSER}@127.0.0.1 git-upload-pack '/test-repo' \
 		> $testroot/stdout 2>$testroot/stderr
 
 	tr '\0' '\n' < $testroot/stdout | tail -n 1 > $testroot/stdout.filtered
 
-	echo -n " agent=got/${GOT_VERSION_STR} ofs-delta side-band-64k0000" \
+	echo -n " agent=got/${GOT_VERSION_STR} ${server_capabilities}0000" \
 		> $testroot/stdout.expected
 	echo -n '0018ERR packet too short' >> $testroot/stdout.expected
 
@@ -169,16 +182,15 @@ test_request_bad_length_small() {
 test_request_bad_length_large() {
 	local testroot=`test_init request_bad_length_large`
 
-	echo "ffffwant $dummy_commit multi_ack side-band-64k ofs-delta" \
+	echo "ffffwant $dummy_commit $capabilities" \
 		| ssh ${GOTD_DEVUSER}@127.0.0.1 git-upload-pack '/test-repo' \
 		> $testroot/stdout 2>$testroot/stderr
 
 	tr '\0' '\n' < $testroot/stdout | tail -n 1 > $testroot/stdout.filtered
 
-	echo -n " agent=got/${GOT_VERSION_STR} ofs-delta side-band-64k0000" \
+	echo -n " agent=got/${GOT_VERSION_STR} ${server_capabilities}0000" \
 		> $testroot/stdout.expected
-	echo -n '001eERR unexpected end of file' \
-		>> $testroot/stdout.expected
+	echo -n '001eERR unexpected end of file' >> $testroot/stdout.expected
 
 	echo "gotsh: unexpected end of file" > $testroot/stderr.expected
 
@@ -211,12 +223,18 @@ test_request_bad_capabilities() {
 
 	tr '\0' '\n' < $testroot/stdout | tail -n 1 > $testroot/stdout.filtered
 
-	echo -n " agent=got/${GOT_VERSION_STR} ofs-delta side-band-64k0000" \
+	echo -n " agent=got/${GOT_VERSION_STR} ${server_capabilities}0000" \
 		> $testroot/stdout.expected
-	echo -n "0025ERR unexpected want-line received" \
+	if [ "$GOT_TEST_ALGO" = "sha256" ]; then
+		echo -n "0059" >> $testroot/stdout.expected
+	else
+		echo -n "0041" >> $testroot/stdout.expected
+	fi
+	echo -n "ERR object $dummy_commit not found" \
 		>> $testroot/stdout.expected
 
-	echo "gotsh: unexpected want-line received" > $testroot/stderr.expected
+	echo "gotsh: object $dummy_commit not found" \
+		> $testroot/stderr.expected
 
 	cmp -s $testroot/stdout.expected $testroot/stdout.filtered
 	ret=$?

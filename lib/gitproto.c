@@ -146,8 +146,15 @@ got_gitproto_parse_want_line(char **id_str,
 	}
 
 	free(tokens[0]);
-	if (tokens[1])
+	if (tokens[1]) {
+		char *lf;
+
 		*id_str = tokens[1];
+		lf = strchr(*id_str, '\n');
+		if (lf)
+			*lf = '\0';
+	}
+
 	if (tokens[2]) {
 		if (tokens[2][0] != '\0' && *capabilities == NULL) {
 			char *p;
@@ -185,8 +192,15 @@ got_gitproto_parse_have_line(char **id_str, char *line, int len)
 	}
 
 	free(tokens[0]);
-	if (tokens[1])
+	if (tokens[1]) {
+		char *lf;
+
 		*id_str = tokens[1];
+
+		lf = strchr(*id_str, '\n');
+		if (lf)
+			*lf = '\0';
+	}
 
 	return NULL;
 }

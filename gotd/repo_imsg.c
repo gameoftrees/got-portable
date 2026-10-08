@@ -44,14 +44,15 @@ gotd_imsg_send_ack(struct got_object_id *id, struct imsgbuf *ibuf,
 {
 	const struct got_error *err = NULL;
 	struct gotd_imsg_ack iack;
-	char hex[SHA1_DIGEST_STRING_LENGTH];
+	char hex[GOT_HASH_DIGEST_STRING_MAXLEN];
 
 	if (log_getverbose() > 0 &&
 	    got_object_id_hex(id, hex, sizeof(hex)))
 		log_debug("sending ACK for %s", hex);
 
 	memset(&iack, 0, sizeof(iack));
-	memcpy(iack.object_id, id->hash, SHA1_DIGEST_LENGTH);
+	memcpy(iack.object_id, id->hash, got_hash_digest_length(id->algo));
+	iack.algo = id->algo;
 
 	if (imsg_compose(ibuf, GOTD_IMSG_ACK, peerid, pid, -1,
 	    &iack, sizeof(iack)) == -1) {
@@ -71,14 +72,15 @@ gotd_imsg_send_nak(struct got_object_id *id, struct imsgbuf *ibuf,
 {
 	const struct got_error *err = NULL;
 	struct gotd_imsg_nak inak;
-	char hex[SHA1_DIGEST_STRING_LENGTH];
+	char hex[GOT_HASH_DIGEST_STRING_MAXLEN];
 
 	if (log_getverbose() > 0 &&
 	    got_object_id_hex(id, hex, sizeof(hex)))
 		log_debug("sending NAK for %s", hex);
 
 	memset(&inak, 0, sizeof(inak));
-	memcpy(inak.object_id, id->hash, SHA1_DIGEST_LENGTH);
+	memcpy(inak.object_id, id->hash, got_hash_digest_length(id->algo));
+	inak.algo = id->algo;
 
 	if (imsg_compose(ibuf, GOTD_IMSG_NAK, peerid, pid, -1,
 	    &inak, sizeof(inak)) == -1) {

@@ -117,6 +117,7 @@ send_symref(struct got_reference *symref, struct got_object_id *target_id,
 	isymref.name_len = strlen(refname);
 	isymref.target_len = strlen(target);
 	memcpy(isymref.target_id, target_id->hash, sizeof(isymref.target_id));
+	isymref.algo = got_repo_get_object_format(repo_read.repo);
 
 	len = sizeof(isymref) + isymref.name_len + isymref.target_len;
 	if (len > MAX_IMSGSIZE - IMSG_HEADER_SIZE) {
@@ -155,6 +156,7 @@ send_peeled_tag_ref(struct got_reference *ref, struct got_object *obj,
 {
 	const struct got_error *err = NULL;
 	struct got_tag_object *tag;
+	int algo = got_repo_get_object_format(repo_read.repo);
 	size_t namelen, len;
 	char *peeled_refname = NULL;
 	struct got_object_id *id;
@@ -186,7 +188,11 @@ send_peeled_tag_ref(struct got_reference *ref, struct got_object *obj,
 	}
 
 	/* Keep in sync with struct gotd_imsg_ref definition. */
-	if (imsg_add(wbuf, id->hash, SHA1_DIGEST_LENGTH) == -1) {
+	if (imsg_add(wbuf, id->hash, GOT_OBJECT_ID_MAXLEN) == -1) {
+		err = got_error_from_errno("imsg_add REF");
+		goto done;
+	}
+	if (imsg_add(wbuf, &algo, sizeof(algo)) == -1) {
 		err = got_error_from_errno("imsg_add REF");
 		goto done;
 	}
@@ -215,6 +221,7 @@ send_ref(struct got_reference *ref, struct imsgbuf *ibuf)
 	struct got_object *obj = NULL;
 	size_t len;
 	struct ibuf *wbuf;
+	int algo = got_repo_get_object_format(repo_read.repo);
 
 	namelen = strlen(refname);
 
@@ -234,8 +241,12 @@ send_ref(struct got_reference *ref, struct imsgbuf *ibuf)
 	}
 
 	/* Keep in sync with struct gotd_imsg_ref definition. */
-	if (imsg_add(wbuf, id->hash, SHA1_DIGEST_LENGTH) == -1)
+	if (imsg_add(wbuf, id->hash, GOT_OBJECT_ID_MAXLEN) == -1)
 		return got_error_from_errno("imsg_add REF");
+	if (imsg_add(wbuf, &algo, sizeof(algo)) == -1) {
+		err = got_error_from_errno("imsg_add REF");
+		goto done;
+	}
 	if (imsg_add(wbuf, &namelen, sizeof(namelen)) == -1)
 		return got_error_from_errno("imsg_add REF");
 	if (imsg_add(wbuf, refname, namelen) == -1)
@@ -293,6 +304,7 @@ list_refs(struct imsg *imsg)
 		return err;
 
 	memset(&irefs, 0, sizeof(irefs));
+	irefs.algo = got_repo_get_object_format(repo_read.repo);
 	TAILQ_FOREACH(re, &refs, entry) {
 		struct got_object_id *id;
 		int obj_type;
@@ -404,18 +416,23 @@ recv_want(struct imsg *imsg)
 	struct repo_read_client *client = &repo_read_client;
 	struct gotd_imsg_want iwant;
 	size_t datalen;
-	char hex[SHA1_DIGEST_STRING_LENGTH];
+	char hex[GOT_HASH_DIGEST_STRING_MAXLEN];
 	struct got_object_id id;
 	int obj_type;
 	struct imsgbuf ibuf;
+	int algo = got_repo_get_object_format(repo_read.repo);
 
 	datalen = imsg->hdr.len - IMSG_HEADER_SIZE;
 	if (datalen != sizeof(iwant))
 		return got_error(GOT_ERR_PRIVSEP_LEN);
 	memcpy(&iwant, imsg->data, sizeof(iwant));
 
+	if (iwant.algo != algo)
+		return got_error(GOT_ERR_OBJECT_FORMAT);
+
 	memset(&id, 0, sizeof(id));
-	memcpy(id.hash, iwant.object_id, SHA1_DIGEST_LENGTH);
+	memcpy(id.hash, iwant.object_id, GOT_OBJECT_ID_MAXLEN);
+	id.algo = algo;
 
 	if (log_getverbose() > 0 &&
 	    got_object_id_hex(&id, hex, sizeof(hex)))
@@ -451,18 +468,23 @@ recv_have(struct imsg *imsg)
 	struct repo_read_client *client = &repo_read_client;
 	struct gotd_imsg_have ihave;
 	size_t datalen;
-	char hex[SHA1_DIGEST_STRING_LENGTH];
+	char hex[GOT_HASH_DIGEST_STRING_MAXLEN];
 	struct got_object_id id;
 	int obj_type;
 	struct imsgbuf ibuf;
+	int algo = got_repo_get_object_format(repo_read.repo);
 
 	datalen = imsg->hdr.len - IMSG_HEADER_SIZE;
 	if (datalen != sizeof(ihave))
 		return got_error(GOT_ERR_PRIVSEP_LEN);
 	memcpy(&ihave, imsg->data, sizeof(ihave));
 
+	if (ihave.algo != algo)
+		return got_error(GOT_ERR_OBJECT_FORMAT);
+
 	memset(&id, 0, sizeof(id));
-	memcpy(id.hash, ihave.object_id, SHA1_DIGEST_LENGTH);
+	memcpy(id.hash, ihave.object_id, GOT_OBJECT_ID_MAXLEN);
+	id.algo = algo;
 
 	if (log_getverbose() > 0 &&
 	    got_object_id_hex(&id, hex, sizeof(hex)))
@@ -892,11 +914,6 @@ repo_read_main(const char *title, const char *repo_path,
 	if (!got_repo_is_bare(repo_read.repo)) {
 		err = got_error_msg(GOT_ERR_NOT_GIT_REPO,
 		    "bare git repository required");
-		goto done;
-	}
-	if (got_repo_get_object_format(repo_read.repo) != GOT_HASH_SHA1) {
-		err = got_error_msg(GOT_ERR_NOT_IMPL,
-		    "sha256 object IDs unsupported in network protocol");
 		goto done;
 	}
 
