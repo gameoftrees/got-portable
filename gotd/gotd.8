@@ -122,13 +122,6 @@ The flan_hacker user can now populate the empty repository with
 .Sh AUTHORS
 .An Stefan Sperling Aq Mt stsp@openbsd.org
 .Sh CAVEATS
-At present,
-.Nm
-cannot serve repositories that use the sha256 object ID hashing algorithm
-because
-.Nm
-does not yet support the object-format capability of the Git network protocol.
-.Pp
 .Nm
 cannot honour the SIGHUP signal because the
 .Pa /etc/gotd-secrets.conf
