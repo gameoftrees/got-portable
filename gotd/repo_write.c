@@ -2336,7 +2336,7 @@ open_tree(struct got_tree_object **tree, struct got_pack *pack,
 		goto done;
 	
 	err = got_object_parse_tree(&entries, &nentries, &nentries_alloc,
-	    buf, len, pack->algo);
+	    buf, len, algo);
 	if (err)
 		goto done;
 
