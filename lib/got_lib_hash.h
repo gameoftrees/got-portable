@@ -17,9 +17,6 @@
 #define GOT_SHA1_STRING_ZERO "0000000000000000000000000000000000000000"
 #define GOT_SHA256_STRING_ZERO "0000000000000000000000000000000000000000000000000000000000000000"
 
-#define GOT_HASH_DIGEST_MAXLEN SHA256_DIGEST_LENGTH
-#define GOT_HASH_DIGEST_STRING_MAXLEN SHA256_DIGEST_STRING_LENGTH
-
 int got_parse_xdigit(uint8_t *, const char *);
 
 char *got_sha1_digest_to_str(const uint8_t *, char *, size_t);
@@ -87,3 +84,6 @@ void	got_hash_final_object_id(struct got_hash *, struct got_object_id *);
  * Compare two hash digest; similar to memcmp().
  */
 int	got_hash_cmp(enum got_hash_algorithm, uint8_t *, uint8_t *);
+
+/* Return a human-readable name of the hash algorithm. */
+const char *got_hash_algo_name(enum got_hash_algorithm);

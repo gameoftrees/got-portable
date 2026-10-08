@@ -358,13 +358,15 @@ struct gotd_imsg_list_refs {
 /* Structure for GOTD_IMSG_REFLIST. */
 struct gotd_imsg_reflist {
 	size_t nrefs;
+	int algo;
 
 	/* Followed by nrefs times of gotd_imsg_ref/gotd_imsg_symref data. */
 } __attribute__((__packed__));
 
 /* Structure for GOTD_IMSG_REF data. */
 struct gotd_imsg_ref {
-	uint8_t id[SHA1_DIGEST_LENGTH];
+	uint8_t id[GOT_OBJECT_ID_MAXLEN];
+	int algo;
 	size_t name_len;
 	/* Followed by name_len data bytes. */
 } __attribute__((__packed__));
@@ -373,7 +375,8 @@ struct gotd_imsg_ref {
 struct gotd_imsg_symref {
 	size_t name_len;
 	size_t target_len;
-	uint8_t target_id[SHA1_DIGEST_LENGTH];
+	uint8_t target_id[GOT_OBJECT_ID_MAXLEN];
+	int algo;
 
 	/*
 	 * Followed by name_len + target_len data bytes.
@@ -401,22 +404,26 @@ struct gotd_imsg_capability {
 
 /* Structure for GOTD_IMSG_WANT data. */
 struct gotd_imsg_want {
-	uint8_t object_id[SHA1_DIGEST_LENGTH];
+	uint8_t object_id[GOT_OBJECT_ID_MAXLEN];
+	int algo;
 } __attribute__((__packed__));
 
 /* Structure for GOTD_IMSG_HAVE data. */
 struct gotd_imsg_have {
-	uint8_t object_id[SHA1_DIGEST_LENGTH];
+	uint8_t object_id[GOT_OBJECT_ID_MAXLEN];
+	int algo;
 } __attribute__((__packed__));
 
 /* Structure for GOTD_IMSG_ACK data. */
 struct gotd_imsg_ack {
-	uint8_t object_id[SHA1_DIGEST_LENGTH];
+	uint8_t object_id[GOT_OBJECT_ID_MAXLEN];
+	int algo;
 } __attribute__((__packed__));
 
 /* Structure for GOTD_IMSG_NAK data. */
 struct gotd_imsg_nak {
-	uint8_t object_id[SHA1_DIGEST_LENGTH];
+	uint8_t object_id[GOT_OBJECT_ID_MAXLEN];
+	int algo;
 } __attribute__((__packed__));
 
 /* Structure for GOTD_IMSG_PACKFILE_STATUS data. */
@@ -429,8 +436,9 @@ struct gotd_imsg_packfile_status {
 
 /* Structure for GOTD_IMSG_REF_UPDATE data. */
 struct gotd_imsg_ref_update {
-	uint8_t old_id[SHA1_DIGEST_LENGTH];
-	uint8_t new_id[SHA1_DIGEST_LENGTH];
+	uint8_t old_id[GOT_OBJECT_ID_MAXLEN];
+	uint8_t new_id[GOT_OBJECT_ID_MAXLEN];
+	int algo;
 	int ref_is_new;
 	int delete_ref;
 	size_t name_len;
@@ -471,8 +479,9 @@ struct gotd_imsg_ref_updates_start {
 
 /* Structure for GOTD_IMSG_REF_UPDATE_OK data. */
 struct gotd_imsg_ref_update_ok {
-	uint8_t old_id[SHA1_DIGEST_LENGTH];
-	uint8_t new_id[SHA1_DIGEST_LENGTH];
+	uint8_t old_id[GOT_OBJECT_ID_MAXLEN];
+	uint8_t new_id[GOT_OBJECT_ID_MAXLEN];
+	int algo;
 	int ref_is_new;
 	size_t name_len;
 
@@ -481,8 +490,9 @@ struct gotd_imsg_ref_update_ok {
 
 /* Structure for GOTD_IMSG_REF_UPDATE_NG data. */
 struct gotd_imsg_ref_update_ng {
-	uint8_t old_id[SHA1_DIGEST_LENGTH];
-	uint8_t new_id[SHA1_DIGEST_LENGTH];
+	uint8_t old_id[GOT_OBJECT_ID_MAXLEN];
+	uint8_t new_id[GOT_OBJECT_ID_MAXLEN];
+	int algo;
 	size_t name_len;
 	size_t reason_len;
 
@@ -527,7 +537,8 @@ struct gotd_imsg_packfile_progress {
 
 /* Structure for GOTD_IMSG_PACKFILE_INSTALL. */
 struct gotd_imsg_packfile_install {
-	uint8_t pack_sha1[SHA1_DIGEST_LENGTH];
+	uint8_t pack_hash[GOT_HASH_DIGEST_MAXLEN];
+	int algo;
 };
 
 /* Structure for GOTD_IMSG_LISTEN_SOCKET data. */

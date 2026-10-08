@@ -134,7 +134,15 @@ EOF
 		test_done "$testroot" "$ret"
 		return 1
 	fi
-	egrep -q '\+pack-[a-f0-9]{40}.pack' $testroot/repo-list.newlines
+
+	if [ "$GOT_TEST_ALGO" = "sha256" ]; then
+		digest_len=64
+	else
+		digest_len=40
+	fi
+
+	egrep -q "\+pack-[a-f0-9]{$digest_len}.pack" \
+		$testroot/repo-list.newlines
 	ret=$?
 	if [ $ret -ne 0 ]; then
 		echo "new pack file not found in ${GOTD_TEST_REPO}"
@@ -142,7 +150,8 @@ EOF
 		test_done "$testroot" "$ret"
 		return 1
 	fi
-	egrep -q '\+pack-[a-f0-9]{40}.idx' $testroot/repo-list.newlines
+	egrep -q "\+pack-[a-f0-9]{$digest_len}.idx" \
+		$testroot/repo-list.newlines
 	ret=$?
 	if [ $ret -ne 0 ]; then
 		echo "new pack index not found in ${GOTD_TEST_REPO}"

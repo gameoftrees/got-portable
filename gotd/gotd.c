@@ -3475,7 +3475,6 @@ main(int argc, char **argv)
 	enum gotd_procid proc_id = GOTD_PROC_GOTD;
 	struct event evsigint, evsigterm, evsighup, evsigusr1, evsigchld;
 	int *pack_fds = NULL, *temp_fds = NULL;
-	struct gotd_repo *repo = NULL;
 	char hostname[_POSIX_HOST_NAME_MAX + 1];
 	FILE *fp;
 	FILE *diff_f1 = NULL, *diff_f2 = NULL, *tmp_f1 = NULL, *tmp_f2 = NULL;
@@ -3606,31 +3605,6 @@ main(int argc, char **argv)
 
 		if (pw->pw_uid == 0)
 			fatalx("cannot run %s as the superuser", getprogname());
-
-		/*
-		 * SHA2 repositories cannot be used with gotd until Git protov2
-		 * support is added. Reject them at startup for now.
-		 */
-		TAILQ_FOREACH(repo, &gotd.repos, entry) {
-			struct got_repository *r;
-
-			error = got_repo_open(&r, repo->path, NULL, NULL);
-			if (error) {
-				if (error->code == GOT_ERR_ERRNO &&
-				    errno == ENOENT)
-					continue;
-				fatalx("%s: %s", repo->path, error->msg);
-			}
-
-			if (got_repo_get_object_format(r) != GOT_HASH_SHA1) {
-				error = got_error_msg(GOT_ERR_NOT_IMPL,
-				    "sha256 object IDs unsupported in network "
-				    "protocol");
-				fatalx("%s: %s", repo->path, error->msg);
-			}
-
-			got_repo_close(r);
-		}
 
 		if (noaction) {
 			fprintf(stderr, "configuration OK\n");

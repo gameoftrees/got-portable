@@ -348,6 +348,9 @@ recv_packfile_install(struct imsg *imsg)
 		return got_error(GOT_ERR_PRIVSEP_LEN);
 	memcpy(&inst, imsg->data, sizeof(inst));
 
+	if (inst.algo != got_repo_get_object_format(gotd_session.repo))
+		return got_error(GOT_ERR_OBJECT_FORMAT);
+
 	return NULL;
 }
 
@@ -380,6 +383,9 @@ recv_ref_update(struct imsg *imsg)
 		return got_error(GOT_ERR_PRIVSEP_LEN);
 	memcpy(&iref, imsg->data, sizeof(iref));
 
+	if (iref.algo != got_repo_get_object_format(gotd_session.repo))
+		return got_error(GOT_ERR_OBJECT_FORMAT);
+
 	return NULL;
 }
 
@@ -393,8 +399,9 @@ send_ref_update_ok(struct gotd_session_client *client,
 	size_t len;
 
 	memset(&iok, 0, sizeof(iok));
-	memcpy(iok.old_id, iref->old_id, SHA1_DIGEST_LENGTH);
-	memcpy(iok.new_id, iref->new_id, SHA1_DIGEST_LENGTH);
+	memcpy(iok.old_id, iref->old_id, GOT_OBJECT_ID_MAXLEN);
+	memcpy(iok.new_id, iref->new_id, GOT_OBJECT_ID_MAXLEN);
+	iok.algo = got_repo_get_object_format(gotd_session.repo);
 	iok.name_len = strlen(refname);
 
 	len = sizeof(iok) + iok.name_len;
@@ -435,8 +442,9 @@ send_ref_update_ng(struct gotd_session_client *client,
 	size_t len;
 
 	memset(&ing, 0, sizeof(ing));
-	memcpy(ing.old_id, iref->old_id, SHA1_DIGEST_LENGTH);
-	memcpy(ing.new_id, iref->new_id, SHA1_DIGEST_LENGTH);
+	memcpy(ing.old_id, iref->old_id, GOT_OBJECT_ID_MAXLEN);
+	memcpy(ing.new_id, iref->new_id, GOT_OBJECT_ID_MAXLEN);
+	ing.algo = got_repo_get_object_format(gotd_session.repo);
 	ing.name_len = strlen(refname);
 
 	ng_err = got_error_fmt(GOT_ERR_REF_BUSY, "%s", reason);
@@ -466,9 +474,10 @@ install_pack(struct gotd_session_client *client, const char *repo_path,
 {
 	const struct got_error *err = NULL;
 	struct gotd_imsg_packfile_install inst;
-	char hex[SHA1_DIGEST_STRING_LENGTH];
+	char hex[GOT_HASH_DIGEST_STRING_MAXLEN];
 	size_t datalen;
 	char *packfile_path = NULL, *packidx_path = NULL;
+	int algo = got_repo_get_object_format(gotd_session.repo);
 
 	datalen = imsg->hdr.len - IMSG_HEADER_SIZE;
 	if (datalen != sizeof(inst))
@@ -482,9 +491,13 @@ install_pack(struct gotd_session_client *client, const char *repo_path,
 		return got_error_msg(GOT_ERR_BAD_REQUEST,
 		    "client has no pack file index");
 
-	if (got_sha1_digest_to_str(inst.pack_sha1, hex, sizeof(hex)) == NULL)
+	if (inst.algo != algo)
+		return got_error(GOT_ERR_OBJECT_FORMAT);
+
+	if (got_hash_digest_to_str(inst.pack_hash,
+	    hex, sizeof(hex), algo) == NULL)
 		return got_error_msg(GOT_ERR_NO_SPACE,
-		    "could not convert pack file SHA1 to hex");
+		    "could not convert pack file hash to hex");
 
 	if (asprintf(&packfile_path, "/%s/%s/pack-%s.pack",
 	    repo_path, GOT_OBJECTS_PACK_DIR, hex) == -1) {
@@ -819,8 +832,9 @@ update_ref(int *shut, struct gotd_session_client *client,
 	char *refname = NULL;
 	size_t datalen;
 	int locked = 0;
-	char hex1[SHA1_DIGEST_STRING_LENGTH];
-	char hex2[SHA1_DIGEST_STRING_LENGTH];
+	char hex1[GOT_HASH_DIGEST_STRING_MAXLEN];
+	char hex2[GOT_HASH_DIGEST_STRING_MAXLEN];
+	int algo = got_repo_get_object_format(gotd_session.repo);
 
 	log_debug("update-ref from uid %d", client->euid);
 
@@ -840,9 +854,12 @@ update_ref(int *shut, struct gotd_session_client *client,
 	log_debug("updating ref %s for uid %d", refname, client->euid);
 
 	memset(&old_id, 0, sizeof(old_id));
-	memcpy(old_id.hash, iref.old_id, SHA1_DIGEST_LENGTH);
+	memcpy(old_id.hash, iref.old_id, GOT_OBJECT_ID_MAXLEN);
+	old_id.algo = algo;
 	memset(&new_id, 0, sizeof(new_id));
-	memcpy(new_id.hash, iref.new_id, SHA1_DIGEST_LENGTH);
+	memcpy(new_id.hash, iref.new_id, GOT_OBJECT_ID_MAXLEN);
+	new_id.algo = algo;
+	iref.algo = algo;
 	err = got_repo_find_object_id(iref.delete_ref ? &old_id : &new_id,
 	    repo);
 	if (err)
@@ -2047,11 +2064,6 @@ session_write_main(const char *title, const char *repo_path,
 	if (!got_repo_is_bare(gotd_session.repo)) {
 		err = got_error_msg(GOT_ERR_NOT_GIT_REPO,
 		    "bare git repository required");
-		goto done;
-	}
-	if (got_repo_get_object_format(gotd_session.repo) != GOT_HASH_SHA1) {
-		err = got_error_msg(GOT_ERR_NOT_IMPL,
-		    "sha256 object IDs unsupported in network protocol");
 		goto done;
 	}
 

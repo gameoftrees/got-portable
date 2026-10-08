@@ -72,18 +72,42 @@ static const struct got_capability write_capabilities[] = {
 
 static const struct got_error *
 append_read_capabilities(size_t *capalen, size_t len, const char *symrefstr,
-    uint8_t *buf, size_t bufsize)
+    uint8_t *buf, size_t bufsize, int algo)
 {
-	struct got_capability capa[nitems(read_capabilities) + 1];
+	struct got_capability capa[nitems(read_capabilities) + 2];
 	size_t ncapa;
 
 	memcpy(&capa, read_capabilities, sizeof(read_capabilities));
+	ncapa = nitems(read_capabilities);
 	if (symrefstr) {
-		capa[nitems(read_capabilities)].key = "symref";
-		capa[nitems(read_capabilities)].value = symrefstr;
-		ncapa = nitems(capa);
-	} else
-		ncapa = nitems(read_capabilities);
+		capa[ncapa].key = "symref";
+		capa[ncapa].value = symrefstr;
+		ncapa++;
+	}
+	if (algo == GOT_HASH_SHA256) {
+		capa[ncapa].key = GOT_CAPA_OBJECT_FORMAT;
+		capa[ncapa].value = "sha256";
+		ncapa++;
+	}
+
+	return got_gitproto_append_capabilities(capalen, buf, len,
+	    bufsize, capa, ncapa);
+}
+
+static const struct got_error *
+append_write_capabilities(size_t *capalen, size_t len, const char *symrefstr,
+    uint8_t *buf, size_t bufsize, int algo)
+{
+	struct got_capability capa[nitems(write_capabilities) + 1];
+	size_t ncapa;
+
+	memcpy(&capa, write_capabilities, sizeof(write_capabilities));
+	ncapa = nitems(write_capabilities);
+	if (algo == GOT_HASH_SHA256) {
+		capa[ncapa].key = GOT_CAPA_OBJECT_FORMAT;
+		capa[ncapa].value = "sha256";
+		ncapa++;
+	}
 
 	return got_gitproto_append_capabilities(capalen, buf, len,
 	    bufsize, capa, ncapa);
@@ -91,14 +115,14 @@ append_read_capabilities(size_t *capalen, size_t len, const char *symrefstr,
 
 static const struct got_error *
 send_ref(int outfd, uint8_t *id, const char *refname, int send_capabilities,
-    int client_is_reading, const char *symrefstr, int chattygot)
+    int client_is_reading, const char *symrefstr, int chattygot, int algo)
 {
 	const struct got_error *err = NULL;
-	char hex[SHA1_DIGEST_STRING_LENGTH];
+	char hex[GOT_HASH_DIGEST_STRING_MAXLEN];
 	char buf[GOT_PKT_MAX];
 	size_t len, capalen = 0;
-
-	if (got_sha1_digest_to_str(id, hex, sizeof(hex)) == NULL)
+	
+	if (got_hash_digest_to_str(id, hex, sizeof(hex), algo) == NULL)
 		return got_error(GOT_ERR_BAD_OBJ_ID);
 
 	len = snprintf(buf, sizeof(buf), "%s %s", hex, refname);
@@ -108,11 +132,10 @@ send_ref(int outfd, uint8_t *id, const char *refname, int send_capabilities,
 	if (send_capabilities) {
 		if (client_is_reading) {
 			err = append_read_capabilities(&capalen, len,
-			    symrefstr, buf, sizeof(buf));
+			    symrefstr, buf, sizeof(buf), algo);
 		} else {
-			err = got_gitproto_append_capabilities(&capalen,
-			    buf, len, sizeof(buf), write_capabilities,
-			    nitems(write_capabilities));
+			err = append_write_capabilities(&capalen, len,
+			    symrefstr, buf, sizeof(buf), algo);
 		}
 		if (err)
 			return err;
@@ -129,26 +152,32 @@ send_ref(int outfd, uint8_t *id, const char *refname, int send_capabilities,
 }
 
 static const struct got_error *
-send_zero_refs(int outfd, int client_is_reading, int chattygot)
+send_zero_refs(int outfd, int client_is_reading, int chattygot, int algo)
 {
 	const struct got_error *err = NULL;
-	const char *line = GOT_SHA1_STRING_ZERO " capabilities^{}";
+	const char *line;
 	char buf[GOT_PKT_MAX];
 	size_t len, capalen = 0;
+
+	if (algo == GOT_HASH_SHA1)
+		line = GOT_SHA1_STRING_ZERO " capabilities^{}";
+	else if (algo == GOT_HASH_SHA256)
+		line = GOT_SHA256_STRING_ZERO " capabilities^{}";
+	else
+		return got_error(GOT_ERR_OBJECT_FORMAT);
 
 	len = strlcpy(buf, line, sizeof(buf));
 	if (len >= sizeof(buf))
 		return got_error(GOT_ERR_NO_SPACE);
 
 	if (client_is_reading) {
-		err = got_gitproto_append_capabilities(&capalen, buf, len,
-		    sizeof(buf), read_capabilities, nitems(read_capabilities));
+		err = append_read_capabilities(&capalen, len,
+		    NULL, buf, sizeof(buf), algo);
 		if (err)
 			return err;
 	} else {
-		err = got_gitproto_append_capabilities(&capalen, buf, len,
-		    sizeof(buf), write_capabilities,
-		    nitems(write_capabilities));
+		err = append_write_capabilities(&capalen, len,
+		    NULL, buf, sizeof(buf), algo);
 		if (err)
 			return err;
 	}
@@ -172,8 +201,8 @@ echo_error(const struct got_error *err, int outfd, int chattygot)
 }
 
 static const struct got_error *
-announce_refs(int outfd, struct imsgbuf *ibuf, int client_is_reading,
-    const char *repo_path, int chattygot)
+announce_refs(int outfd, int *algo, struct imsgbuf *ibuf,
+    int client_is_reading, const char *repo_path, int chattygot)
 {
 	const struct got_error *err = NULL;
 	struct imsg imsg;
@@ -186,6 +215,8 @@ announce_refs(int outfd, struct imsgbuf *ibuf, int client_is_reading,
 	int have_nrefs = 0, sent_capabilities = 0;
 	char *symrefname = NULL, *symreftarget = NULL, *symrefstr = NULL;
 	char *refname = NULL;
+
+	*algo = GOT_NUM_HASH_ALGOS;
 
 	memset(&imsg, 0, sizeof(imsg));
 	memset(&lsref, 0, sizeof(lsref));
@@ -225,7 +256,8 @@ announce_refs(int outfd, struct imsgbuf *ibuf, int client_is_reading,
 			err = gotd_imsg_recv_error(NULL, &imsg);
 			goto done;
 		case GOTD_IMSG_REFLIST:
-			if (have_nrefs || nrefs > 0) {
+			if (have_nrefs || nrefs > 0 ||
+			    *algo != GOT_NUM_HASH_ALGOS) {
 				err = got_error(GOT_ERR_PRIVSEP_MSG);
 				goto done;
 			}
@@ -235,13 +267,24 @@ announce_refs(int outfd, struct imsgbuf *ibuf, int client_is_reading,
 			}
 			memcpy(&ireflist, imsg.data, sizeof(ireflist));
 			nrefs = ireflist.nrefs;
+			if (ireflist.algo != GOT_HASH_SHA1 &&
+			    ireflist.algo != GOT_HASH_SHA256) {
+				err = got_error(GOT_ERR_OBJECT_FORMAT);
+				goto done;
+			}
+			*algo = ireflist.algo;
 			have_nrefs = 1;
-			if (nrefs == 0)
+			if (nrefs == 0) {
 				err = send_zero_refs(outfd, client_is_reading,
-				    chattygot);
+				    chattygot, *algo);
+				if (err)
+					goto done;
+				sent_capabilities = 1;
+			}
 			break;
 		case GOTD_IMSG_REF:
-			if (!have_nrefs || nrefs == 0) {
+			if (!have_nrefs || nrefs == 0 ||
+			    *algo == GOT_NUM_HASH_ALGOS) {
 				err = got_error(GOT_ERR_PRIVSEP_MSG);
 				goto done;
 			}
@@ -260,9 +303,13 @@ announce_refs(int outfd, struct imsgbuf *ibuf, int client_is_reading,
 				err = got_error_from_errno("strndup");
 				goto done;
 			}
+			if (iref.algo != *algo) {
+				err = got_error(GOT_ERR_OBJECT_FORMAT);
+				goto done;
+			}
 			err = send_ref(outfd, iref.id, refname,
 			    !sent_capabilities, client_is_reading,
-			    NULL, chattygot);
+			    NULL, chattygot, *algo);
 			free(refname);
 			refname = NULL;
 			if (err)
@@ -272,7 +319,8 @@ announce_refs(int outfd, struct imsgbuf *ibuf, int client_is_reading,
 				nrefs--;
 			break;
 		case GOTD_IMSG_SYMREF:
-			if (!have_nrefs || nrefs == 0) {
+			if (!have_nrefs || nrefs == 0 ||
+			    *algo == GOT_NUM_HASH_ALGOS) {
 				err = got_error(GOT_ERR_PRIVSEP_MSG);
 				goto done;
 			}
@@ -315,9 +363,13 @@ announce_refs(int outfd, struct imsgbuf *ibuf, int client_is_reading,
 				err = got_error_from_errno("asprintf");
 				goto done;
 			}
+			if (isymref.algo != *algo) {
+				err = got_error(GOT_ERR_OBJECT_FORMAT);
+				goto done;
+			}
 			err = send_ref(outfd, isymref.target_id, symrefname,
 			    !sent_capabilities, client_is_reading, symrefstr,
-			    chattygot);
+			    chattygot, *algo);
 			free(refname);
 			refname = NULL;
 			if (err)
@@ -345,7 +397,62 @@ done:
 }
 
 static const struct got_error *
-parse_want_line(char **common_capabilities, uint8_t *id, char *buf, size_t len)
+negotiate_hash_algorithm(const char *client_capabilities,
+    enum got_hash_algorithm server_algo, int require_client_algo)
+{
+	const struct got_error *err;
+	char *s = NULL;
+	struct got_capability *capa = NULL;
+	size_t ncapa = 0;
+	const char *object_format;
+	enum got_hash_algorithm client_algo = GOT_NUM_HASH_ALGOS;
+
+	s = strdup(client_capabilities);
+	if (s == NULL)
+		return got_error_from_errno("strdup");
+
+	err = got_gitproto_split_capabilities_str(&capa, &ncapa, s); 
+	if (err)
+		goto done;
+
+	if (got_gitproto_find_capability(&object_format,
+	    capa, ncapa, GOT_CAPA_OBJECT_FORMAT)) {
+		if (strcmp(object_format,
+		    GOT_CAPA_OBJECT_FORMAT_SHA256) == 0) {
+			client_algo = GOT_HASH_SHA256;
+		} else if (strcmp(object_format,
+		    GOT_CAPA_OBJECT_FORMAT_SHA1) == 0) {
+			client_algo = GOT_HASH_SHA1;
+		} else {
+			err = got_error_fmt(GOT_ERR_OBJECT_FORMAT,
+			    "unknown hash algorithm %s", object_format);
+			goto done;
+		}
+	}
+
+	/*
+	 * Some Git clients do not send an object-format capability
+	 * when fetching, in which case we must trust that they do
+	 * support our hash algorithm.
+	 */
+	if (require_client_algo && client_algo != server_algo) {
+		err = got_error_fmt(GOT_ERR_OBJECT_FORMAT,
+		    "your Git client uses hash algorithm %s "
+		    "which is incompatible with the hash "
+		    "algorithm %s used by this repository",
+		    got_hash_algo_name(client_algo),
+		    got_hash_algo_name(server_algo));
+		goto done;
+	}
+done:
+	free(s);
+	free(capa);
+	return err;
+}
+
+static const struct got_error *
+parse_want_line(char **common_capabilities, uint8_t *id, char *buf, size_t len,
+    int algo, int expect_capabilities)
 {
 	const struct got_error *err;
 	char *id_str = NULL, *client_capabilities = NULL;
@@ -355,19 +462,43 @@ parse_want_line(char **common_capabilities, uint8_t *id, char *buf, size_t len)
 	if (err)
 		return err;
 
-	if (!got_parse_hash_digest(id, id_str, GOT_HASH_SHA1)) {
-		err = got_error_msg(GOT_ERR_BAD_PACKET,
-		    "want-line with bad object ID");
+	if (strlen(id_str) != got_hash_digest_string_length(algo) - 1 ||
+	    !got_parse_hash_digest(id, id_str, algo)) {
+		err = got_error_fmt(GOT_ERR_BAD_PACKET,
+		    "want-line with bad object ID: '%s'", id_str);
 		goto done;
 	}
 
-	if (client_capabilities) {
+	if (client_capabilities && expect_capabilities) {
 		err = got_gitproto_match_capabilities(common_capabilities,
 		    NULL, client_capabilities, read_capabilities,
 		    nitems(read_capabilities));
 		if (err)
 			goto done;
+
+		err = negotiate_hash_algorithm(client_capabilities, algo, 0);
+		if (err)
+			goto done;
+
+		if (algo == GOT_HASH_SHA256) {
+			char *s;
+
+			if (asprintf(&s, "%s%s%s=%s", *common_capabilities,
+			    (*common_capabilities)[0] != '\0' ? " " : "",
+			    GOT_CAPA_OBJECT_FORMAT,
+			    GOT_CAPA_OBJECT_FORMAT_SHA256) == -1) {
+				err = got_error_from_errno("asprintf");
+				goto done;
+			}
+			free(*common_capabilities);
+			*common_capabilities = s;
+		}
+	} else if (client_capabilities) {
+		err = got_error_msg(GOT_ERR_BAD_PACKET,
+		    "unexpected capability announcement received");
+		goto done;
 	}
+
 done:
 	free(id_str);
 	free(client_capabilities);
@@ -375,7 +506,7 @@ done:
 }
 
 static const struct got_error *
-parse_have_line(uint8_t *id, char *buf, size_t len)
+parse_have_line(uint8_t *id, char *buf, size_t len, int algo)
 {
 	const struct got_error *err;
 	char *id_str = NULL;
@@ -384,9 +515,10 @@ parse_have_line(uint8_t *id, char *buf, size_t len)
 	if (err)
 		return err;
 
-	if (!got_parse_hash_digest(id, id_str, GOT_HASH_SHA1)) {
-		err = got_error_msg(GOT_ERR_BAD_PACKET,
-		    "have-line with bad object ID");
+	if (strlen(id_str) != got_hash_digest_string_length(algo) - 1 ||
+	    !got_parse_hash_digest(id, id_str, algo)) {
+		err = got_error_fmt(GOT_ERR_BAD_PACKET,
+		    "have-line with bad object ID: '%s'", id_str);
 		goto done;
 	}
 done:
@@ -478,7 +610,7 @@ forward_flushpkt(struct imsgbuf *ibuf)
 }
 
 static const struct got_error *
-recv_ack(struct imsg *imsg, uint8_t *expected_id)
+recv_ack(struct imsg *imsg, uint8_t *expected_id, int algo)
 {
 	struct gotd_imsg_ack iack;
 	size_t datalen;
@@ -488,16 +620,18 @@ recv_ack(struct imsg *imsg, uint8_t *expected_id)
 		return got_error(GOT_ERR_PRIVSEP_LEN);
 
 	memcpy(&iack, imsg->data, sizeof(iack));
-	if (memcmp(iack.object_id, expected_id, SHA1_DIGEST_LENGTH) != 0)
+	if (iack.algo != algo ||
+	    memcmp(iack.object_id, expected_id,
+	    got_hash_digest_length(algo)) != 0)
 		return got_error(GOT_ERR_BAD_OBJ_ID);
 
 	return NULL;
 }
 
 static const struct got_error *
-recv_nak(struct imsg *imsg, uint8_t *expected_id)
+recv_nak(struct imsg *imsg, uint8_t *expected_id, int algo)
 {
-	struct gotd_imsg_ack inak;
+	struct gotd_imsg_nak inak;
 	size_t datalen;
 
 	datalen = imsg->hdr.len - IMSG_HEADER_SIZE;
@@ -505,7 +639,9 @@ recv_nak(struct imsg *imsg, uint8_t *expected_id)
 		return got_error(GOT_ERR_PRIVSEP_LEN);
 
 	memcpy(&inak, imsg->data, sizeof(inak));
-	if (memcmp(inak.object_id, expected_id, SHA1_DIGEST_LENGTH) != 0)
+	if (inak.algo != algo ||
+	    memcmp(inak.object_id, expected_id,
+	    got_hash_digest_length(algo)) != 0)
 		return got_error(GOT_ERR_BAD_OBJ_ID);
 
 	return NULL;
@@ -514,7 +650,7 @@ recv_nak(struct imsg *imsg, uint8_t *expected_id)
 
 static const struct got_error *
 recv_want(int *use_sidebands, int outfd, struct imsgbuf *ibuf,
-    char *buf, size_t len, int expect_capabilities, int chattygot)
+    char *buf, size_t len, int expect_capabilities, int chattygot, int algo)
 {
 	const struct got_error *err;
 	struct gotd_imsg_want iwant;
@@ -525,16 +661,13 @@ recv_want(int *use_sidebands, int outfd, struct imsgbuf *ibuf,
 	memset(&iwant, 0, sizeof(iwant));
 	memset(&imsg, 0, sizeof(imsg));
 
-	err = parse_want_line(&capabilities_str, iwant.object_id, buf, len);
+	iwant.algo = algo;
+	err = parse_want_line(&capabilities_str, iwant.object_id, buf, len,
+	    algo, expect_capabilities);
 	if (err)
 		return err;
 
 	if (capabilities_str) {
-		if (!expect_capabilities) {
-			err = got_error_msg(GOT_ERR_BAD_PACKET,
-			    "unexpected capability announcement received");
-			goto done;
-		}
 		err = send_capabilities(use_sidebands, NULL, capabilities_str,
 		    ibuf);
 		if (err)
@@ -565,7 +698,7 @@ recv_want(int *use_sidebands, int outfd, struct imsgbuf *ibuf,
 			err = gotd_imsg_recv_error(NULL, &imsg);
 			break;
 		case GOTD_IMSG_ACK:
-			err = recv_ack(&imsg, iwant.object_id);
+			err = recv_ack(&imsg, iwant.object_id, algo);
 			if (err)
 				break;
 			done = 1;
@@ -583,13 +716,13 @@ done:
 }
 
 static const struct got_error *
-send_ack(int outfd, uint8_t *id, int chattygot)
+send_ack(int outfd, uint8_t *id, int chattygot, int algo)
 {
-	char hex[SHA1_DIGEST_STRING_LENGTH];
+	char hex[GOT_HASH_DIGEST_STRING_MAXLEN];
 	char buf[GOT_PKT_MAX];
 	int len;
 
-	if (got_sha1_digest_to_str(id, hex, sizeof(hex)) == NULL)
+	if (got_hash_digest_to_str(id, hex, sizeof(hex), algo) == NULL)
 		return got_error(GOT_ERR_BAD_OBJ_ID);
 
 	len = snprintf(buf, sizeof(buf), "ACK %s\n", hex);
@@ -614,7 +747,7 @@ send_nak(int outfd, int chattygot)
 
 static const struct got_error *
 recv_have(int *have_ack, int outfd, struct imsgbuf *ibuf, char *buf,
-    size_t len, int chattygot)
+    size_t len, int chattygot, int algo)
 {
 	const struct got_error *err;
 	struct gotd_imsg_have ihave;
@@ -624,7 +757,8 @@ recv_have(int *have_ack, int outfd, struct imsgbuf *ibuf, char *buf,
 	memset(&ihave, 0, sizeof(ihave));
 	memset(&imsg, 0, sizeof(imsg));
 
-	err = parse_have_line(ihave.object_id, buf, len);
+	ihave.algo = algo;
+	err = parse_have_line(ihave.object_id, buf, len, algo);
 	if (err)
 		return err;
 
@@ -649,12 +783,12 @@ recv_have(int *have_ack, int outfd, struct imsgbuf *ibuf, char *buf,
 			err = gotd_imsg_recv_error(NULL, &imsg);
 			break;
 		case GOTD_IMSG_ACK:
-			err = recv_ack(&imsg, ihave.object_id);
+			err = recv_ack(&imsg, ihave.object_id, algo);
 			if (err)
 				break;
 			if (!*have_ack) {
 				err = send_ack(outfd, ihave.object_id,
-				    chattygot);
+				    chattygot, algo);
 				if (err)
 					return err;
 				*have_ack = 1;
@@ -662,7 +796,7 @@ recv_have(int *have_ack, int outfd, struct imsgbuf *ibuf, char *buf,
 			done = 1;
 			break;
 		case GOTD_IMSG_NAK:
-			err = recv_nak(&imsg, ihave.object_id);
+			err = recv_nak(&imsg, ihave.object_id, algo);
 			if (err)
 				break;
 			done = 1;
@@ -803,14 +937,14 @@ serve_read(int infd, int outfd, int gotd_sock, const char *repo_path,
 	};
 	enum protostate curstate = STATE_EXPECT_WANT;
 	int have_ack = 0, use_sidebands = 0, seen_have = 0, sent_nak = 0;
-	int packfd = -1;
+	int packfd = -1, algo = GOT_NUM_HASH_ALGOS;
 	size_t pack_chunksize;
 
 	if (imsgbuf_init(&ibuf, gotd_sock) == -1)
 		return got_error_from_errno("imsgbuf_init");
 	imsgbuf_allow_fdpass(&ibuf);
 
-	err = announce_refs(outfd, &ibuf, 1, repo_path, chattygot);
+	err = announce_refs(outfd, &algo, &ibuf, 1, repo_path, chattygot);
 	if (err)
 		goto done;
 
@@ -875,7 +1009,8 @@ serve_read(int infd, int outfd, int gotd_sock, const char *repo_path,
 				goto done;
 			}
 			err = recv_want(&use_sidebands, outfd, &ibuf, buf, n,
-			    curstate == STATE_EXPECT_WANT ? 1 : 0, chattygot);
+			    curstate == STATE_EXPECT_WANT ? 1 : 0, chattygot,
+			    algo);
 			if (err)
 				goto done;
 			if (curstate == STATE_EXPECT_WANT)
@@ -887,7 +1022,7 @@ serve_read(int infd, int outfd, int gotd_sock, const char *repo_path,
 				goto done;
 			}
 			err = recv_have(&have_ack, outfd, &ibuf,
-			    buf, n, chattygot);
+			    buf, n, chattygot, algo);
 			if (err)
 				goto done;
 			seen_have = 1;
@@ -960,12 +1095,14 @@ done:
 
 static const struct got_error *
 parse_ref_update_line(char **common_capabilities, char **refname,
-    uint8_t *old_id, uint8_t *new_id, char *buf, size_t len)
+    uint8_t *old_id, uint8_t *new_id, char *buf, size_t len,
+    int algo, int expect_capabilities)
 {
 	const struct got_error *err;
 	char *old_id_str = NULL, *new_id_str = NULL;
 	char *client_capabilities = NULL;
 
+	*common_capabilities = NULL;
 	*refname = NULL;
 
 	err = got_gitproto_parse_ref_update_line(&old_id_str, &new_id_str,
@@ -973,8 +1110,41 @@ parse_ref_update_line(char **common_capabilities, char **refname,
 	if (err)
 		return err;
 
-	if (!got_parse_hash_digest(old_id, old_id_str, GOT_HASH_SHA1) ||
-	    !got_parse_hash_digest(new_id, new_id_str, GOT_HASH_SHA1)) {
+	if (client_capabilities && expect_capabilities) {
+		err = got_gitproto_match_capabilities(common_capabilities,
+		    NULL, client_capabilities, write_capabilities,
+		    nitems(write_capabilities));
+		if (err)
+			goto done;
+
+		err = negotiate_hash_algorithm(client_capabilities, algo,
+		    algo == GOT_HASH_SHA1 ? 0 : 1);
+		if (err)
+			goto done;
+
+		if (algo == GOT_HASH_SHA256) {
+			char *s;
+
+			if (asprintf(&s, "%s%s%s=%s", *common_capabilities,
+			    (*common_capabilities)[0] != '\0' ? " " : "",
+			    GOT_CAPA_OBJECT_FORMAT,
+			    GOT_CAPA_OBJECT_FORMAT_SHA256) == -1) {
+				err = got_error_from_errno("asprintf");
+				goto done;
+			}
+			free(*common_capabilities);
+			*common_capabilities = s;
+		}
+	} else if (client_capabilities) {
+		err = got_error_msg(GOT_ERR_BAD_PACKET,
+		    "unexpected capability announcement received");
+		goto done;
+	}
+
+	if (strlen(old_id_str) != got_hash_digest_string_length(algo) - 1 ||
+	    strlen(new_id_str) != got_hash_digest_string_length(algo) - 1 ||
+	    !got_parse_hash_digest(old_id, old_id_str, algo) ||
+	    !got_parse_hash_digest(new_id, new_id_str, algo)) {
 		err = got_error_msg(GOT_ERR_BAD_PACKET,
 		    "ref-update with bad object ID");
 		goto done;
@@ -983,14 +1153,6 @@ parse_ref_update_line(char **common_capabilities, char **refname,
 		err = got_error_msg(GOT_ERR_BAD_PACKET,
 		    "ref-update with bad reference name");
 		goto done;
-	}
-
-	if (client_capabilities) {
-		err = got_gitproto_match_capabilities(common_capabilities,
-		    NULL, client_capabilities, write_capabilities,
-		    nitems(write_capabilities));
-		if (err)
-			goto done;
 	}
 done:
 	free(old_id_str);
@@ -1005,7 +1167,7 @@ done:
 
 static const struct got_error *
 recv_ref_update(int *report_status, int outfd, struct imsgbuf *ibuf,
-    char *buf, size_t len, int expect_capabilities, int chattygot)
+    char *buf, size_t len, int expect_capabilities, int chattygot, int algo)
 {
 	const struct got_error *err;
 	struct gotd_imsg_ref_update iref;
@@ -1017,17 +1179,13 @@ recv_ref_update(int *report_status, int outfd, struct imsgbuf *ibuf,
 	memset(&iref, 0, sizeof(iref));
 	memset(&imsg, 0, sizeof(imsg));
 
+	iref.algo = algo;
 	err = parse_ref_update_line(&capabilities_str, &refname,
-	    iref.old_id, iref.new_id, buf, len);
+	    iref.old_id, iref.new_id, buf, len, algo, expect_capabilities);
 	if (err)
 		return err;
 
 	if (capabilities_str) {
-		if (!expect_capabilities) {
-			err = got_error_msg(GOT_ERR_BAD_PACKET,
-			    "unexpected capability announcement received");
-			goto done;
-		}
 		err = send_capabilities(NULL, report_status, capabilities_str,
 		    ibuf);
 		if (err)
@@ -1062,7 +1220,7 @@ recv_ref_update(int *report_status, int outfd, struct imsgbuf *ibuf,
 			err = gotd_imsg_recv_error(NULL, &imsg);
 			break;
 		case GOTD_IMSG_ACK:
-			err = recv_ack(&imsg, iref.new_id);
+			err = recv_ack(&imsg, iref.new_id, algo);
 			if (err)
 				break;
 			done = 1;
@@ -1194,7 +1352,7 @@ done:
 }
 
 static const struct got_error *
-recv_ref_update_ok(struct imsg *imsg, int outfd, int chattygot)
+recv_ref_update_ok(struct imsg *imsg, int outfd, int chattygot, int algo)
 {
 	const struct got_error *err = NULL;
 	struct gotd_imsg_ref_update_ok iok;
@@ -1210,6 +1368,9 @@ recv_ref_update_ok(struct imsg *imsg, int outfd, int chattygot)
 		return got_error(GOT_ERR_PRIVSEP_LEN);
 
 	memcpy(&iok, imsg->data, sizeof(iok));
+
+	if (iok.algo != algo)
+		return got_error(GOT_ERR_OBJECT_FORMAT);
 
 	refname = strndup(imsg->data + sizeof(iok), iok.name_len);
 	if (refname == NULL)
@@ -1228,7 +1389,7 @@ done:
 }
 
 static const struct got_error *
-recv_ref_update_ng(struct imsg *imsg, int outfd, int chattygot)
+recv_ref_update_ng(struct imsg *imsg, int outfd, int chattygot, int algo)
 {
 	const struct got_error *err = NULL;
 	struct gotd_imsg_ref_update_ng ing;
@@ -1244,6 +1405,9 @@ recv_ref_update_ng(struct imsg *imsg, int outfd, int chattygot)
 		return got_error(GOT_ERR_PRIVSEP_LEN);
 
 	memcpy(&ing, imsg->data, sizeof(ing));
+
+	if (ing.algo != algo)
+		return got_error(GOT_ERR_OBJECT_FORMAT);
 
 	refname = strndup(imsg->data + sizeof(ing), ing.name_len);
 	if (refname == NULL)
@@ -1286,6 +1450,8 @@ serve_write(int infd, int outfd, int gotd_sock, const char *repo_path,
 	enum protostate curstate = STATE_EXPECT_REF_UPDATE;
 	struct imsg imsg;
 	int report_status = 0;
+	int algo = GOT_NUM_HASH_ALGOS;
+	int digest_string_length;
 
 	if (imsgbuf_init(&ibuf, gotd_sock) == -1)
 		return got_error_from_errno("imsgbuf_init");
@@ -1293,9 +1459,11 @@ serve_write(int infd, int outfd, int gotd_sock, const char *repo_path,
 
 	memset(&imsg, 0, sizeof(imsg));
 
-	err = announce_refs(outfd, &ibuf, 0, repo_path, chattygot);
+	err = announce_refs(outfd, &algo, &ibuf, 0, repo_path, chattygot);
 	if (err)
 		goto done;
+
+	digest_string_length = got_hash_digest_string_length(algo) - 1;
 
 	while (curstate != STATE_EXPECT_PACKFILE) {
 		int n;
@@ -1317,7 +1485,7 @@ serve_write(int infd, int outfd, int gotd_sock, const char *repo_path,
 			if (err)
 				goto done;
 			curstate = STATE_EXPECT_PACKFILE;
-		} else if (n >= (SHA1_DIGEST_STRING_LENGTH * 2) + 2) {
+		} else if (n >= (digest_string_length * 2) + 1 + 2) {
 			if (curstate != STATE_EXPECT_REF_UPDATE &&
 			    curstate != STATE_EXPECT_MORE_REF_UPDATES) {
 				err = got_error_msg(GOT_ERR_BAD_PACKET,
@@ -1326,10 +1494,10 @@ serve_write(int infd, int outfd, int gotd_sock, const char *repo_path,
 			}
 			if (curstate == STATE_EXPECT_REF_UPDATE) {
 				err = recv_ref_update(&report_status,
-				    outfd, &ibuf, buf, n, 1, chattygot);
+				    outfd, &ibuf, buf, n, 1, chattygot, algo);
 			} else {
 				err = recv_ref_update(NULL, outfd, &ibuf,
-				    buf, n, 0, chattygot);
+				    buf, n, 0, chattygot, algo);
 			}
 			if (err)
 				goto done;
@@ -1389,12 +1557,12 @@ serve_write(int infd, int outfd, int gotd_sock, const char *repo_path,
 		case GOTD_IMSG_REF_UPDATE_OK:
 			if (!report_status)
 				break;
-			err = recv_ref_update_ok(&imsg, outfd, chattygot);
+			err = recv_ref_update_ok(&imsg, outfd, chattygot, algo);
 			break;
 		case GOTD_IMSG_REF_UPDATE_NG:
 			if (!report_status)
 				break;
-			err = recv_ref_update_ng(&imsg, outfd, chattygot);
+			err = recv_ref_update_ng(&imsg, outfd, chattygot, algo);
 			break;
 		case GOTD_IMSG_REFS_UPDATED:
 			curstate = STATE_REFS_UPDATED;

@@ -108,7 +108,7 @@ static struct repo_write_client {
 	int				 pack_pipe;
 	struct got_pack			 pack;
 	struct got_packidx		 *packidx;
-	uint8_t				 pack_sha1[SHA1_DIGEST_LENGTH];
+	uint8_t				 pack_hash[GOT_HASH_DIGEST_MAXLEN];
 	int				 packidx_fd;
 	struct gotd_ref_updates		 ref_updates;
 	int				 nref_updates;
@@ -151,6 +151,7 @@ send_peeled_tag_ref(struct got_reference *ref, struct got_object *obj,
 	char *peeled_refname = NULL;
 	struct got_object_id *id;
 	struct ibuf *wbuf;
+	int algo = got_repo_get_object_format(repo_write.repo);
 
 	err = got_object_tag_open(&tag, repo_write.repo, obj);
 	if (err)
@@ -178,7 +179,11 @@ send_peeled_tag_ref(struct got_reference *ref, struct got_object *obj,
 	}
 
 	/* Keep in sync with struct gotd_imsg_ref definition. */
-	if (imsg_add(wbuf, id->hash, SHA1_DIGEST_LENGTH) == -1) {
+	if (imsg_add(wbuf, id->hash, GOT_OBJECT_ID_MAXLEN) == -1) {
+		err = got_error_from_errno("imsg_add REF");
+		goto done;
+	}
+	if (imsg_add(wbuf, &algo, sizeof(algo)) == -1) {
 		err = got_error_from_errno("imsg_add REF");
 		goto done;
 	}
@@ -207,6 +212,7 @@ send_ref(struct got_reference *ref, struct imsgbuf *ibuf)
 	struct got_object *obj = NULL;
 	size_t len;
 	struct ibuf *wbuf;
+	int algo = got_repo_get_object_format(repo_write.repo);
 
 	namelen = strlen(refname);
 
@@ -226,7 +232,9 @@ send_ref(struct got_reference *ref, struct imsgbuf *ibuf)
 	}
 
 	/* Keep in sync with struct gotd_imsg_ref definition. */
-	if (imsg_add(wbuf, id->hash, SHA1_DIGEST_LENGTH) == -1)
+	if (imsg_add(wbuf, id->hash, GOT_OBJECT_ID_MAXLEN) == -1)
+		return got_error_from_errno("imsg_add REF");
+	if (imsg_add(wbuf, &algo, sizeof(algo)) == -1)
 		return got_error_from_errno("imsg_add REF");
 	if (imsg_add(wbuf, &namelen, sizeof(namelen)) == -1)
 		return got_error_from_errno("imsg_add REF");
@@ -289,6 +297,7 @@ list_refs(struct imsg *imsg)
 		return err;
 
 	memset(&irefs, 0, sizeof(irefs));
+	irefs.algo = got_repo_get_object_format(repo_write.repo);
 	TAILQ_FOREACH(re, &refs, entry) {
 		struct got_object_id *id;
 		int obj_type;
@@ -365,7 +374,7 @@ verify_object_type(struct got_object_id *id, int expected_obj_type,
     struct got_pack *pack, struct got_packidx *packidx)
 {
 	const struct got_error *err;
-	char hex[SHA1_DIGEST_STRING_LENGTH];
+	char hex[GOT_HASH_DIGEST_STRING_MAXLEN];
 	struct got_object *obj;
 	int idx;
 	const char *typestr;
@@ -424,7 +433,7 @@ protect_require_yca(struct got_object_id *tip_id,
 	struct got_object_id *expected_yca_id = NULL;
 	struct got_object *obj = NULL;
 	struct got_commit_object *commit = NULL;
-	char hex[SHA1_DIGEST_STRING_LENGTH];
+	char hex[GOT_HASH_DIGEST_STRING_MAXLEN];
 	const struct got_object_id_queue *parent_ids;
 	struct got_object_id_queue ids;
 	struct got_object_qid *pid, *qid;
@@ -523,7 +532,7 @@ protect_require_yca(struct got_object_id *tip_id,
 				goto done;
 
 			err = got_object_parse_commit(&commit, buf, len,
-			    GOT_HASH_SHA1);
+			    got_repo_get_object_format(repo_write.repo));
 			if (err)
 				goto done;
 
@@ -617,7 +626,7 @@ protect_branch(const char *refname, struct got_pack *pack,
 static const struct got_error *
 recv_ref_update(struct imsg *imsg)
 {
-	static const char zero_id[SHA1_DIGEST_LENGTH];
+	static const char zero_id[GOT_OBJECT_ID_MAXLEN];
 	const struct got_error *err = NULL;
 	struct repo_write_client *client = &repo_write_client;
 	struct gotd_imsg_ref_update iref;
@@ -627,6 +636,8 @@ recv_ref_update(struct imsg *imsg)
 	struct got_object_id *id = NULL;
 	struct imsgbuf ibuf;
 	struct gotd_ref_update *ref_update = NULL;
+	int algo = got_repo_get_object_format(repo_write.repo);
+	int digest_length = got_hash_digest_length(algo);
 
 	log_debug("ref-update received");
 
@@ -636,6 +647,8 @@ recv_ref_update(struct imsg *imsg)
 	memcpy(&iref, imsg->data, sizeof(iref));
 	if (datalen != sizeof(iref) + iref.name_len)
 		return got_error(GOT_ERR_PRIVSEP_LEN);
+	if (iref.algo != algo)
+		return got_error(GOT_ERR_OBJECT_FORMAT);
 
 	if (imsgbuf_init(&ibuf, client->fd))
 		return got_error_from_errno("imsgbuf_init");
@@ -653,15 +666,17 @@ recv_ref_update(struct imsg *imsg)
 		goto done;
 	}
 
-	memcpy(ref_update->old_id.hash, iref.old_id, SHA1_DIGEST_LENGTH);
-	memcpy(ref_update->new_id.hash, iref.new_id, SHA1_DIGEST_LENGTH);
+	memcpy(ref_update->old_id.hash, iref.old_id, GOT_HASH_DIGEST_MAXLEN);
+	ref_update->old_id.algo = algo;
+	memcpy(ref_update->new_id.hash, iref.new_id, GOT_HASH_DIGEST_MAXLEN);
+	ref_update->new_id.algo = algo;
 
 	err = got_ref_open(&ref, repo_write.repo, refname, 0);
 	if (err) {
 		if (err->code != GOT_ERR_NOT_REF)
 			goto done;
 		if (memcmp(ref_update->new_id.hash,
-		    zero_id, sizeof(zero_id)) == 0) {
+		    zero_id, digest_length) == 0) {
 			err = got_error_fmt(GOT_ERR_BAD_OBJ_ID,
 			    "%s", refname);
 			goto done;
@@ -824,25 +839,26 @@ copy_object_type_and_size(uint8_t *type, uint64_t *size, int infd, int outfd,
 
 static const struct got_error *
 copy_ref_delta(int infd, int outfd, off_t *outsize, BUF *buf, size_t *buf_pos,
-    struct got_hash *ctx)
+    struct got_hash *ctx, int algo)
 {
 	const struct got_error *err = NULL;
 	size_t remain = buf_len(buf) - *buf_pos;
+	int digest_length = got_hash_digest_length(algo);
 
-	if (remain < SHA1_DIGEST_LENGTH) {
+	if (remain < digest_length) {
 		err = read_more_pack_stream(infd, buf,
-		    SHA1_DIGEST_LENGTH - remain);
+		    digest_length - remain);
 		if (err)
 			return err;
 	}
 
 	err = got_pack_hwrite(outfd, buf_get(buf) + *buf_pos,
-	    SHA1_DIGEST_LENGTH, ctx);
+	    digest_length, ctx);
 	if (err)
 		return err;
 
-	*buf_pos += SHA1_DIGEST_LENGTH;
-	*outsize += SHA1_DIGEST_LENGTH;
+	*buf_pos += digest_length;
+	*outsize += digest_length;
 	return NULL;
 }
 
@@ -1009,8 +1025,8 @@ ensure_all_objects_exist_locally(struct gotd_ref_updates *ref_updates)
 }
 
 static const struct got_error *
-recv_packdata(off_t *outsize, uint32_t *nobj, uint8_t *sha1,
-    int infd, int outfd)
+recv_packdata(off_t *outsize, uint32_t *nobj, uint8_t *hash,
+    int infd, int outfd, int algo)
 {
 	const struct got_error *err;
 	struct repo_write_client *client = &repo_write_client;
@@ -1018,11 +1034,12 @@ recv_packdata(off_t *outsize, uint32_t *nobj, uint8_t *sha1,
 	size_t have;
 	uint32_t nhave = 0;
 	struct got_hash ctx;
-	uint8_t expected_sha1[SHA1_DIGEST_LENGTH];
-	char hex[SHA1_DIGEST_STRING_LENGTH];
+	uint8_t expected_hash[GOT_HASH_DIGEST_MAXLEN];
+	char hex[GOT_HASH_DIGEST_STRING_MAXLEN];
 	BUF *buf = NULL;
 	size_t buf_pos = 0, remain;
 	ssize_t w;
+	int digest_length = got_hash_digest_length(algo);
 
 	*outsize = 0;
 	*nobj = 0;
@@ -1031,7 +1048,7 @@ recv_packdata(off_t *outsize, uint32_t *nobj, uint8_t *sha1,
 	if (client->nref_updates == client->nref_del)
 		return NULL;
 
-	got_hash_init(&ctx, GOT_HASH_SHA1);
+	got_hash_init(&ctx, algo);
 
 	err = got_poll_read_full(infd, &have, &hdr, sizeof(hdr), sizeof(hdr));
 	if (err)
@@ -1098,7 +1115,7 @@ recv_packdata(off_t *outsize, uint32_t *nobj, uint8_t *sha1,
 
 		if (obj_type == GOT_OBJ_TYPE_REF_DELTA) {
 			err = copy_ref_delta(infd, outfd, outsize,
-			    buf, &buf_pos, &ctx);
+			    buf, &buf_pos, &ctx, algo);
 			if (err)
 				goto done;
 		} else if (obj_type == GOT_OBJ_TYPE_OFFSET_DELTA) {
@@ -1117,40 +1134,40 @@ recv_packdata(off_t *outsize, uint32_t *nobj, uint8_t *sha1,
 
 	log_debug("received %u objects", *nobj);
 
-	got_hash_final(&ctx, expected_sha1);
+	got_hash_final(&ctx, expected_hash);
 
 	remain = buf_len(buf) - buf_pos;
-	if (remain < SHA1_DIGEST_LENGTH) {
+	if (remain < digest_length) {
 		err = read_more_pack_stream(infd, buf,
-		    SHA1_DIGEST_LENGTH - remain);
+		    digest_length - remain);
 		if (err)
 			return err;
 	}
 
-	got_sha1_digest_to_str(expected_sha1, hex, sizeof(hex));
-	log_debug("expect SHA1: %s", hex);
-	got_sha1_digest_to_str(buf_get(buf) + buf_pos, hex, sizeof(hex));
-	log_debug("actual SHA1: %s", hex);
+	got_hash_digest_to_str(expected_hash, hex, sizeof(hex), algo);
+	log_debug("expect hash: %s", hex);
+	got_hash_digest_to_str(buf_get(buf) + buf_pos, hex, sizeof(hex), algo);
+	log_debug("actual hash: %s", hex);
 
-	if (memcmp(buf_get(buf) + buf_pos, expected_sha1,
-	    SHA1_DIGEST_LENGTH) != 0) {
+	if (memcmp(buf_get(buf) + buf_pos, expected_hash,
+	    digest_length) != 0) {
 		err = got_error(GOT_ERR_PACKFILE_CSUM);
 		goto done;
 	}
 
-	memcpy(sha1, expected_sha1, SHA1_DIGEST_LENGTH);
+	memcpy(hash, expected_hash, digest_length);
 
-	w = write(outfd, expected_sha1, SHA1_DIGEST_LENGTH);
+	w = write(outfd, expected_hash, digest_length);
 	if (w == -1) {
 		err = got_error_from_errno("write");
 		goto done;
 	}
-	if (w != SHA1_DIGEST_LENGTH) {
+	if (w != digest_length) {
 		err = got_error(GOT_ERR_IO);
 		goto done;
 	}
 
-	*outsize += SHA1_DIGEST_LENGTH;
+	*outsize += digest_length;
 
 	if (fsync(outfd) == -1) {
 		err = got_error_from_errno("fsync");
@@ -1230,6 +1247,7 @@ recv_packfile(int *have_packfile, struct imsg *imsg)
 	struct got_pack *pack = NULL;
 	off_t pack_filesize = 0;
 	uint32_t nobj = 0;
+	int algo = got_repo_get_object_format(repo_write.repo);
 
 	log_debug("packfile request received");
 
@@ -1251,6 +1269,7 @@ recv_packfile(int *have_packfile, struct imsg *imsg)
 		err = got_error(GOT_ERR_PRIVSEP_NO_FD);
 		goto done;
 	}
+	pack->algo = got_repo_get_object_format(repo_write.repo);
 
 	err = got_delta_cache_alloc(&pack->delta_cache);
 	if (err)
@@ -1283,7 +1302,8 @@ recv_packfile(int *have_packfile, struct imsg *imsg)
 
 	log_debug("receiving pack data");
 	unpack_err = recv_packdata(&pack_filesize, &nobj,
-	    client->pack_sha1, client->pack_pipe, pack->fd);
+	    client->pack_hash, client->pack_pipe, pack->fd,
+	    got_repo_get_object_format(repo_write.repo));
 	if (ireq.report_status) {
 		err = report_pack_status(unpack_err);
 		if (err) {
@@ -1330,10 +1350,11 @@ recv_packfile(int *have_packfile, struct imsg *imsg)
 
 	pack->filesize = pack_filesize;
 	*have_packfile = 1;
+	pack->algo = algo;
 
 	memset(&id, 0, sizeof(id));
-	memcpy(&id.hash, client->pack_sha1, SHA1_DIGEST_LENGTH);
-	id.algo = GOT_HASH_SHA1;
+	memcpy(&id.hash, client->pack_hash, GOT_HASH_DIGEST_MAXLEN);
+	id.algo = algo;
 
 	log_debug("begin indexing pack (%lld bytes in size)",
 	    (long long)pack->filesize);
@@ -1378,7 +1399,7 @@ verify_packfile(void)
 	char *id_str = NULL;
 	struct got_object *obj = NULL;
 	struct got_pathlist_entry *pe;
-	char hex[SHA1_DIGEST_STRING_LENGTH];
+	char hex[GOT_HASH_DIGEST_STRING_MAXLEN];
 
 	if (STAILQ_EMPTY(&client->ref_updates)) {
 		return got_error_msg(GOT_ERR_BAD_REQUEST,
@@ -1407,6 +1428,7 @@ verify_packfile(void)
 	client->packidx->fd = client->packidx_fd;
 	client->packidx_fd = -1;
 	client->packidx->len = sb.st_size;
+	client->packidx->algo = got_repo_get_object_format(repo_write.repo);
 
 	err = got_packidx_init_hdr(client->packidx, 1, client->pack.filesize);
 	if (err)
@@ -1575,7 +1597,8 @@ install_packfile(struct gotd_imsgev *iev)
 	int ret;
 
 	memset(&inst, 0, sizeof(inst));
-	memcpy(inst.pack_sha1, client->pack_sha1, SHA1_DIGEST_LENGTH);
+	memcpy(inst.pack_hash, client->pack_hash, GOT_HASH_DIGEST_MAXLEN);
+	inst.algo = got_repo_get_object_format(repo_write.repo); 
 
 	ret = gotd_imsg_compose_event(iev, GOTD_IMSG_PACKFILE_INSTALL,
 	    GOTD_PROC_REPO_WRITE, -1, &inst, sizeof(inst));
@@ -1612,8 +1635,9 @@ send_ref_update(struct gotd_ref_update *ref_update, struct gotd_imsgev *iev)
 	size_t len;
 
 	memset(&iref, 0, sizeof(iref));
-	memcpy(iref.old_id, ref_update->old_id.hash, SHA1_DIGEST_LENGTH);
-	memcpy(iref.new_id, ref_update->new_id.hash, SHA1_DIGEST_LENGTH);
+	memcpy(iref.old_id, ref_update->old_id.hash, GOT_HASH_DIGEST_MAXLEN);
+	memcpy(iref.new_id, ref_update->new_id.hash, GOT_HASH_DIGEST_MAXLEN);
+	iref.algo = got_repo_get_object_format(repo_write.repo); 
 	iref.ref_is_new = ref_update->ref_is_new;
 	iref.delete_ref = ref_update->delete_ref;
 	iref.name_len = strlen(refname);
@@ -2311,7 +2335,7 @@ open_tree(struct got_tree_object **tree, struct got_pack *pack,
 		goto done;
 	
 	err = got_object_parse_tree(&entries, &nentries, &nentries_alloc,
-	    buf, len, GOT_HASH_SHA1);
+	    buf, len, pack->algo);
 	if (err)
 		goto done;
 
@@ -2338,7 +2362,7 @@ open_tree(struct got_tree_object **tree, struct got_pack *pack,
 			goto done;
 		}
 		memcpy(te->id.hash, pe->id, pe->digest_len);
-		te->id.algo = GOT_HASH_SHA1;
+		te->id.algo = te->id.algo;
 		te->mode = pe->mode;
 		te->idx = i;
 	}
@@ -2542,7 +2566,8 @@ get_content_from_packfile(struct gotd_imsgev *iev, struct imsg *imsg)
 		got_object_close(obj);
 		obj = NULL;
 
-		err = got_object_parse_commit(&commit, buf, len, GOT_HASH_SHA1);
+		err = got_object_parse_commit(&commit, buf, len,
+		    got_repo_get_object_format(repo_write.repo));
 		if (err)
 			goto done;
 	}
@@ -2978,11 +3003,6 @@ repo_write_main(const char *title, const char *repo_path,
 	if (!got_repo_is_bare(repo_write.repo)) {
 		err = got_error_msg(GOT_ERR_NOT_GIT_REPO,
 		    "bare git repository required");
-		goto done;
-	}
-	if (got_repo_get_object_format(repo_write.repo) != GOT_HASH_SHA1) {
-		err = got_error_msg(GOT_ERR_NOT_IMPL,
-		    "sha256 object IDs unsupported in network protocol");
 		goto done;
 	}
 

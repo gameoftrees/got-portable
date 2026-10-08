@@ -248,3 +248,17 @@ got_hash_cmp(enum got_hash_algorithm algo, uint8_t *b1, uint8_t *b2)
 		abort();
 	return -1;
 }
+
+const char *
+got_hash_algo_name(enum got_hash_algorithm algo)
+{
+	switch (algo) {
+	case GOT_HASH_SHA1:
+		return "sha1";
+	case GOT_HASH_SHA256:
+		return "sha256";
+	default:
+		abort();
+		return NULL;
+	}
+}
