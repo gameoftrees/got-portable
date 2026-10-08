@@ -406,7 +406,7 @@ negotiate_hash_algorithm(const char *client_capabilities,
 	struct got_capability *capa = NULL;
 	size_t ncapa = 0;
 	const char *object_format;
-	enum got_hash_algorithm client_algo = GOT_NUM_HASH_ALGOS;
+	enum got_hash_algorithm client_algo = GOT_HASH_SHA1;
 
 	s = strdup(client_capabilities);
 	if (s == NULL)
