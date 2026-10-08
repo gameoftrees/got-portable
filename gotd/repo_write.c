@@ -2318,6 +2318,7 @@ open_tree(struct got_tree_object **tree, struct got_pack *pack,
 	struct got_object *obj = NULL;
 	uint8_t *buf = NULL;
 	size_t len;
+	int algo = got_repo_get_object_format(repo_write.repo);
 
 	*tree = NULL;
 
@@ -2362,7 +2363,7 @@ open_tree(struct got_tree_object **tree, struct got_pack *pack,
 			goto done;
 		}
 		memcpy(te->id.hash, pe->id, pe->digest_len);
-		te->id.algo = te->id.algo;
+		te->id.algo = algo;
 		te->mode = pe->mode;
 		te->idx = i;
 	}
