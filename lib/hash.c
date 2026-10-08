@@ -258,7 +258,6 @@ got_hash_algo_name(enum got_hash_algorithm algo)
 	case GOT_HASH_SHA256:
 		return "sha256";
 	default:
-		abort();
-		return NULL;
+		return "unknown";
 	}
 }
