@@ -31,7 +31,13 @@ fi
 test_request_bad_commit() {
 	local testroot=`test_init request_bad_commit`
 
-	echo "0054want $dummy_commit $capabilities" \
+	if [ "$GOT_TEST_ALGO" = "sha256" ]; then
+		len="0080" 
+	else
+		len="0054"
+	fi
+
+	echo "${len}want $dummy_commit $capabilities" \
 		| ssh ${GOTD_DEVUSER}@127.0.0.1 git-upload-pack '/test-repo' \
 		> $testroot/stdout 2>$testroot/stderr
 
@@ -217,7 +223,13 @@ test_request_bad_length_large() {
 test_request_bad_capabilities() {
 	local testroot=`test_init request_bad_capabilities`
 
-	echo "0054want $dummy_commit aaaaaaaaa bbbbbbbbbbbbb ccccccccc" \
+	if [ "$GOT_TEST_ALGO" = "sha256" ]; then
+		len="0064" 
+	else
+		len="004c"
+	fi
+
+	echo "${len}want $dummy_commit aaaaaaaaa bbbbbbbbbbbbb ccccccccc" \
 		| ssh ${GOTD_DEVUSER}@127.0.0.1 git-upload-pack '/test-repo' \
 		> $testroot/stdout 2>$testroot/stderr
 
@@ -259,7 +271,13 @@ test_request_bad_capabilities() {
 test_request_bad_repository() {
 	local testroot=`test_init request_bad_repository`
 
-	echo "0054want $dummy_commit aaaaaaaaa bbbbbbbbbbbbb ccccccccc" \
+	if [ "$GOT_TEST_ALGO" = "sha256" ]; then
+		len="008e" 
+	else
+		len="0078"
+	fi
+
+	echo "${len}want $dummy_commit aaaaaaaaa bbbbbbbbbbbbb ccccccccc" \
 		| ssh ${GOTD_DEVUSER}@127.0.0.1 git-upload-pack '/XXXX-XXXX' \
 		> $testroot/stdout 2>$testroot/stderr
 
@@ -295,7 +313,13 @@ test_request_bad_large_repo_name() {
 	local a=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 	local repo_name="AAA$a$a$a$a"
 
-	echo "0054want $dummy_commit aaaaaaaaa bbbbbbbbbbbbb ccccccccc" \
+	if [ "$GOT_TEST_ALGO" = "sha256" ]; then
+		len="0080" 
+	else
+		len="0054"
+	fi
+
+	echo "${len}want $dummy_commit $capabilities" \
 		| ssh ${GOTD_DEVUSER}@127.0.0.1 git-upload-pack "/$repo_name" \
 		> $testroot/stdout 2>$testroot/stderr
 
