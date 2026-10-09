@@ -57,7 +57,7 @@ The server test suite can now be run from the top-level directory:
 The suite must be started as root in order to be able to start and stop gotd.
 The test suite switches to non-root users as appropriate.
 
-By default the test suite uses repositories with the SHA1 hash algorithm.:
+By default the test suite uses repositories with the SHA1 hash algorithm.
 The test suite can also be run with SHA256 repositories:
 
  $ doas make server-regress GOT_TEST_ALGO=sha256
