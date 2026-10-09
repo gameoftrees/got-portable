@@ -456,7 +456,11 @@ fetch_pack(int fd, int packfd, int expected_algo,
 				}
 			}
 			if (expected_algo != -1 && algo != expected_algo) {
-				err = got_error(GOT_ERR_OBJECT_FORMAT);
+				err = got_error_fmt(GOT_ERR_OBJECT_FORMAT,
+				    "the local repository uses %s hashes "
+				    "and the remote repository uses %s hashes",
+				    got_hash_algo_name(expected_algo),
+				    got_hash_algo_name(algo));
 				goto done;
 			}
 

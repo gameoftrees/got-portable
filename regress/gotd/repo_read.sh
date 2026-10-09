@@ -172,7 +172,60 @@ test_send_to_read_only_repo() {
 	test_done "$testroot" "$ret"
 }
 
+test_fetch_incompatible_hash_algo() {
+	local testroot=`test_init fetch_incompatible_hash_algo 1`
+
+	got clone -q ${GOTD_TEST_REPO_URL} $testroot/repo-clone
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got clone failed unexpectedly" >&2
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	if [ "$GOT_TEST_ALGO" = "sha256" ]; then
+		other_hash=sha1
+	else
+		other_hash=sha256
+	fi
+
+	got init -A $other_hash $testroot/otherhash.git
+
+	cp $testroot/repo-clone/got.conf $testroot/otherhash.git
+
+	got fetch -q -r $testroot/otherhash.git \
+		> $testroot/stdout 2> $testroot/stderr
+	
+	echo -n "" > $testroot/stdout.expected
+
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	echo -n "got-fetch-pack: " > $testroot/stderr.expected
+	echo -n "the local repository uses $other_hash hashes " \
+		>> $testroot/stderr.expected
+	echo -n "and the remote repository uses ${GOT_TEST_ALGO} hashes: " \
+		>> $testroot/stderr.expected
+	echo "object format not supported" >> $testroot/stderr.expected
+
+	grep '^got-fetch-pack' $testroot/stderr > $testroot/stderr.filtered
+
+	cmp -s $testroot/stderr.expected $testroot/stderr.filtered
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stderr.expected $testroot/stderr
+	fi
+
+	test_done "$testroot" "$ret"
+}
+
 test_parseargs "$@"
 run_test test_clone_basic
 run_test test_clone_basic_git
 run_test test_send_to_read_only_repo
+run_test test_fetch_incompatible_hash_algo
