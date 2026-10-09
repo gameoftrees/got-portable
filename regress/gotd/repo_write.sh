@@ -745,6 +745,64 @@ EOF
 	test_done "$testroot" "$ret"
 }
 
+test_send_incompatible_hash_algo() {
+	local testroot=`test_init send_incompatible_hash_algo 1`
+
+	got clone -q ${GOTD_TEST_REPO_URL} $testroot/repo-clone
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "got clone failed unexpectedly" >&2
+		test_done "$testroot" "1"
+		return 1
+	fi
+
+	if [ "$GOT_TEST_ALGO" = "sha256" ]; then
+		other_hash=sha1
+	else
+		other_hash=sha256
+	fi
+
+	got init -A $other_hash $testroot/otherhash.git
+
+	mkdir -p $testroot/otherhash
+	echo 'this is file alpha' > $testroot/otherhash/alpha
+	got import -m init -r $testroot/otherhash.git $testroot/otherhash \
+		> /dev/null
+
+	cp $testroot/repo-clone/got.conf $testroot/otherhash.git
+
+	got send -q -r $testroot/otherhash.git \
+		> $testroot/stdout 2> $testroot/stderr
+	
+	echo -n "" > $testroot/stdout.expected
+
+	cmp -s $testroot/stdout.expected $testroot/stdout
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stdout.expected $testroot/stdout
+		test_done "$testroot" "$ret"
+		return 1
+	fi
+
+	echo -n "got-send-pack: " > $testroot/stderr.expected
+	echo -n "the local repository uses $other_hash hashes " \
+		>> $testroot/stderr.expected
+	echo -n "and the remote repository uses ${GOT_TEST_ALGO} hashes: " \
+		>> $testroot/stderr.expected
+	echo "object format not supported" >> $testroot/stderr.expected
+
+	grep '^got-send-pack' $testroot/stderr > $testroot/stderr.filtered
+
+	cmp -s $testroot/stderr.expected $testroot/stderr.filtered
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		diff -u $testroot/stderr.expected $testroot/stderr
+	fi
+
+	test_done "$testroot" "$ret"
+
+}
+
 test_parseargs "$@"
 run_test test_send_basic
 run_test test_fetch_more_history
@@ -752,3 +810,4 @@ run_test test_send_new_empty_branch
 run_test test_delete_branch
 run_test test_rewind_branch
 run_test test_fetch_unrelated_history
+run_test test_send_incompatible_hash_algo

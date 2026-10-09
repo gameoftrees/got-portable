@@ -384,7 +384,7 @@ send_pack(int fd, enum got_hash_algorithm algo, struct got_pathlist_head *refs,
 		if (err)
 			goto done;
 		if (is_firstpkt) {
-			enum got_hash_algorithm expected_algo = algo;
+			enum got_hash_algorithm server_algo = GOT_HASH_SHA1;
 			const char *object_format;
 
 			if (server_capabilities == NULL) {
@@ -412,10 +412,10 @@ send_pack(int fd, enum got_hash_algorithm algo, struct got_pathlist_head *refs,
 			    capa, ncapa, GOT_CAPA_OBJECT_FORMAT)) {
 				if (strcmp(object_format,
 				    GOT_CAPA_OBJECT_FORMAT_SHA256) == 0) {
-					algo = GOT_HASH_SHA256;
+					server_algo = GOT_HASH_SHA256;
 				} else if (strcmp(object_format,
 				    GOT_CAPA_OBJECT_FORMAT_SHA1) == 0) {
-					algo = GOT_HASH_SHA1;
+					server_algo = GOT_HASH_SHA1;
 				} else {
 					err = got_error_fmt(
 					    GOT_ERR_OBJECT_FORMAT,
@@ -424,8 +424,13 @@ send_pack(int fd, enum got_hash_algorithm algo, struct got_pathlist_head *refs,
 					goto done;
 				}
 			}
-			if (algo != expected_algo) {
-				err = got_error(GOT_ERR_OBJECT_FORMAT);
+
+			if (algo != server_algo) {
+				err = got_error_fmt(GOT_ERR_OBJECT_FORMAT,
+				    "the local repository uses %s hashes "
+				    "and the remote repository uses %s hashes",
+				    got_hash_algo_name(algo),
+				    got_hash_algo_name(server_algo));
 				goto done;
 			}
 
