@@ -36,15 +36,14 @@ test_send_incompatible_hash_algo() {
 	commit2="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
 	if [ "$GOT_TEST_ALGO" = "sha256" ]; then
-		len="0088" 
+		len="0087" 
 		other_algo=sha1
 		capabilities="${basic_capabilities}"
 	else
-		len="00b0"
+		len="00b7"
 		other_algo=sha256
-		my_dummy_commit="${my_dummy_commit}aaaaaaaaaaaaaaaaaaaaaaaa"
-		commit1="${commit1}bbbbbbbbbbbbbbbbbbbbbbbb"
-		commit2="${commit2} object-format=sha256"
+		commit1="${commit1}aaaaaaaaaaaaaaaaaaaaaaaa"
+		commit2="${commit2}bbbbbbbbbbbbbbbbbbbbbbbb"
 	fi
 
 	# The protocol requires an embedded NUL between reference name
