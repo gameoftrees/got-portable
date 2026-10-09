@@ -49,7 +49,6 @@ test_send_incompatible_hash_algo() {
 
 	# The protocol requires an embedded NUL between reference name
 	# and capabilities.
-	echo -n "${len}$commit1 $commit2 refs/heads/mainX$capabilities" > /tmp/p
 	echo "${len}$commit1 $commit2 refs/heads/mainX$capabilities" | \
 		tr 'X' '\0' | \
 		ssh ${GOTD_DEVUSER}@127.0.0.1 git-receive-pack '/test-repo' \
