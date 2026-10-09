@@ -3,7 +3,7 @@
 REGRESS_TARGETS=test_repo_read test_repo_read_group \
 	test_repo_read_denied_user test_repo_read_denied_group \
 	test_repo_read_bad_user test_repo_read_bad_group \
-	test_repo_write test_repo_write_empty test_request_bad \
+	test_repo_write test_repo_write_empty test_request_bad test_send_bad \
 	test_repo_write_protected test_repo_write_readonly \
 	test_email_notification test_http_notification \
 	test_git_interop test_email_and_http_notification \
@@ -322,6 +322,11 @@ test_repo_write_readonly: prepare_test_repo_empty start_gotd_implicit_ro
 test_request_bad: prepare_test_repo_empty start_gotd_ro
 	@-$(GOTD_TRAP); su -m ${GOTD_TEST_USER} -c \
 		'env $(GOTD_TEST_ENV) sh ./request_bad.sh'
+	@$(GOTD_STOP_CMD) 2>/dev/null
+
+test_send_bad: prepare_test_repo_empty start_gotd_rw
+	@-$(GOTD_TRAP); su -m ${GOTD_TEST_USER} -c \
+		'env $(GOTD_TEST_ENV) sh ./send_bad.sh'
 	@$(GOTD_STOP_CMD) 2>/dev/null
 
 test_email_notification: prepare_test_repo start_gotd_email_notification
