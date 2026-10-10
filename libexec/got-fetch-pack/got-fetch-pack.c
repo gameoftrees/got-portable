@@ -353,7 +353,8 @@ fetch_pack(int fd, int packfd, int expected_algo,
     int no_head, struct imsgbuf *ibuf)
 {
 	const struct got_error *err = NULL;
-	char buf[GOT_PKT_MAX];
+	char *buf = NULL;
+	const size_t bufsize = GOT_PKT_MAX;
 	char hashstr[GOT_HASH_DIGEST_STRING_MAXLEN];
 	struct got_object_id *have, *want;
 	int is_firstpkt = 1, nref = 0, refsz = 16;
@@ -388,8 +389,14 @@ fetch_pack(int fd, int packfd, int expected_algo,
 		err = got_error_from_errno("malloc");
 		goto done;
 	}
+
+	buf = calloc(1, bufsize);
+	if (buf == NULL) {
+		err = got_error_from_errno("calloc");
+		goto done;
+	}
 	while (1) {
-		err = got_pkt_readpkt(&n, fd, buf, sizeof(buf), chattygot,
+		err = got_pkt_readpkt(&n, fd, buf, bufsize, chattygot,
 		    INFTIM);
 		if (err)
 			goto done;
@@ -652,10 +659,10 @@ fetch_pack(int fd, int packfd, int expected_algo,
 		if (got_object_id_cmp(&have[i], &want[i]) == 0)
 			continue;
 		got_object_id_hex(&want[i], hashstr, sizeof(hashstr));
-		n = snprintf(buf, sizeof(buf), "want %s%s\n", hashstr,
+		n = snprintf(buf, bufsize, "want %s%s\n", hashstr,
 		    sent_my_capabilites || my_capabilities == NULL ?
 		    "" : my_capabilities);
-		if (n < 0 || (size_t)n >= sizeof(buf)) {
+		if (n < 0 || (size_t)n >= bufsize) {
 			err = got_error(GOT_ERR_NO_SPACE);
 			goto done;
 		}
@@ -675,8 +682,8 @@ fetch_pack(int fd, int packfd, int expected_algo,
 	RB_FOREACH(pe, got_pathlist_head, have_refs) {
 		struct got_object_id *id = pe->data;
 		got_object_id_hex(id, hashstr, sizeof(hashstr));
-		n = snprintf(buf, sizeof(buf), "have %s\n", hashstr);
-		if (n < 0 || (size_t)n >= sizeof(buf)) {
+		n = snprintf(buf, bufsize, "have %s\n", hashstr);
+		if (n < 0 || (size_t)n >= bufsize) {
 			err = got_error(GOT_ERR_NO_SPACE);
 			goto done;
 		}
@@ -686,7 +693,7 @@ fetch_pack(int fd, int packfd, int expected_algo,
 		nhave++;
 	}
 
-	n = strlcpy(buf, "done\n", sizeof(buf));
+	n = strlcpy(buf, "done\n", bufsize);
 	err = got_pkt_writepkt(fd, buf, n, chattygot);
 	if (err)
 		goto done;
@@ -695,7 +702,7 @@ fetch_pack(int fd, int packfd, int expected_algo,
 		struct got_object_id common_id;
 
 		/* The server should ACK the object IDs we need. */
-		err = got_pkt_readpkt(&n, fd, buf, sizeof(buf), chattygot,
+		err = got_pkt_readpkt(&n, fd, buf, bufsize, chattygot,
 		    INFTIM);
 		if (err)
 			goto done;
@@ -725,7 +732,7 @@ fetch_pack(int fd, int packfd, int expected_algo,
 	}
 
 	if (nhave == 0) {
-		err = got_pkt_readpkt(&n, fd, buf, sizeof(buf), chattygot,
+		err = got_pkt_readpkt(&n, fd, buf, bufsize, chattygot,
 		    INFTIM);
 		if (err)
 			goto done;
@@ -765,7 +772,7 @@ fetch_pack(int fd, int packfd, int expected_algo,
 				    "short packet");
 				goto done;
 			}
-			if (datalen > sizeof(buf) - 5) {
+			if (datalen > bufsize - 5) {
 				err = got_error_msg(GOT_ERR_BAD_PACKET,
 				    "bad packet length");
 				goto done;
@@ -837,7 +844,7 @@ fetch_pack(int fd, int packfd, int expected_algo,
 			/* No sideband channel. Every byte is packfile data. */
 			size_t n = 0;
 			err = got_poll_read_full_timeout(fd, &n,
-			    buf, sizeof buf, 1, INFTIM);
+			    buf, bufsize, 1, INFTIM);
 			if (err) {
 				if (err->code != GOT_ERR_EOF)
 					goto done;
@@ -944,9 +951,9 @@ done:
 	free(server_capabilities);
 	free(my_capabilities);
 	free(capa);
+	free(buf);
 	return err;
 }
-
 
 int
 main(int argc, char **argv)

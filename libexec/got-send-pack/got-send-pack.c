@@ -345,7 +345,8 @@ send_pack(int fd, enum got_hash_algorithm algo, struct got_pathlist_head *refs,
     struct got_pathlist_head *delete_refs, struct imsgbuf *ibuf)
 {
 	const struct got_error *err = NULL;
-	char buf[GOT_PKT_MAX];
+	char *buf = NULL;
+	const size_t bufsize = GOT_PKT_MAX;
 	const unsigned char zero_id[GOT_HASH_DIGEST_MAXLEN] = { 0 };
 	char old_hashstr[GOT_HASH_DIGEST_STRING_MAXLEN];
 	char new_hashstr[GOT_HASH_DIGEST_STRING_MAXLEN];
@@ -366,8 +367,12 @@ send_pack(int fd, enum got_hash_algorithm algo, struct got_pathlist_head *refs,
 	if (RB_EMPTY(refs) && RB_EMPTY(delete_refs))
 		return got_error(GOT_ERR_SEND_EMPTY);
 
+	buf = calloc(1, bufsize);
+	if (buf == NULL)
+		return got_error_from_errno("calloc");
+
 	while (1) {
-		err = got_pkt_readpkt(&n, fd, buf, sizeof(buf), chattygot,
+		err = got_pkt_readpkt(&n, fd, buf, bufsize, chattygot,
 		    INFTIM);
 		if (err)
 			goto done;
@@ -526,7 +531,7 @@ send_pack(int fd, enum got_hash_algorithm algo, struct got_pathlist_head *refs,
 		got_hash_digest_to_str(zero_id, new_hashstr,
 		    sizeof(new_hashstr), algo);
 		err = describe_refchange(&n, &sent_my_capabilites,
-		    my_capabilities, buf, sizeof(buf), refname,
+		    my_capabilities, buf, bufsize, refname,
 		    old_hashstr, new_hashstr);
 		if (err)
 			goto done;
@@ -571,7 +576,7 @@ send_pack(int fd, enum got_hash_algorithm algo, struct got_pathlist_head *refs,
 		}
 		got_object_id_hex(id, new_hashstr, sizeof(new_hashstr));
 		err = describe_refchange(&n, &sent_my_capabilites,
-		    my_capabilities, buf, sizeof(buf), refname,
+		    my_capabilities, buf, bufsize, refname,
 		    old_hashstr, new_hashstr);
 		if (err)
 			goto done;
@@ -608,7 +613,7 @@ send_pack(int fd, enum got_hash_algorithm algo, struct got_pathlist_head *refs,
 			goto done;
 	}
 
-	err = got_pkt_readpkt(&n, fd, buf, sizeof(buf), chattygot, INFTIM);
+	err = got_pkt_readpkt(&n, fd, buf, bufsize, chattygot, INFTIM);
 	if (err)
 		goto done;
 	if (n >= 4 && strncmp(buf, "ERR ", 4) == 0) {
@@ -621,7 +626,7 @@ send_pack(int fd, enum got_hash_algorithm algo, struct got_pathlist_head *refs,
 	}
 
 	while (nsent > 0) {
-		err = got_pkt_readpkt(&n, fd, buf, sizeof(buf), chattygot,
+		err = got_pkt_readpkt(&n, fd, buf, bufsize, chattygot,
 		    INFTIM);
 		if (err)
 			goto done;
@@ -659,6 +664,7 @@ done:
 	free(server_capabilities);
 	free(my_capabilities);
 	free(capa);
+	free(buf);
 	return err;
 }
 
