@@ -412,7 +412,7 @@ connect_proc(struct gotsysd_child_proc *proc1,
 static const struct got_error *
 write_gotsys_db_file(void)
 {
-	char buf[GOT_OBJECT_ID_HEX_MAXLEN];
+	char buf[GOT_OBJECT_ID_HEX_MAXLEN + 1]; /* hex\0 + \n */
 	ssize_t w;
 	size_t len;
 	int ret;
@@ -426,7 +426,7 @@ write_gotsys_db_file(void)
 		return got_error_from_errno2("lseek", GOTSYSD_DB_COMMIT_PATH);
 
 	len = strlen(gotsysd.sysconf_commit_id_str);
-	if (len == 0 || len > GOT_OBJECT_ID_HEX_MAXLEN)
+	if (len == 0 || len >= GOT_OBJECT_ID_HEX_MAXLEN)
 		return got_error(GOT_ERR_BAD_OBJ_ID_STR);
 
 	ret = snprintf(buf, sizeof(buf), "%s\n", gotsysd.sysconf_commit_id_str);
