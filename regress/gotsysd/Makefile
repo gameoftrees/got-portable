@@ -325,7 +325,7 @@ setup_test_vm: start_test_vm build_got ${GOTD_CONF} ${GOTSYSD_CONF} ${GOTSYS_CON
  	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} rcctl reload sshd";
 	
 stop_test_vm: ensure_root
-	@vmctl stop ${GOTSYSD_VM_NAME}
+	@vmctl stop -w ${GOTSYSD_VM_NAME}
 
 test_gotsysd: 
 	@set -e; \
