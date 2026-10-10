@@ -290,6 +290,18 @@ parameter can only contain one line of text in ASCII encoding,
 or in UTF-8 encoding if
 .Ar string
 is wrapped in quotes.
+.It Ic hash algorithm Ar hashing-algorithm
+Configure the repository's
+.Ar hashing-algorithm
+used for the computation of Git object IDs.
+Possible values are
+.Dq sha1
+.Pq the default
+or
+.Dq sha256 .
+.Pp
+This configuration directive only affects newly created repositories.
+The hashing algorithm of existing repositories cannot be changed.
 .It Ic head Ar branch
 Point the repository's symbolic
 .Pa HEAD

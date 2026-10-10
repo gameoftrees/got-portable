@@ -41,6 +41,7 @@ GOTSYSD_TEST_HTTP_PORT=8000
 GOTSYSD_TEST_HMAC_SECRET!=openssl rand -base64 32
 HTTPD_CONF=httpd.conf
 SSHD_CONF=sshd_config
+GOT_TEST_ALGO=sha1
 
 GOTSYSD_TEST_USER?=${DOAS_USER}
 .if empty(GOTSYSD_TEST_USER)
@@ -68,7 +69,8 @@ GOTSYSD_TEST_ENV=GOTSYSD_TEST_ROOT=${GOTSYSD_TEST_ROOT} \
 	GOTD_USER=${GOTD_USER} \
 	GOTSYSD_TEST_SMTP_PORT=${GOTSYSD_TEST_SMTP_PORT} \
 	GOTSYSD_TEST_HTTP_PORT=${GOTSYSD_TEST_HTTP_PORT} \
-	GOTSYSD_TEST_HMAC_SECRET=${GOTSYSD_TEST_HMAC_SECRET}
+	GOTSYSD_TEST_HMAC_SECRET=${GOTSYSD_TEST_HMAC_SECRET} \
+	GOT_TEST_ALGO=${GOT_TEST_ALGO}
 
 
 UNPRIV=su -m ${GOTSYSD_TEST_USER} -c
@@ -218,6 +220,7 @@ ${GOTSYS_CONF}: ${GOTSYSD_SSH_PUBKEY}
 	@${UNPRIV} "echo \\\" >> $@"
 	@${UNPRIV} "echo } >> $@"
 	@${UNPRIV} "echo repository gotsys { >> $@"
+	@${UNPRIV} "echo \ \ \ \ hash algorithm ${GOT_TEST_ALGO} >> $@"
 	@${UNPRIV} "echo \ \ \ \ permit rw ${GOTSYSD_TEST_USER} >> $@"
 	@${UNPRIV} "echo } >> $@"
 
@@ -278,7 +281,7 @@ setup_test_vm: start_test_vm build_got ${GOTD_CONF} ${GOTSYSD_CONF} ${GOTSYS_CON
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} rcctl restart syslogd"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} mkdir -m 750 /git "; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
-		got init /git/${GOTSYS_REPO}"; \
+		got init -A ${GOT_TEST_ALGO} /git/${GOTSYS_REPO}"; \
 	${UNPRIV} "${GOTSYSD_SCP_CMD} \
 		${GOT_CONF} root@$${VMIP}:/git/${GOTSYS_REPO}/got.conf"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} mkdir /tmp/gotsys "; \
@@ -342,9 +345,9 @@ test_gotwebd:
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
 		'rm -rf /git/${GOTSYS_REPO} /git/{foo,hidden}.git /tmp/gotsys'"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
-		got init /git/${GOTSYS_REPO}"; \
+		got init -A ${GOT_TEST_ALGO} /git/${GOTSYS_REPO}"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
-		got init /git/hidden.git"; \
+		got init -A ${GOT_TEST_ALGO} /git/hidden.git"; \
 	${UNPRIV} "${GOTSYSD_SCP_CMD} \
 		${GOT_CONF} root@$${VMIP}:/git/${GOTSYS_REPO}/got.conf"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} mkdir /tmp/gotsys "; \
@@ -369,7 +372,7 @@ test_gotwebd_www:
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
 		'rm -rf /git/*.git /tmp/gotsys'"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
-		got init /git/${GOTSYS_REPO}"; \
+		got init -A ${GOT_TEST_ALGO} /git/${GOTSYS_REPO}"; \
 	${UNPRIV} "${GOTSYSD_SCP_CMD} \
 		${GOT_CONF} root@$${VMIP}:/git/${GOTSYS_REPO}/got.conf"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} mkdir /tmp/gotsys "; \
@@ -395,7 +398,7 @@ test_gotwebd_repos_www:
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
 		'rm -rf /git/*.git /tmp/gotsys'"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} \
-		got init /git/${GOTSYS_REPO}"; \
+		got init -A ${GOT_TEST_ALGO} /git/${GOTSYS_REPO}"; \
 	${UNPRIV} "${GOTSYSD_SCP_CMD} \
 		${GOT_CONF} root@$${VMIP}:/git/${GOTSYS_REPO}/got.conf"; \
 	${UNPRIV} "${GOTSYSD_SSH_CMD} root@$${VMIP} mkdir /tmp/gotsys "; \

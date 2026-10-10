@@ -45,6 +45,7 @@ user deleteme {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
@@ -310,6 +311,7 @@ user deleteme {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
@@ -400,6 +402,7 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
@@ -565,6 +568,7 @@ user ${GOTSYSD_DEV_USER} {
 	group developers
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
@@ -729,6 +733,7 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
@@ -897,10 +902,12 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository "foo" {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_DEV_USER}
 }
 EOF
@@ -979,7 +986,7 @@ EOF
 	fi
 
 	# We should be able to import data into the newly created repository.
-	got init $testroot/foo.git
+	got init -A ${GOT_TEST_ALGO} $testroot/foo.git
 	mkdir $testroot/foo
 	echo alpha > $testroot/foo/alpha
 	got import -m init -r $testroot/foo.git $testroot/foo >/dev/null
@@ -1009,6 +1016,7 @@ test_user_anonymous() {
 	# An attempt to grant write permissions to anonymous is an error.
 	cat > ${testroot}/bad-gotsys.conf <<EOF
 repository "gotsys" {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw anonymous
 }
 EOF
@@ -1021,7 +1029,7 @@ EOF
 		return 1
 	fi
 
-	echo -n "gotsys: ${testroot}/bad-gotsys.conf: line 2: " \
+	echo -n "gotsys: ${testroot}/bad-gotsys.conf: line 3: " \
 		> $testroot/stderr.expected
 	echo "the \"anonymous\" user must not have write permission" \
 		>> $testroot/stderr.expected
@@ -1056,10 +1064,12 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository "foo" {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_DEV_USER}
 	permit ro anonymous
 }
@@ -1132,10 +1142,12 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository "foo" {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_DEV_USER}
 }
 EOF
@@ -1225,10 +1237,12 @@ looser ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository "foo" {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_DEV_USER}
 	permit ro anonymous
 }
@@ -1309,10 +1323,12 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository "foo" {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_DEV_USER}
 	permit ro anonymous
 	protect branch 'mai"n'
@@ -1327,7 +1343,7 @@ EOF
 		return 1
 	fi
 
-	echo "gotsys: ${testroot}/wt/gotsys.conf: line 18: invalid reference name: refs/heads/mai\"n" \
+	echo "gotsys: ${testroot}/wt/gotsys.conf: line 20: invalid reference name: refs/heads/mai\"n" \
 		> $testroot/stderr.expected
 	cmp -s $testroot/stderr.expected $testroot/stderr
 	ret=$?
@@ -1351,8 +1367,8 @@ EOF
 	fi
 
 	cat > ${testroot}/stderr.expected <<EOF
-git-receive-pack: gotsys.conf: line 18: invalid reference name: refs/heads/mai"n
-got-send-pack: gotsys.conf: line 18: invalid reference name: refs/heads/mai"n
+git-receive-pack: gotsys.conf: line 20: invalid reference name: refs/heads/mai"n
+got-send-pack: gotsys.conf: line 20: invalid reference name: refs/heads/mai"n
 got: could not send pack file
 EOF
 	cmp -s $testroot/stderr.expected $testroot/stderr
@@ -1377,6 +1393,7 @@ user ${GOTSYSD_TEST_USER} {
 }
 
 repository "gotsys" {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	head "refs/heads/foo"
 }
@@ -1391,7 +1408,7 @@ EOF
 	fi
 
 	cat > $testroot/stderr.expected <<EOF
-gotsys: ${testroot}/bad-gotsys.conf: line 8: HEAD of the "gotsys" repository cannot be overridden
+gotsys: ${testroot}/bad-gotsys.conf: line 9: HEAD of the "gotsys" repository cannot be overridden
 EOF
 	cmp -s $testroot/stderr.expected $testroot/stderr
 	ret=$?
@@ -1424,15 +1441,18 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository "foo" {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_DEV_USER}
 	permit ro anonymous
 	head foo
 }
 repository "customhead" {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_DEV_USER}
 	permit ro anonymous
 	head foo
@@ -1520,7 +1540,7 @@ EOF
 	fi
 
 	# Create branch "foo" in customhead.git.
-	got init -b foo $testroot/customhead.git
+	got init -A ${GOT_TEST_ALGO} -b foo $testroot/customhead.git
 	mkdir $testroot/foo
 	echo alpha > $testroot/foo/alpha
 	got import -m init -b foo -r $testroot/customhead.git \
@@ -1589,10 +1609,12 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository "foo" {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_DEV_USER}
 	permit ro anonymous
 	head foo
@@ -1706,10 +1728,12 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository "foo" {
+	hash algorithm "${GOT_TEST_ALGO}"
 	deny ${GOTSYSD_DEV_USER}
 	permit ro anonymous
 	head foo
@@ -1842,10 +1866,12 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository "foo" {
+	hash algorithm "${GOT_TEST_ALGO}"
 	deny ${GOTSYSD_DEV_USER}
 	permit ro anonymous
 	head foo
@@ -1855,6 +1881,7 @@ repository "foo" {
 	}
 }
 repository "bar" {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_DEV_USER}
 }
 EOF
@@ -2002,6 +2029,7 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 
@@ -2053,6 +2081,7 @@ user ${GOTSYSD_DEV_USER} {
 }
 
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 
@@ -2160,6 +2189,7 @@ user ${GOTSYSD_DEV_USER} {
 }
 
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 
@@ -2209,6 +2239,7 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 	notify url "http://${GWIP}:${GOTSYSD_TEST_HTTP_PORT}/" user flan password "password" insecure hmac "${GOTSYSD_TEST_HMAC_SECRET}"
@@ -2318,6 +2349,7 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 	notify email to "${GOTSYSD_TEST_USER}@example.com"
@@ -2368,6 +2400,7 @@ user ${GOTSYSD_DEV_USER} {
 }
 
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 
@@ -2465,6 +2498,7 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }

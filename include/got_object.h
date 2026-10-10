@@ -26,6 +26,12 @@ enum got_hash_algorithm {
 	GOT_NUM_HASH_ALGOS,
 };
 
+/* Return a human-readable name of the hash algorithm. */
+const char *got_hash_algo_name(enum got_hash_algorithm);
+
+/* Return an error if the specified algorithm is out of range. */
+const struct got_error *got_hash_algo_validate(enum got_hash_algorithm);
+
 struct got_object_id {
 	uint8_t hash[GOT_OBJECT_ID_MAXLEN];
 	enum got_hash_algorithm algo;

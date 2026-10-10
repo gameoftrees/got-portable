@@ -54,5 +54,9 @@ Now the actual test suite can be run with:
 
   # make
 
+To run the test suite with SHA256 repositories, use:
+
+  # make GOT_TEST_ALGO=sha256
+
 A test VM will be started automatically and stopped again once the tests
 have finished running.

@@ -1220,6 +1220,8 @@ create_repos(struct gotsysd_imsgev *iev)
 
 		memset(&ireq, 0, sizeof(ireq));
 
+		ireq.algo = repo->algo;
+
 		ireq.name_len = strlen(repo->name);
 		if (repo->headref)
 			ireq.headref_len = strlen(repo->headref);

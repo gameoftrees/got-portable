@@ -1416,6 +1416,7 @@ send_repo(struct gotsysd_imsgev *iev, struct gotsys_repo *repo)
 
 	memset(&irepo, 0, sizeof(irepo));
 
+	irepo.algo = repo->algo;
 	irepo.name_len = strlen(repo->name);
 	if (repo->headref)
 		irepo.headref_len = strlen(repo->headref);
@@ -1707,6 +1708,10 @@ gotsys_imsg_recv_repository(struct gotsys_repo **repo, struct imsg *imsg)
 	    irepo.name_len == 0)
 		return got_error(GOT_ERR_PRIVSEP_LEN);
 
+	err = got_hash_algo_validate(irepo.algo);
+	if (err)
+		goto done;
+
 	name = strndup(imsg->data + sizeof(irepo), irepo.name_len);
 	if (name == NULL)
 		return got_error_from_errno("strndup");
@@ -1758,6 +1763,7 @@ gotsys_imsg_recv_repository(struct gotsys_repo **repo, struct imsg *imsg)
 	if (err)
 		goto done;
 
+	(*repo)->algo = irepo.algo;
 	(*repo)->headref = headref;
 	if (description != NULL) {
 		if (strlcpy((*repo)->description, description,

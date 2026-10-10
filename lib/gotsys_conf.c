@@ -39,6 +39,8 @@
 #include "gotsys.h"
 #include "utf8d.h"
 
+#include "got_lib_hash.h"
+
 #ifndef nitems
 #define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0]))
 #endif
@@ -906,6 +908,8 @@ gotsys_conf_new_repo(struct gotsys_repo **new_repo, const char *name)
 		    "repository name too long: %s", name);
 	}
 
+	repo->algo = GOT_HASH_SHA1;
+
 	*new_repo = repo;
 	return NULL;
 }
@@ -1366,6 +1370,21 @@ gotsys_conf_validate_string(const char *s)
 	}
 
 	return NULL;
+}
+
+const struct got_error *
+gotsys_conf_validate_hash_algo(enum got_hash_algorithm *algo, const char *name)
+{
+	int i = 0;
+
+	for (i = 0; i < GOT_NUM_HASH_ALGOS; i++) {
+		if (strcasecmp(name, got_hash_algo_name(i)) == 0) {
+			*algo = i;
+			return NULL;
+		}
+	}
+
+	return got_error_fmt(GOT_ERR_OBJECT_FORMAT, "%s", name);
 }
 
 struct gotsys_repo *

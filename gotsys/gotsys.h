@@ -146,6 +146,7 @@ struct gotsys_repo {
 	char name[NAME_MAX];
 	char *headref;
 	char description[GOTWEBD_MAXDESCRSZ];
+	enum got_hash_algorithm algo;
 
 	struct gotsys_access_rule_list access_rules;
 
@@ -216,6 +217,8 @@ const struct got_error *gotsys_conf_parse_url(char **, char **, char **,
     char **, const char *);
 const struct got_error *gotsys_conf_validate_mediatype(const char *);
 const struct got_error *gotsys_conf_validate_string(const char *);
+const struct got_error *gotsys_conf_validate_hash_algo(
+    enum got_hash_algorithm *, const char *);
 const struct got_error *gotsys_conf_new_access_rule(
     struct gotsys_access_rule **, enum gotsys_access, int, const char *,
     struct gotsys_userlist *, struct gotsys_grouplist *);

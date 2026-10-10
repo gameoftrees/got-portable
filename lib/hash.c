@@ -261,3 +261,16 @@ got_hash_algo_name(enum got_hash_algorithm algo)
 		return "unknown";
 	}
 }
+
+const struct got_error *
+got_hash_algo_validate(enum got_hash_algorithm algo)
+{
+	switch (algo) {
+	case GOT_HASH_SHA1:
+		return NULL;
+	case GOT_HASH_SHA256:
+		return NULL;
+	default:
+		return got_error(GOT_ERR_OBJECT_FORMAT);
+	}
+}

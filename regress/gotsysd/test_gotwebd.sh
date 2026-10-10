@@ -54,16 +54,20 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository testrepo.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 }
 repository gottestdev.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository hidden.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 }
 web server "${VMIP}" {
@@ -152,7 +156,7 @@ EOF
 		return 1
 	fi
 
-	got init $testroot/testrepo.git
+	got init -A ${GOT_TEST_ALGO} $testroot/testrepo.git
 	ret=$?
 	if [ $ret -ne 0 ]; then
 		"got init failed unexpectedly"
@@ -365,20 +369,25 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository public.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository gottestdev.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository gottest {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 }
 repository hidden.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 }
 web server "${VMIP}" {
@@ -560,20 +569,25 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository public.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository gottestdev.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository gottest.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 }
 repository hidden.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 }
 web server "${VMIP}" {
@@ -760,18 +774,23 @@ user ${GOTSYSD_DEV_USER} {
 	group devs
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw :writers
 }
 repository public.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw :writers
 }
 repository gottestdev.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw :devs
 }
 repository gottest.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw :testers
 }
 repository hidden.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw :testers
 }
 web server "${VMIP}" {
@@ -923,20 +942,25 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository public.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository gottestdev.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository gottest.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 }
 repository hidden.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 }
 web server "${VMIP}" {
@@ -995,7 +1019,7 @@ EOF
 		return 1
 	fi
 
-	got init $testroot/public.git > /dev/null
+	got init -A ${GOT_TEST_ALGO} $testroot/public.git > /dev/null
 	mkdir -p $testroot/public
 
 	cat > $testroot/public/readme.txt <<EOF
@@ -1097,20 +1121,25 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository public.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository gottestdev.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository gottest.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 }
 repository hidden.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 }
 web server "${VMIP}" {
@@ -1285,20 +1314,25 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository public.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository gottestdev.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository gottest.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 }
 repository hidden.git {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 }
 web server "${VMIP}" {
@@ -1338,7 +1372,7 @@ EOF
 		return 1
 	fi
 	cat > $testroot/stderr.expected <<EOF
-gotsys: ${testroot}/wt/gotsys.conf.bad: line 42: invalid UTF-8 string
+gotsys: ${testroot}/wt/gotsys.conf.bad: line 47: invalid UTF-8 string
 EOF
 	cmp -s $testroot/stderr.expected $testroot/stderr
 	ret=$?
@@ -1386,7 +1420,7 @@ EOF
 		return 1
 	fi
 
-	got init $testroot/public.git > /dev/null
+	got init -A ${GOT_TEST_ALGO} $testroot/public.git > /dev/null
 	mkdir -p $testroot/public
 
 	cat > $testroot/public/readme.txt <<EOF
