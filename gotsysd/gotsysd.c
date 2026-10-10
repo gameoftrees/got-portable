@@ -365,7 +365,7 @@ send_info(struct gotsysd_client *client)
 	        GOT_HASH_SHA256))
 		memcpy(&info.commit_id, &commit_id, sizeof(info.commit_id));
 	else
-		return got_error(GOT_ERR_OBJECT_FORMAT);
+		info.commit_id.algo = GOT_NUM_HASH_ALGOS;
 
 	if (gotsysd_imsg_compose_event(&client->iev, GOTSYSD_IMSG_INFO,
 	    GOTSYSD_PROC_GOTSYSD, -1, &info, sizeof(info)) == -1) {
