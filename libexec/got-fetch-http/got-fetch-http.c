@@ -354,10 +354,10 @@ http_chunk(struct bufio *bio, const void *buf, size_t len)
 }
 
 static int
-get_refs(int https, const char *host, const char *port, const char *path)
+get_refs(int https, const char *host, const char *port, const char *path,
+    char *buf, const size_t bufsize)
 {
 	struct bufio		 bio;
-	char			 buf[GOT_PKT_MAX];
 	const struct got_error	*e;
 	size_t			 chunksz = 0;
 	ssize_t			 r;
@@ -401,7 +401,7 @@ get_refs(int https, const char *host, const char *port, const char *path)
 	/* TODO: validate it's # service=git-upload-pack\n */
 	while (skip > 0) {
 		r = http_read(&bio, chunked, &chunksz, buf,
-		    MINIMUM(skip, sizeof(buf)), NULL);
+		    MINIMUM(skip, bufsize), NULL);
 		if (r <= 0)
 			goto err;
 		skip -= r;
@@ -418,10 +418,9 @@ err:
 
 static int
 upload_request(int https, const char *host, const char *port, const char *path,
-    FILE *in)
+    FILE *in, char *buf, const size_t bufsize)
 {
 	struct bufio		 bio;
-	char			 buf[GOT_PKT_MAX];
 	const struct got_error	*e;
 	ssize_t			 r;
 	size_t			 chunksz = 0;
@@ -478,6 +477,11 @@ upload_request(int https, const char *host, const char *port, const char *path,
 			goto err;
 		}
 
+		if (t > bufsize) {
+			warnx("pktline len is too large");
+			goto err;
+		}
+
 		r = fread(buf + 4, 1, t - 4, in);
 		if (r != t - 4)
 			goto err;
@@ -525,6 +529,8 @@ main(int argc, char **argv)
 	char		*path;
 	int		 https = 0;
 	int		 ch;
+	char		*buf = NULL;
+	const size_t	 bufsize = GOT_PKT_MAX;
 
 #ifndef PROFILE
 	if (pledge("stdio rpath inet dns unveil", NULL) == -1)
@@ -571,7 +577,11 @@ main(int argc, char **argv)
 	path = argv[3];
 	got_path_strip_trailing_slashes(path);
 
-	if (get_refs(https, host, port, path) == -1)
+	buf = calloc(1, bufsize);
+	if (buf == NULL)
+		err(1, "calloc");
+
+	if (get_refs(https, host, port, path, buf, bufsize) == -1)
 		errx(1, "failed to get refs");
 
 	pfd.fd = 0;
@@ -583,9 +593,12 @@ main(int argc, char **argv)
 		return 0;
 
 	ungetc(ch, stdin);
-	if (upload_request(https, host, port, path, stdin) == -1) {
+	memset(buf, '\0', bufsize);
+	if (upload_request(https, host, port, path, stdin,
+	    buf, bufsize) == -1) {
 		errx(1, "failed to upload request");
 	}
 
+	free(buf);
 	return 0;
 }

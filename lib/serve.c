@@ -119,36 +119,48 @@ send_ref(int outfd, uint8_t *id, const char *refname, int send_capabilities,
 {
 	const struct got_error *err = NULL;
 	char hex[GOT_HASH_DIGEST_STRING_MAXLEN];
-	char buf[GOT_PKT_MAX];
+	char *buf = NULL;
+	const size_t bufsize = GOT_PKT_MAX;
 	size_t len, capalen = 0;
 	
 	if (got_hash_digest_to_str(id, hex, sizeof(hex), algo) == NULL)
 		return got_error(GOT_ERR_BAD_OBJ_ID);
 
-	len = snprintf(buf, sizeof(buf), "%s %s", hex, refname);
-	if (len >= sizeof(buf))
-		return got_error(GOT_ERR_NO_SPACE);
+	buf = calloc(1, bufsize);
+	if (buf == NULL)
+		return got_error_from_errno("calloc");
+
+	len = snprintf(buf, bufsize, "%s %s", hex, refname);
+	if (len >= bufsize) {
+		err = got_error(GOT_ERR_NO_SPACE);
+		goto done;
+	}
 
 	if (send_capabilities) {
 		if (client_is_reading) {
 			err = append_read_capabilities(&capalen, len,
-			    symrefstr, buf, sizeof(buf), algo);
+			    symrefstr, buf, bufsize, algo);
 		} else {
 			err = append_write_capabilities(&capalen, len,
-			    symrefstr, buf, sizeof(buf), algo);
+			    symrefstr, buf, bufsize, algo);
 		}
 		if (err)
-			return err;
+			goto done;
 		len += capalen;
 	}
 
-	if (len + 1 >= sizeof(buf))
-		return got_error(GOT_ERR_NO_SPACE);
+	if (len + 1 >= bufsize) {
+		err = got_error(GOT_ERR_NO_SPACE);
+		goto done;
+	}
 	buf[len] = '\n';
 	len++;
 	buf[len] = '\0';
 
-	return got_pkt_writepkt(outfd, buf, len, chattygot);
+	err = got_pkt_writepkt(outfd, buf, len, chattygot);
+done:
+	free(buf);
+	return err;
 }
 
 static const struct got_error *
@@ -156,7 +168,8 @@ send_zero_refs(int outfd, int client_is_reading, int chattygot, int algo)
 {
 	const struct got_error *err = NULL;
 	const char *line;
-	char buf[GOT_PKT_MAX];
+	char *buf = NULL;
+	const size_t bufsize = GOT_PKT_MAX;
 	size_t len, capalen = 0;
 
 	if (algo == GOT_HASH_SHA1)
@@ -166,23 +179,32 @@ send_zero_refs(int outfd, int client_is_reading, int chattygot, int algo)
 	else
 		return got_error(GOT_ERR_OBJECT_FORMAT);
 
-	len = strlcpy(buf, line, sizeof(buf));
-	if (len >= sizeof(buf))
-		return got_error(GOT_ERR_NO_SPACE);
+	buf = calloc(1, bufsize);
+	if (buf == NULL)
+		return got_error_from_errno("calloc");
+
+	len = strlcpy(buf, line, bufsize);
+	if (len >= bufsize) {
+		err = got_error(GOT_ERR_NO_SPACE);
+		goto done;
+	}
 
 	if (client_is_reading) {
 		err = append_read_capabilities(&capalen, len,
-		    NULL, buf, sizeof(buf), algo);
+		    NULL, buf, bufsize, algo);
 		if (err)
-			return err;
+			goto done;
 	} else {
 		err = append_write_capabilities(&capalen, len,
-		    NULL, buf, sizeof(buf), algo);
+		    NULL, buf, bufsize, algo);
 		if (err)
-			return err;
+			goto done;
 	}
 
-	return got_pkt_writepkt(outfd, buf, len + capalen, chattygot);
+	err = got_pkt_writepkt(outfd, buf, len + capalen, chattygot);
+done:
+	free(buf);
+	return err;
 }
 
 static void
@@ -718,18 +740,29 @@ done:
 static const struct got_error *
 send_ack(int outfd, uint8_t *id, int chattygot, int algo)
 {
+	const struct got_error *err = NULL;
 	char hex[GOT_HASH_DIGEST_STRING_MAXLEN];
-	char buf[GOT_PKT_MAX];
+	char *buf = NULL;
+	const size_t bufsize = GOT_PKT_MAX;
 	int len;
 
 	if (got_hash_digest_to_str(id, hex, sizeof(hex), algo) == NULL)
 		return got_error(GOT_ERR_BAD_OBJ_ID);
 
-	len = snprintf(buf, sizeof(buf), "ACK %s\n", hex);
-	if (len >= sizeof(buf))
-		return got_error(GOT_ERR_NO_SPACE);
+	buf = calloc(1, bufsize);
+	if (buf == NULL)
+		return got_error_from_errno("calloc");
 
-	return got_pkt_writepkt(outfd, buf, len, chattygot);
+	len = snprintf(buf, bufsize, "ACK %s\n", hex);
+	if (len >= bufsize) {
+		err = got_error(GOT_ERR_NO_SPACE);
+		goto done;
+	}
+
+	err = got_pkt_writepkt(outfd, buf, len, chattygot);
+done:
+	free(buf);
+	return err;
 }
 
 static const struct got_error *
@@ -867,13 +900,18 @@ relay_progress_reports(struct imsgbuf *ibuf, int outfd, int chattygot)
 	const struct got_error *err = NULL;
 	int pack_starting = 0;
 	struct gotd_imsg_packfile_progress iprog;
-	char buf[GOT_PKT_MAX];
+	char *buf = NULL;
+	const size_t bufsize = GOT_PKT_MAX;
 	struct imsg imsg;
 	size_t datalen;
 	int p_deltify = 0, n;
 	const char *eol = "\r";
 
 	memset(&imsg, 0, sizeof(imsg));
+
+	buf = calloc(1, bufsize);
+	if (buf == NULL)
+		return got_error_from_errno("calloc");
 
 	while (!pack_starting && err == NULL) {
 		err = gotd_imsg_poll_recv(&imsg, ibuf, 0);
@@ -900,14 +938,14 @@ relay_progress_reports(struct imsgbuf *ibuf, int outfd, int chattygot)
 				    iprog.nobj_total;
 			}
 			buf[0] = GOT_SIDEBAND_PROGRESS_INFO;
-			n = snprintf(&buf[1], sizeof(buf) - 1,
+			n = snprintf(&buf[1], bufsize - 1,
 			    "%d commits colored, "
 			    "%d objects found, "
 			    "deltify %d%%%s",
 			    iprog.ncolored,
 			    iprog.nfound,
 			    p_deltify, eol);
-			if (n >= sizeof(buf) - 1)
+			if (n >= bufsize - 1)
 				break;
 			err = got_pkt_writepkt(outfd, buf, 1 + n, chattygot);
 			break;
@@ -919,6 +957,7 @@ relay_progress_reports(struct imsgbuf *ibuf, int outfd, int chattygot)
 		imsg_free(&imsg);
 	}
 
+	free(buf);
 	return err;
 }
 
@@ -927,7 +966,8 @@ serve_read(int infd, int outfd, int gotd_sock, const char *repo_path,
     int chattygot)
 {
 	const struct got_error *err = NULL;
-	char buf[GOT_PKT_MAX];
+	char *buf = NULL;
+	const size_t bufsize = GOT_PKT_MAX;
 	struct imsgbuf ibuf;
 	enum protostate {
 		STATE_EXPECT_WANT,
@@ -944,6 +984,12 @@ serve_read(int infd, int outfd, int gotd_sock, const char *repo_path,
 		return got_error_from_errno("imsgbuf_init");
 	imsgbuf_allow_fdpass(&ibuf);
 
+	buf = calloc(1, bufsize);
+	if (buf == NULL) {
+		err = got_error_from_errno("calloc");
+		goto done;
+	}
+
 	err = announce_refs(outfd, &algo, &ibuf, 1, repo_path, chattygot);
 	if (err)
 		goto done;
@@ -951,7 +997,7 @@ serve_read(int infd, int outfd, int gotd_sock, const char *repo_path,
 	while (curstate != STATE_DONE) {
 		int n;
 
-		err = got_pkt_readpkt(&n, infd, buf, sizeof(buf), chattygot,
+		err = got_pkt_readpkt(&n, infd, buf, bufsize, chattygot,
 		    timeout);
 		if (err)
 			goto done;
@@ -971,7 +1017,7 @@ serve_read(int infd, int outfd, int gotd_sock, const char *repo_path,
 				 * anything we should receive a flush
 				 * packet followed by EOF.
 				 */
-				r = read(infd, buf, sizeof(buf));
+				r = read(infd, buf, bufsize);
 				if (r == -1) {
 					err = got_error_from_errno("read");
 					goto done;
@@ -1055,7 +1101,7 @@ serve_read(int infd, int outfd, int gotd_sock, const char *repo_path,
 			goto done;
 		pack_chunksize = GOT_SIDEBAND_64K_PACKFILE_DATA_MAX;
 	} else
-		pack_chunksize = sizeof(buf);
+		pack_chunksize = bufsize;
 
 	for (;;) {
 		ssize_t r;
@@ -1086,6 +1132,7 @@ serve_read(int infd, int outfd, int gotd_sock, const char *repo_path,
 	}
 done:
 	imsgbuf_clear(&ibuf);
+	free(buf);
 	if (packfd != -1 && close(packfd) == -1 && err == NULL)
 		err = got_error_from_errno("close");
 	if (err)
@@ -1244,7 +1291,8 @@ recv_packfile(struct imsg *imsg, struct imsgbuf *ibuf, int infd)
 	const struct got_error *err = NULL;
 	size_t datalen;
 	int packfd;
-	char buf[GOT_PKT_MAX];
+	char *buf = NULL;
+	const size_t bufsize = GOT_PKT_MAX;
 	int pack_done = 0;
 
 	datalen = imsg->hdr.len - IMSG_HEADER_SIZE;
@@ -1263,6 +1311,10 @@ recv_packfile(struct imsg *imsg, struct imsgbuf *ibuf, int infd)
 	if (err)
 		return err;
 
+	buf = calloc(1, bufsize);
+	if (buf == NULL)
+		return got_error_from_errno("calloc");
+
 	while (!pack_done) {
 		ssize_t r = 0;
 
@@ -1272,7 +1324,7 @@ recv_packfile(struct imsg *imsg, struct imsgbuf *ibuf, int infd)
 				break;
 			err = NULL;
 		} else {
-			r = read(infd, buf, sizeof(buf));
+			r = read(infd, buf, bufsize);
 			if (r == -1) {
 				err = got_error_from_errno("read");
 				break;
@@ -1311,6 +1363,7 @@ recv_packfile(struct imsg *imsg, struct imsgbuf *ibuf, int infd)
 	}
 
 	close(packfd);
+	free(buf);
 	return err;
 }
 
@@ -1319,7 +1372,8 @@ report_unpack_status(struct imsg *imsg, int outfd, int chattygot)
 {
 	const struct got_error *err = NULL;
 	struct gotd_imsg_packfile_status istatus;
-	char buf[GOT_PKT_MAX];
+	char *buf = NULL;
+	const size_t bufsize = GOT_PKT_MAX;
 	size_t datalen, len;
 	char *reason = NULL;
 
@@ -1336,11 +1390,17 @@ report_unpack_status(struct imsg *imsg, int outfd, int chattygot)
 		goto done;
 	}
 
+	buf = calloc(1, bufsize);
+	if (buf == NULL) {
+		err = got_error_from_errno("calloc");
+		goto done;
+	}
+
 	if (err == NULL)
-		len = snprintf(buf, sizeof(buf), "unpack ok\n");
+		len = snprintf(buf, bufsize, "unpack ok\n");
 	else
-		len = snprintf(buf, sizeof(buf), "unpack %s\n", reason);
-	if (len >= sizeof(buf)) {
+		len = snprintf(buf, bufsize, "unpack %s\n", reason);
+	if (len >= bufsize) {
 		err = got_error(GOT_ERR_NO_SPACE);
 		goto done;
 	}
@@ -1348,6 +1408,7 @@ report_unpack_status(struct imsg *imsg, int outfd, int chattygot)
 	err = got_pkt_writepkt(outfd, buf, len, chattygot);
 done:
 	free(reason);
+	free(buf);
 	return err;
 }
 
@@ -1357,7 +1418,8 @@ recv_ref_update_ok(struct imsg *imsg, int outfd, int chattygot, int algo)
 	const struct got_error *err = NULL;
 	struct gotd_imsg_ref_update_ok iok;
 	size_t datalen, len;
-	char buf[GOT_PKT_MAX];
+	char *buf = NULL;
+	const size_t bufsize = GOT_PKT_MAX;
 	char *refname = NULL;
 
 	datalen = imsg->hdr.len - IMSG_HEADER_SIZE;
@@ -1376,8 +1438,14 @@ recv_ref_update_ok(struct imsg *imsg, int outfd, int chattygot, int algo)
 	if (refname == NULL)
 		return got_error_from_errno("strndup");
 
-	len = snprintf(buf, sizeof(buf), "ok %s\n", refname);
-	if (len >= sizeof(buf)) {
+	buf = calloc(1, bufsize);
+	if (buf == NULL) {
+		err = got_error_from_errno("calloc");
+		goto done;
+	}
+
+	len = snprintf(buf, bufsize, "ok %s\n", refname);
+	if (len >= bufsize) {
 		err = got_error(GOT_ERR_NO_SPACE);
 		goto done;
 	}
@@ -1385,6 +1453,7 @@ recv_ref_update_ok(struct imsg *imsg, int outfd, int chattygot, int algo)
 	err = got_pkt_writepkt(outfd, buf, len, chattygot);
 done:
 	free(refname);
+	free(buf);
 	return err;
 }
 
@@ -1394,7 +1463,8 @@ recv_ref_update_ng(struct imsg *imsg, int outfd, int chattygot, int algo)
 	const struct got_error *err = NULL;
 	struct gotd_imsg_ref_update_ng ing;
 	size_t datalen, len;
-	char buf[GOT_PKT_MAX];
+	char *buf = NULL;
+	const size_t bufsize = GOT_PKT_MAX;
 	char *refname = NULL, *reason = NULL;
 
 	datalen = imsg->hdr.len - IMSG_HEADER_SIZE;
@@ -1420,8 +1490,14 @@ recv_ref_update_ng(struct imsg *imsg, int outfd, int chattygot, int algo)
 		goto done;
 	}
 
-	len = snprintf(buf, sizeof(buf), "ng %s %s\n", refname, reason);
-	if (len >= sizeof(buf)) {
+	buf = calloc(1, bufsize);
+	if (buf == NULL) {
+		err = got_error_from_errno("calloc");
+		goto done;
+	}
+
+	len = snprintf(buf, bufsize, "ng %s %s\n", refname, reason);
+	if (len >= bufsize) {
 		err = got_error(GOT_ERR_NO_SPACE);
 		goto done;
 	}
@@ -1430,6 +1506,7 @@ recv_ref_update_ng(struct imsg *imsg, int outfd, int chattygot, int algo)
 done:
 	free(refname);
 	free(reason);
+	free(buf);
 	return err;
 }
 
@@ -1438,7 +1515,8 @@ serve_write(int infd, int outfd, int gotd_sock, const char *repo_path,
     int chattygot)
 {
 	const struct got_error *err = NULL;
-	char buf[GOT_PKT_MAX];
+	char *buf = NULL;
+	const size_t bufsize = GOT_PKT_MAX;
 	struct imsgbuf ibuf;
 	enum protostate {
 		STATE_EXPECT_REF_UPDATE,
@@ -1465,10 +1543,16 @@ serve_write(int infd, int outfd, int gotd_sock, const char *repo_path,
 
 	digest_string_length = got_hash_digest_string_length(algo) - 1;
 
+	buf = calloc(1, bufsize);
+	if (buf == NULL) {
+		err = got_error_from_errno("calloc");
+		goto done;
+	}
+
 	while (curstate != STATE_EXPECT_PACKFILE) {
 		int n;
 
-		err = got_pkt_readpkt(&n, infd, buf, sizeof(buf), chattygot,
+		err = got_pkt_readpkt(&n, infd, buf, bufsize, chattygot,
 		    timeout);
 		if (err)
 			goto done;
@@ -1577,6 +1661,7 @@ serve_write(int infd, int outfd, int gotd_sock, const char *repo_path,
 	}
 done:
 	imsgbuf_clear(&ibuf);
+	free(buf);
 	if (err)
 		echo_error(err, outfd, chattygot);
 	return err;
