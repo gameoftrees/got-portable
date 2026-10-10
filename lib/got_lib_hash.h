@@ -84,6 +84,3 @@ void	got_hash_final_object_id(struct got_hash *, struct got_object_id *);
  * Compare two hash digest; similar to memcmp().
  */
 int	got_hash_cmp(enum got_hash_algorithm, uint8_t *, uint8_t *);
-
-/* Return a human-readable name of the hash algorithm. */
-const char *got_hash_algo_name(enum got_hash_algorithm);

@@ -213,7 +213,11 @@ create_repo(struct imsg *imsg)
 	if (datalen == 0 || datalen > NAME_MAX)
 		return got_error(GOT_ERR_PRIVSEP_LEN);
 
-	repo_name = strndup(imsg->data, datalen);
+	err = got_hash_algo_validate(param.algo);
+	if (err)
+		goto done;
+
+	repo_name = strndup(imsg->data + sizeof(param), param.name_len);
 	if (repo_name == NULL)
 		return got_error_from_errno("strndup");
 	if (strlen(repo_name) != param.name_len) {
@@ -276,7 +280,7 @@ create_repo(struct imsg *imsg)
 		} else
 			err = got_error_from_errno2("mkdir", abspath);
 	} else
-		err = got_repo_init(abspath, head_name, GOT_HASH_SHA1);
+		err = got_repo_init(abspath, head_name, param.algo);
 done:
 	free(repo_name);
 	free(fullname);

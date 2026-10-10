@@ -42,10 +42,12 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository www {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
@@ -97,7 +99,7 @@ EOF
 		return 1
 	fi
 
-	got init $testroot/www.git > /dev/null
+	got init -A ${GOT_TEST_ALGO} $testroot/www.git > /dev/null
 	mkdir -p $testroot/www
 
 	cat > $testroot/www/index.html <<EOF
@@ -209,10 +211,12 @@ user ${GOTSYSD_DEV_USER} {
 	authorized key ${sshkey}
 }
 repository gotsys {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
 repository www {
+	hash algorithm "${GOT_TEST_ALGO}"
 	permit rw ${GOTSYSD_TEST_USER}
 	permit rw ${GOTSYSD_DEV_USER}
 }
@@ -263,7 +267,7 @@ EOF
 		return 1
 	fi
 
-	got init -b website $testroot/www.git > /dev/null
+	got init -A ${GOT_TEST_ALGO} -b website $testroot/www.git > /dev/null
 	mkdir -p $testroot/www
 
 	cat > $testroot/www/index.html <<EOF

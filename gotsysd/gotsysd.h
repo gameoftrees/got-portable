@@ -448,6 +448,15 @@ struct gotsysd_imsg_sysconf_rmkeys_param {
 	uid_t uid_end;
 };
 
+/* Structture for GOTSYSD_IMSG_SYSCONF_REPO_CREATE. */
+struct gotsysd_imsg_sysconf_repo_create {
+	int algo;
+	size_t name_len;
+	size_t headref_len;
+
+	/* Followed by name_len + headref_len bytes. */
+};
+
 /* 
  * Structure for messages sent via gotsys_imsg_send_users():
  * GOTSYSD_IMSG_SYSCONF_USERS
@@ -506,6 +515,7 @@ struct gotsysd_imsg_sysconf_authorized_key {
 
 /* Structure for GOTSYSD_IMSG_SYSCONF_REPO, */
 struct gotsysd_imsg_sysconf_repo {
+	int algo;
 	size_t name_len;
 	size_t headref_len;
 	size_t description_len;

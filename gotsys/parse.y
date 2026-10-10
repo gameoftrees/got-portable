@@ -130,6 +130,7 @@ typedef struct {
 %token	NOTIFY EMAIL FROM REPLY TO URL INSECURE HMAC HEAD WEB SERVER
 %token	HIDE REPOSITORIES STYLESHEET LOGO SITE OWNER WEBSITE PATH
 %token	DISABLE ENABLE AUTHENTICATION MEDIA TYPES DESCRIPTION
+%token	HASH ALGORITHM
 
 %token	<v.string>	STRING
 %token	<v.number>	NUMBER
@@ -613,6 +614,18 @@ repoopts1	: PERMIT RO numberstring {
 				YYERROR;
 			}
 			free($2);
+		}
+		| HASH ALGORITHM STRING {
+			const struct got_error *err;
+
+			err = gotsys_conf_validate_hash_algo(&new_repo->algo,
+			    $3);
+			if (err) {
+				yyerror("%s", err->msg);
+				free($3);
+				YYERROR;
+			}
+			free($3);
 		}
 		;
 
@@ -1263,6 +1276,7 @@ lookup(char *s)
 {
 	/* This has to be sorted always. */
 	static const struct keywords keywords[] = {
+		{ "algorithm",			ALGORITHM },
 		{ "authentication",		AUTHENTICATION },
 		{ "authorized",			AUTHORIZED },
 		{ "branch",			BRANCH },
@@ -1273,6 +1287,7 @@ lookup(char *s)
 		{ "enable",			ENABLE },
 		{ "from",			FROM },
 		{ "group",			GROUP },
+		{ "hash",			HASH },
 		{ "head",			HEAD },
 		{ "hide",			HIDE },
 		{ "hmac",			HMAC },
