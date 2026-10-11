@@ -191,11 +191,14 @@ listen_addr	: '*' { $$ = NULL; }
 		;
 
 main		: LISTEN ON STRING {
+			char *p;
+
 			if (!got_path_is_absolute($3))
 				yyerror("bad unix socket path \"%s\": "
 				    "must be an absolute path", $3);
 
-			if (realpath($3, gotsysd->unix_socket_path) == NULL) {
+			p = realpath($3, NULL);
+			if (p == NULL) {
 				if (errno != ENOENT && errno != EACCES) {
 					yyerror("realpath %s: %s", $3,
 					    strerror(errno));
@@ -211,6 +214,17 @@ main		: LISTEN ON STRING {
 					free($3);
 					YYERROR;
 				}
+			} else {
+				if (strlcpy(gotsysd->unix_socket_path, p,
+				    sizeof(gotsysd->unix_socket_path)) >=
+				    sizeof(gotsysd->unix_socket_path)) {
+					yyerror("unix socket path too long: %s",
+					    p);
+					free(p);
+					free($3);
+					YYERROR;
+				}
+				free(p);
 			}
 			free($3);
 		}
@@ -235,6 +249,8 @@ main		: LISTEN ON STRING {
 			free($3);
 		}
 		| REPOSITORY DIRECTORY STRING {
+			char *p;
+
 			if (!got_path_is_absolute($3)) {
 				yyerror("bad path \"%s\": "
 				    "must be an absolute path", $3);
@@ -242,8 +258,17 @@ main		: LISTEN ON STRING {
 				YYERROR;
 			}
 
-			if (realpath($3, gotsysd->repos_path) == NULL) {
+			p = realpath($3, NULL);
+			if (p == NULL) {
 				yyerror("realpath %s: %s", $3, strerror(errno));
+				free($3);
+				YYERROR;
+			}
+			if (strlcpy(gotsysd->repos_path, p,
+			    sizeof(gotsysd->repos_path)) >=
+			    sizeof(gotsysd->repos_path)) {
+				yyerror("repository path too long: %s", p);
+				free(p);
 				free($3);
 				YYERROR;
 			}
