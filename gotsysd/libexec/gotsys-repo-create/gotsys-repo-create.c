@@ -372,7 +372,7 @@ main(int argc, char **argv)
 	struct gotsysd_imsgev iev;
 	struct event evsigint, evsigterm, evsighup, evsigusr1;
 	struct passwd *pw;
-	char *username;
+	char *username, *p;
 	struct stat sb;
 #if 0
 	static int attached;
@@ -394,8 +394,12 @@ main(int argc, char **argv)
 		errx(1, "usage: %s username repos_path", getprogname());
 
 	username = argv[1];
-	if (realpath(argv[2], repos_path) == NULL)
+	p = realpath(argv[2], NULL);
+	if (p == NULL)
 		err(1, "realpath %s", argv[2]);
+	if (strlcpy(repos_path, p, sizeof(repos_path)) >= sizeof(repos_path))
+		err(1, "path too long: %s", p);
+	free(p);
 
 	pw = getpwnam(username);
 	if (pw == NULL)

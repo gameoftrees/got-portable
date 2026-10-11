@@ -674,13 +674,15 @@ repository	: REPOSITORY STRING {
 repoopts1	: PATH STRING {
 			if (gotd_proc_id == GOTD_PROC_GOTD ||
 			    gotd_proc_id == GOTD_PROC_GITWRAPPER) {
+				char *repo_path;
 				if (!got_path_is_absolute($2)) {
 					yyerror("%s: path %s is not absolute",
 					    __func__, $2);
 					free($2);
 					YYERROR;
 				}
-				if (realpath($2, new_repo->path) == NULL) {
+				repo_path = realpath($2, NULL);
+				if (repo_path == NULL) {
 					/*
 					 * To give admins a chance to create
 					 * missing repositories at run-time
@@ -706,8 +708,19 @@ repoopts1	: PATH STRING {
 					    sizeof(new_repo->path)) >=
 					    sizeof(new_repo->path)) {
 						yyerror("path too long");
+						free($2);
 						YYERROR;
 					}
+				} else {
+					if (strlcpy(new_repo->path, repo_path,
+					    sizeof(new_repo->path)) >=
+					    sizeof(new_repo->path)) {
+						yyerror("path too long");
+						free(repo_path);
+						free($2);
+						YYERROR;
+					}
+					free(repo_path);
 				}
 			}
 			free($2);
