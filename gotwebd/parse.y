@@ -1837,7 +1837,7 @@ parse_config(const char *filename, struct gotwebd *env)
 
 	/* add the implicit listen on socket */
 	if (TAILQ_EMPTY(&gotwebd->addresses)) {
-		char path[_POSIX_PATH_MAX];
+		char path[PATH_MAX];
 		struct address *h;
 
 		if (strlcpy(path, gotwebd->httpd_chroot, sizeof(path))

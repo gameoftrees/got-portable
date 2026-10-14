@@ -48,7 +48,7 @@
 struct gotsysd_helper_proc {
 	pid_t				 pid;
 	enum gotsysd_imsg_type	         type;
-	char				 progname[_POSIX_PATH_MAX];
+	char				 progname[PATH_MAX];
 	int				 pipe[2];
 	int				 fd;
 	struct gotsysd_imsgev		 iev;

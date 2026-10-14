@@ -87,7 +87,7 @@ remove_keys(void)
 {
 	const struct got_error *err = NULL;
 	struct passwd *pw = NULL;
-	char authorized_keys_path[_POSIX_PATH_MAX];
+	char authorized_keys_path[PATH_MAX];
 
 	/*
 	 * Remove keys of users in our UID range no longer mentioned

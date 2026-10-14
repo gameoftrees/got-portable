@@ -47,7 +47,7 @@
 #include "gotwebd.h"
 #include "gotsys.h"
 
-static char authorized_keys_path[_POSIX_PATH_MAX];
+static char authorized_keys_path[PATH_MAX];
 static char *authorized_keys_tmppath;
 static int authorized_keys_tmpfd = -1;
 struct gotsys_authorized_keys_list authorized_keys;
