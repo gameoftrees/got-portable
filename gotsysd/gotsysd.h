@@ -183,8 +183,8 @@ struct gotsysd_web_config {
 
 struct gotsysd {
 	pid_t pid;
-	char unix_socket_path[_POSIX_PATH_MAX];
-	char repos_path[_POSIX_PATH_MAX];
+	char unix_socket_path[PATH_MAX];
+	char repos_path[PATH_MAX];
 	char user_name[32];
 	char gotd_username[32];
 	char gotsys_conf_commit_id[GOT_OBJECT_ID_HEX_MAXLEN];
@@ -399,7 +399,7 @@ struct gotsysd_imsg_auth {
 struct gotsysd_imsg_info {
 	pid_t pid;
 	int verbosity;
-	char repository_directory[_POSIX_PATH_MAX];
+	char repository_directory[PATH_MAX];
 	uid_t uid_start;
 	uid_t uid_end;
 	struct got_object_id commit_id;

@@ -56,7 +56,7 @@
 #include "gotsys.h"
 
 static struct gotsys_conf gotsysconf;
-static char repos_path[_POSIX_PATH_MAX];
+static char repos_path[PATH_MAX];
 static int repos_dir_fd = -1;
 uid_t gotd_uid;
 gid_t gotd_gid;
@@ -114,7 +114,7 @@ static const struct got_error *
 set_head_ref(int repos_dir_fd, const char *repo_name, const char *refname)
 {
 	const struct got_error *err = NULL;
-	char relpath[_POSIX_PATH_MAX];
+	char relpath[PATH_MAX];
 	struct got_lockfile *lf = NULL;
 	int ret, fd = -1;
 	struct stat sb;

@@ -80,7 +80,7 @@ static const struct got_error *
 createhome(const char *username, uid_t uid, gid_t gid)
 {
 	const struct got_error *err = NULL;
-	char path[_POSIX_PATH_MAX];
+	char path[PATH_MAX];
 	int ret;
 
 	ret = snprintf(path, sizeof(path), "%s/%s", GOTSYSD_HOMEDIR,

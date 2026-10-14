@@ -831,7 +831,7 @@ write_gotd_conf(int *auth_idx)
 	const struct got_error *err = NULL;
 	struct gotsys_repo *repo;
 	int ret;
-	char repo_path[_POSIX_PATH_MAX];
+	char repo_path[PATH_MAX];
 	struct timespec now;
 
 	err = got_opentemp_truncatefd(gotd_conf_tmpfd);
@@ -1022,7 +1022,7 @@ write_implicit_clone_url(int fd, const char *path, const char *server_name,
     const char *full_repo_name)
 {
 	const struct got_error *err;
-	char repo_name[_POSIX_PATH_MAX];
+	char repo_name[PATH_MAX];
 	int ret;
 
 	err = canon_repo_name(repo_name, sizeof(repo_name), full_repo_name);
@@ -1092,7 +1092,7 @@ write_webrepo(int *show_repo_description, int *login_hint_user_access,
 	const struct got_error *err;
 	struct gotsys_repo *repo;
 	int ret;
-	char repo_name[_POSIX_PATH_MAX];
+	char repo_name[PATH_MAX];
 	int have_login_hint_user = 0;
 	int login_hint_user_has_repo_access = 0;
 
@@ -1193,7 +1193,7 @@ write_website(int *login_hint_user_access, int fd, const char *path,
 {
 	const struct got_error *err;
 	int ret;
-	char repo_name[_POSIX_PATH_MAX];
+	char repo_name[PATH_MAX];
 	int have_login_hint_user = 0;
 
 	ret = dprintf(fd, "\twebsite \"%s\" {\n", site->url_path);
