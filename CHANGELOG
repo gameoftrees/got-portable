@@ -6,6 +6,13 @@ other than OpenBSD.
 
 All changes are on top of the versioned changes listed in CHANGES.
 
+# got-portable 0.130 (2026-10-16)
+
+* Changes from got 0.130
+
+  - portable: remove {UID,GID}_MAX
+  - portable: automate release
+
 # got-portable 0.129 (2026-09-26)
 
   No -portable changes.  See GoT's changelog.
